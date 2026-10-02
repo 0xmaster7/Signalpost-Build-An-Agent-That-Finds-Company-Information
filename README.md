@@ -11,3 +11,15 @@ This repository starts from Builderr's supplied runnable reference in [`signalpo
 - Builderr questions prepared for follow-up: [`docs/builderr-questions.md`](docs/builderr-questions.md)
 
 The starter README contains setup, sample refresh replay and local run commands. Its historic prototype scorers and compact output example are reference material; they do not supersede the current Builderr evaluator contract or the audited implementation plan.
+## M01 runtime
+
+From the repository root, with the locked starter environment installed:
+
+```sh
+PYTHONPATH=. signalpost-starter-kit/.venv/bin/python -m signalpost.run \
+  --input signalpost-starter-kit/tests/fixtures/m01/offline-batch.jsonl \
+  --registry-snapshot signalpost-starter-kit/tests/fixtures/m01/registry.jsonl \
+  --output signalpost_output.jsonl
+```
+
+The runner accepts JSON, JSONL, CSV, TSV, and plain text inputs. `--previous-state`, `--state-output`, `--config`, `--evidence-cutoff`, and `--network-policy` are available; corresponding input/output/config/cutoff/network settings can be supplied with `SIGNALPOST_*` environment variables. The frozen registry fixture demonstrates deterministic offline operation. Live BRREG integration is the M02 milestone. See [M01 implementation decisions](docs/decisions/M01.md) for contract uncertainty and runtime boundaries.

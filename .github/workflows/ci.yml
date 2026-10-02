@@ -23,6 +23,19 @@ jobs:
       - name: Run starter tests
         working-directory: signalpost-starter-kit
         run: .venv/bin/python -m pytest -q
+      - name: Run M01 offline batch gate
+        working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
+        run: >-
+          .venv/bin/python -m signalpost.run
+          --input tests/fixtures/m01/offline-batch.jsonl
+          --registry-snapshot tests/fixtures/m01/registry.jsonl
+          --output /tmp/signalpost-m01-output.jsonl
+          --state-output /tmp/signalpost-m01-state.sqlite
+          --batch-id ci-m01
+      - name: Verify offline batch cardinality
+        run: test "$(wc -l < /tmp/signalpost-m01-output.jsonl | tr -d ' ')" = "4"
       - name: Run deterministic refresh replay
         working-directory: signalpost-starter-kit
         run: .venv/bin/python scripts/run_refresh_replay.py --manifest tests/fixtures/refresh-snapshots.json --output /tmp/signalpost-refresh-ci.json

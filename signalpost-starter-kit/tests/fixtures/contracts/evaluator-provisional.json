@@ -1,0 +1,35 @@
+{
+  "authority": "current public Builderr harness semantics captured in M00; exact vendor JSON Schema remains unavailable",
+  "top_level_fields": [
+    "input_ref",
+    "organisation_number",
+    "terminal_state",
+    "sections",
+    "claims",
+    "evidence",
+    "source_snapshots",
+    "refresh",
+    "synthesis",
+    "errors",
+    "operations",
+    "run",
+    "batch"
+  ],
+  "section_names": [
+    "identity_brand",
+    "accounts_history",
+    "leadership_workplaces",
+    "website_owned_profiles",
+    "hiring_activity",
+    "claims_evidence_states",
+    "refresh_changes"
+  ],
+  "terminal_states": [
+    "available",
+    "not_available",
+    "blocked",
+    "not_applicable",
+    "ambiguous",
+    "failed"
+  ]
+}
