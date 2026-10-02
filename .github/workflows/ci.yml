@@ -1,0 +1,28 @@
+name: Signalpost starter checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  starter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: python -m pip install uv==0.8.0
+      - name: Install locked starter dependencies
+        working-directory: signalpost-starter-kit
+        run: uv sync --frozen
+      - name: Install pinned test runner
+        working-directory: signalpost-starter-kit
+        run: uv pip install --python .venv/bin/python pytest==9.1.1
+      - name: Run starter tests
+        working-directory: signalpost-starter-kit
+        run: .venv/bin/python -m pytest -q
+      - name: Run deterministic refresh replay
+        working-directory: signalpost-starter-kit
+        run: .venv/bin/python scripts/run_refresh_replay.py --manifest tests/fixtures/refresh-snapshots.json --output /tmp/signalpost-refresh-ci.json

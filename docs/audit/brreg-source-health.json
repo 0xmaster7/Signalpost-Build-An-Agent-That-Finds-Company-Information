@@ -1,0 +1,47 @@
+{
+  "retrieved_at_local_date": "2026-10-03 Asia/Kolkata",
+  "documentation": {
+    "url": "https://data.brreg.no/enhetsregisteret/api/dokumentasjon/en/index.html",
+    "observed": "Public CCR API documentation lists entity, roles, group-structure, subunit and bulk-download endpoints. It identifies Norwegian Licence for Open Government Data (NLOD) 2.0.",
+    "license_url": "https://data.norge.no/nlod/en/2.0"
+  },
+  "checks": [
+    {
+      "url": "https://data.brreg.no/enhetsregisteret/api/enheter/923609016",
+      "status": 200,
+      "content_type": "application/json",
+      "response_bytes": 3050,
+      "latency_ms": 1268,
+      "response_sha256": "d56937533cf67ded913210d6b6bf39475b5b9344147dc4140634531e2edc128f",
+      "retrieved_at": "2026-10-02T21:53:00.164980Z"
+    },
+    {
+      "url": "https://data.brreg.no/enhetsregisteret/api/enheter/923609016/roller",
+      "status": 200,
+      "content_type": "application/json",
+      "response_bytes": 6439,
+      "latency_ms": 1366,
+      "response_sha256": "f735e0a2f201baad64c9c52976b59043ef281d00034e0f1f07715fd4e9c38fb4",
+      "retrieved_at": "2026-10-02T21:53:02.034989Z"
+    },
+    {
+      "url": "https://data.brreg.no/enhetsregisteret/api/underenheter?overordnetEnhet=923609016",
+      "status": 200,
+      "content_type": "application/json",
+      "response_bytes": 32043,
+      "latency_ms": 1315,
+      "response_sha256": "d9b4e0c7f7f80b0e21e65098d4d1a3f8261283182c3254f2d2383aaa1ef5e5a5",
+      "retrieved_at": "2026-10-02T21:53:03.854036Z"
+    },
+    {
+      "url": "https://data.brreg.no/regnskapsregisteret/regnskap/923609016",
+      "status": 200,
+      "content_type": "application/json",
+      "response_bytes": 9524,
+      "latency_ms": 1014,
+      "response_sha256": "fda20c0880f7585fcf5f950813eeb83682e37f4048b607171f2b41894c46bd6b",
+      "retrieved_at": "2026-10-02T21:53:05.372785Z"
+    }
+  ],
+  "note": "Four successful requests establish source health only. Latencies from one request per endpoint are not a rate-limit calibration. No BRREG limit was inferred."
+}

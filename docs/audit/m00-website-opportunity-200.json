@@ -1,0 +1,2194 @@
+{
+  "audit": "M00 fast registry-website opportunity audit",
+  "retrieved_at": "2026-10-02T21:54:53.844459Z",
+  "universe": {
+    "url": "https://builderr.ai/signalpost-company-universe-2025.jsonl.gz",
+    "downloaded_archive_sha256": "1c89710e5b01f8617e86d09fbdff4a52f2f8dbbba297e74f7164b5984f5a0384",
+    "published_archive_sha256": "1c89710e5b01f8617e86d09fbdff4a52f2f8dbbba297e74f7164b5984f5a0384",
+    "uncompressed_sha256": "b82d6a3e7231d1759a958c282bc4366b80ec2fab8095053d8ed7fa9cd01bc838",
+    "published_uncompressed_sha256": "b82d6a3e7231d1759a958c282bc4366b80ec2fab8095053d8ed7fa9cd01bc838",
+    "published_uncompressed_hash_matches": true,
+    "eligible_rows": 411160
+  },
+  "sampling": {
+    "seed": 20261003,
+    "requested": 200,
+    "selected": 200,
+    "selected_organisation_numbers_sha256": "90362b0441ff5c1a5846b68cb00a4308c785e8b2575524198618a5f8b8cec869",
+    "population_strata": {
+      "ASA|100+|no-web": 7,
+      "ASA|100+|web": 21,
+      "ASA|20-99|no-web": 21,
+      "ASA|20-99|web": 26,
+      "ASA|5-19|no-web": 16,
+      "ASA|5-19|web": 23,
+      "ASA|missing|no-web": 42,
+      "ASA|missing|web": 33,
+      "AS|100+|no-web": 1230,
+      "AS|100+|web": 1024,
+      "AS|20-99|no-web": 9713,
+      "AS|20-99|web": 4186,
+      "AS|5-19|no-web": 32704,
+      "AS|5-19|web": 7433,
+      "AS|missing|no-web": 300028,
+      "AS|missing|web": 20638,
+      "ENK|100+|no-web": 2,
+      "ENK|20-99|no-web": 8,
+      "ENK|20-99|web": 1,
+      "ENK|5-19|no-web": 26,
+      "ENK|5-19|web": 7,
+      "ENK|missing|no-web": 1098,
+      "ENK|missing|web": 279,
+      "OTHER|100+|no-web": 111,
+      "OTHER|100+|web": 239,
+      "OTHER|20-99|no-web": 391,
+      "OTHER|20-99|web": 927,
+      "OTHER|5-19|no-web": 806,
+      "OTHER|5-19|web": 899,
+      "OTHER|missing|no-web": 20102,
+      "OTHER|missing|web": 9119
+    },
+    "sample_strata": {
+      "AS|100+|no-web": 1,
+      "AS|100+|web": 1,
+      "AS|20-99|no-web": 5,
+      "AS|20-99|web": 2,
+      "AS|5-19|no-web": 16,
+      "AS|5-19|web": 4,
+      "AS|missing|no-web": 146,
+      "AS|missing|web": 10,
+      "ENK|missing|no-web": 1,
+      "OTHER|missing|no-web": 10,
+      "OTHER|missing|web": 4
+    }
+  },
+  "request_policy": "At most one registry website homepage candidate fetch per sampled company; robots.txt checked once per unique website origin; only public HTTP(S) URLs. The assessment processed HTML transiently; the saved report retains source URL, status, retrieval time, content hash, and identity outcome, not page text. The recorded run did not preserve crawl-delay values; the current audit utility records and honors recognized delays on a rerun.",
+  "results": {
+    "companies": 200,
+    "website_opportunity_statuses": {
+      "missing": 179,
+      "redirect_to_unrelated": 1,
+      "responded_non_html": 2,
+      "responding": 15,
+      "robots_unreachable": 3
+    },
+    "website_identity_statuses": {
+      "exact": 9,
+      "not_assessed": 184,
+      "related_or_uncertain": 7
+    },
+    "candidate_fetches": 18,
+    "unique_robots_origins": 20,
+    "robots_outcomes": {
+      "no_rules": 2,
+      "parsed": 15,
+      "unreachable": 3
+    },
+    "distinct_responded_registered_domains": 16,
+    "companies_on_shared_registered_domains": 0
+  },
+  "companies": [
+    {
+      "organisation_number": "932841797",
+      "name": "SAMEIET BRONSEKARVEIEN 44-46",
+      "registry_website": "www.obos.no",
+      "status": "responded_non_html",
+      "retrieved_at": "2026-10-02T21:54:02.462282Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://www.obos.no/",
+      "error": null,
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "889452862",
+      "name": "SAMEIET KONGENS GATE 56",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689190Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "928080889",
+      "name": "KGJ PARTNERSHIP VIII AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689218Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925182532",
+      "name": "NOBEL MEDISPA AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689224Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "915337694",
+      "name": "MANGER BIL EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689228Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "826735082",
+      "name": "ENERGI NORD AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689234Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "929766253",
+      "name": "TO-BY AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689238Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925152862",
+      "name": "H.ST HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689242Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "993955132",
+      "name": "BESSESEN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689245Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997343808",
+      "name": "S.K.V.A. SA",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:05.689249Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933546225",
+      "name": "KUNO AS",
+      "registry_website": "www.kuno.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:05.689253Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://www.kuno.no/",
+      "error": null,
+      "requested_domain": "kuno.no",
+      "final_domain": "kuno.no",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "kuno"
+        ],
+        "matched_tokens": [
+          "kuno"
+        ],
+        "reasons": [
+          "single distinctive legal-name token appears in homepage identity evidence with substantive content"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "8c512fcac3d2e478076b55ac016cb41a36c9c234f0f8e34a516fd36053849d44"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921548923",
+      "name": "ARNE SVENDSENSGATE 4 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105657Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "821220602",
+      "name": "TELEMARK FORLAG AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105680Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "929252829",
+      "name": "FROST FOSSUM HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105686Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "988238449",
+      "name": "SØRREISA VASK OG SØM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105690Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927955024",
+      "name": "FNB HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105694Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "911945169",
+      "name": "OLSRØD OPTIKK AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105698Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "930295159",
+      "name": "HAWU EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105702Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933433668",
+      "name": "JH BEDRIFTSRÅDGIVNING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105706Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933774155",
+      "name": "NAGA D. AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105710Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933296857",
+      "name": "TINDAN FISKE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105717Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "934531965",
+      "name": "BLUEWAVE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:07.105721Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "948260484",
+      "name": "CF MASKIN AS",
+      "registry_website": "www.cf.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:07.105725Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://cf.no/",
+      "error": null,
+      "requested_domain": "cf.no",
+      "final_domain": "cf.no",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "cf",
+          "maskin"
+        ],
+        "matched_tokens": [
+          "cf",
+          "maskin"
+        ],
+        "reasons": [
+          "all normalized legal-name tokens appear together in homepage identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "ba8949f7a432a1e37f1e530af6cde8253b788f0d3495908417f427bd586c7808"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927033674",
+      "name": "CHRISTIANIA BOLIG AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:12.625054Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "981699106",
+      "name": "MEKLINGSSENTERET ADVOKATFIRMA AS",
+      "registry_website": "www.meglingssenteret.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:12.625074Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://meglingssenteret.no/",
+      "error": null,
+      "requested_domain": "meglingssenteret.no",
+      "final_domain": "meglingssenteret.no",
+      "identity": {
+        "status": "related_or_uncertain",
+        "score": 0.3,
+        "publishable": false,
+        "legal_name_tokens": [
+          "meklingssenteret",
+          "advokatfirma"
+        ],
+        "matched_tokens": [
+          "meklingssenteret"
+        ],
+        "reasons": [
+          "registry-linked URL lacks strong exact-entity identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "8273cb2852744004e3a3519061f9d828b94a0e1e04dc22a299d6abdc93448586"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921390246",
+      "name": "ÅKER UTVIKLING G AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522933Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921621663",
+      "name": "SIMSOL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522958Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "929200233",
+      "name": "UV114 UTVIKLING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522964Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "930839566",
+      "name": "LEINE INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522968Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "931527983",
+      "name": "SØR-VARANGER BILTEKNIKK AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522972Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922342032",
+      "name": "INTERIØR OG BUDSERVICE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522977Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "919215224",
+      "name": "BILVERKSTED SØR AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522981Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "918431012",
+      "name": "DATAHJELP ARENDAL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522984Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "989879731",
+      "name": "KVELLO CASTRUM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522990Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "947553348",
+      "name": "Fiskum Bygg A/S",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522994Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "935621771",
+      "name": "YLLW 0001 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.522999Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "916656483",
+      "name": "JHK EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.523002Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "982521645",
+      "name": "PEBO RØR AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.523006Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921972849",
+      "name": "FLØYVEIEN 14 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:13.523013Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "934650875",
+      "name": "GERDMANS INNREDNINGER AS",
+      "registry_website": "www.gerdmans.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:13.523021Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://www.gerdmans.no/",
+      "error": null,
+      "requested_domain": "gerdmans.no",
+      "final_domain": "gerdmans.no",
+      "identity": {
+        "status": "related_or_uncertain",
+        "score": 0.3,
+        "publishable": false,
+        "legal_name_tokens": [
+          "gerdmans",
+          "innredninger"
+        ],
+        "matched_tokens": [
+          "gerdmans"
+        ],
+        "reasons": [
+          "registry-linked URL lacks strong exact-entity identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "2fc3433ee31f28a86d6d5c3f792130d37ecfc9d8a415bb5803522ebd8ec57259"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "818293992",
+      "name": "GJØDSELTRANSPORT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:16.762014Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "924507101",
+      "name": "I AM THE SCHÜTT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:16.762053Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925271632",
+      "name": "PML INTERNATIONAL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:16.762062Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "880337432",
+      "name": "MUEN INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:16.762069Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "923082085",
+      "name": "GREVE HERMAN WEDEL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:16.762075Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "943488185",
+      "name": "SELØY UNDERVANNSSERVICE AS",
+      "registry_website": "www.seloy.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:16.762084Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://seloy.no/",
+      "error": null,
+      "requested_domain": "seloy.no",
+      "final_domain": "seloy.no",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "seloy",
+          "undervannsservice"
+        ],
+        "matched_tokens": [
+          "seloy",
+          "undervannsservice"
+        ],
+        "reasons": [
+          "all normalized legal-name tokens appear together in homepage identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "6e2287aafc5ef2fb81abb7efa19dc7659f881fc19eceef062995cf70f839ae80"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925588318",
+      "name": "FRIGG AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924490Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "923835687",
+      "name": "BERNT ANKERS GATE 17 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924509Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "995997533",
+      "name": "SLETTA BIL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924514Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "952708686",
+      "name": "JANIC HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924518Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "920194532",
+      "name": "INREGNICO AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924523Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "888798102",
+      "name": "HINNATREKANTEN LEGESENTER EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924526Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "989016652",
+      "name": "OSLAND HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924530Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "999668763",
+      "name": "NESTTUNKOLLEN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924534Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933485773",
+      "name": "SKANSKA GARTNERSLETTA II HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924537Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "975604012",
+      "name": "SAMEIET BALDERSGATE 24/26",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924541Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997762940",
+      "name": "DERWENTWATER INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924545Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "987515465",
+      "name": "HAVBLIKK EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924549Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997706889",
+      "name": "SHY HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924553Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922758476",
+      "name": "FLOWW AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924556Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "915374867",
+      "name": "EASYBRING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924559Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "818434332",
+      "name": "MEK INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:20.924563Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921555164",
+      "name": "KUMA NORGE AS",
+      "registry_website": "www.kuma.dk",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:20.924567Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://www.kuma.dk/",
+      "error": null,
+      "requested_domain": "kuma.dk",
+      "final_domain": "kuma.dk",
+      "identity": {
+        "status": "related_or_uncertain",
+        "score": 0.3,
+        "publishable": false,
+        "legal_name_tokens": [
+          "kuma",
+          "norge"
+        ],
+        "matched_tokens": [
+          "kuma"
+        ],
+        "reasons": [
+          "registry-linked URL lacks strong exact-entity identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "adf1f0f605d7d0ab5ea431d182eadaab01ca8960be7fe31e3e64173acac49e27"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "946916196",
+      "name": "XS HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:22.294186Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "920465021",
+      "name": "BODDCO LP1 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:22.294202Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933628574",
+      "name": "STROZ AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:22.294208Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922168164",
+      "name": "HRRS AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:22.294212Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "935462606",
+      "name": "BSDB AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:22.294216Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "990860467",
+      "name": "HJEM EIENDOMSMEGLING AS",
+      "registry_website": "www.hjemeiendomsmegling.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:22.294219Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://www.hjemeiendomsmegling.no/",
+      "error": null,
+      "requested_domain": "hjemeiendomsmegling.no",
+      "final_domain": "hjemeiendomsmegling.no",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "hjem",
+          "eiendomsmegling"
+        ],
+        "matched_tokens": [
+          "eiendomsmegling",
+          "hjem"
+        ],
+        "reasons": [
+          "all normalized legal-name tokens appear together in homepage identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "6456a637e0bdaf17d41664f00fb7ad767ad02f11ffe6bbda6b42b90450606233"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921044747",
+      "name": "NORGEN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:23.916324Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933954854",
+      "name": "DELKS SKOLEKONTOR AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:23.916350Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933533174",
+      "name": "BERGERUDUSTAD AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:23.916356Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "835464482",
+      "name": "SOULCAKE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:23.916360Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "977184169",
+      "name": "STATSMINISTER GUNNAR KNUDSEN OG HUSTRU SOFIE FØDT CAPPELENS FAMILIELEGAT STI",
+      "registry_website": "www.unifor.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:23.916364Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://unifor.no/",
+      "error": null,
+      "requested_domain": "unifor.no",
+      "final_domain": "unifor.no",
+      "identity": {
+        "status": "related_or_uncertain",
+        "score": 0.3,
+        "publishable": false,
+        "legal_name_tokens": [
+          "statsminister",
+          "gunnar",
+          "knudsen",
+          "hustru",
+          "sofie",
+          "fodt",
+          "cappelens",
+          "familielegat"
+        ],
+        "matched_tokens": [],
+        "reasons": [
+          "registry-linked URL lacks strong exact-entity identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "dabb31751380a992b6b3f6f3cce9bb904e6b938f47d4534b23c400e7300a9b63"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "912334465",
+      "name": "NEPTUS AS",
+      "registry_website": "www.neptus.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:27.922175Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://neptus.no/",
+      "error": null,
+      "requested_domain": "neptus.no",
+      "final_domain": "neptus.no",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "neptus"
+        ],
+        "matched_tokens": [
+          "neptus"
+        ],
+        "reasons": [
+          "single distinctive legal-name token appears in homepage identity evidence with substantive content"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "59a37d9460d4251671ff8aec5bccba88c67ce31203c1710a6e5e365b87e619af"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "914751500",
+      "name": "VBL HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013563Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "919332816",
+      "name": "V & R CONCEPTS AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013594Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "926060287",
+      "name": "DYNACON AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013613Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "923795049",
+      "name": "PSM UTVIKLING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013627Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "928722430",
+      "name": "POLYDENT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013641Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "926672029",
+      "name": "ÅTTE ÅTTE NULL NULL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013657Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921390688",
+      "name": "MARKALLEEN UTVIKLING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013663Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925088188",
+      "name": "JON GEIR TENGESDAL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013667Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "988957305",
+      "name": "SH MONTASJE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:32.013672Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "950156740",
+      "name": "ETTERSTADSVINGEN BORETTSLAG",
+      "registry_website": "www.obos.no",
+      "status": "responded_non_html",
+      "retrieved_at": "2026-10-02T21:54:32.013676Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://www.obos.no/",
+      "error": null,
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "979653719",
+      "name": "RIKIR AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.106850Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "917271852",
+      "name": "GNEISVEIEN 8 HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.106877Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925268771",
+      "name": "ALGECO NORDICS AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.106883Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921215258",
+      "name": "M L DRIFT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.106888Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "977077281",
+      "name": "SAND BYGG AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.106891Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "951936006",
+      "name": "ARKTISK KJØKKEN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.106895Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "994860097",
+      "name": "MAX MC AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.106898Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "915852882",
+      "name": "BERGEN MAT AS",
+      "registry_website": "www.bergenmat.no",
+      "status": "robots_unreachable",
+      "retrieved_at": "2026-10-02T21:54:34.106902Z",
+      "robots": {
+        "state": "unreachable",
+        "error": "URLError: <urlopen error [Errno 61] Connection refused>"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "934016297",
+      "name": "ANTER AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721395Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997386655",
+      "name": "LILLE MEI AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721417Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "932243660",
+      "name": "ZERO CAPITAL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721422Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "928052877",
+      "name": "FAANES INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721427Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922250065",
+      "name": "TORGÅRD 3 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721431Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997609077",
+      "name": "SKIBÅSEN 47 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721435Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "935054931",
+      "name": "MIKKELSEN TRANSPORT & SERVICE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721438Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "924293462",
+      "name": "SIMIEN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721443Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "934056906",
+      "name": "TRIMAS HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721446Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "934053664",
+      "name": "ØVRE STEINAUNET BK2 SAMEIE",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721451Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997930177",
+      "name": "FLUX INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721455Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "932254395",
+      "name": "REALIZED AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721459Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922943451",
+      "name": "ERITRO HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721462Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "998837219",
+      "name": "BARNSTORMER RESOURCE GROUP AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721466Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "828440942",
+      "name": "POLARIS EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:34.721469Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "913307828",
+      "name": "HAMMER ARKITEKTER MNAL AS",
+      "registry_website": "www.haark.no",
+      "status": "redirect_to_unrelated",
+      "retrieved_at": "2026-10-02T21:54:34.721474Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html;charset=utf-8",
+      "final_url": "https://www.hammerarkitekter.no/",
+      "error": null,
+      "requested_domain": "haark.no",
+      "final_domain": "hammerarkitekter.no",
+      "identity": {
+        "status": "related_or_uncertain",
+        "score": 0.65,
+        "publishable": false,
+        "legal_name_tokens": [
+          "hammer",
+          "arkitekter",
+          "mnal"
+        ],
+        "matched_tokens": [
+          "arkitekter",
+          "hammer"
+        ],
+        "reasons": [
+          "partial legal-name overlap only"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "b2f32131435c53255ed849175fc775f82fd6dc8741fc4aab350f7c2578ecf767"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "991356460",
+      "name": "LUNDSTUA AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092838Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "936597858",
+      "name": "ARBOR HELSE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092862Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921981759",
+      "name": "BJØRKHAUG INVESTERING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092868Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933645258",
+      "name": "369 HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092874Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925503924",
+      "name": "CHENG INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092878Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922768153",
+      "name": "ABU AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092882Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "982783666",
+      "name": "FELT BYGG AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092885Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "930530549",
+      "name": "HARALD NORHEIM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092889Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "935562058",
+      "name": "CRAZIUX DESIGN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092892Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "916613512",
+      "name": "J.F.CONSULTING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092896Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "919982128",
+      "name": "THAI CORNER AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:36.092899Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "991505849",
+      "name": "TILDESLASH NUF",
+      "registry_website": "tildeslash.com",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:36.092904Z",
+      "robots": {
+        "state": "no_rules",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://tildeslash.com/",
+      "error": null,
+      "requested_domain": "tildeslash.com",
+      "final_domain": "tildeslash.com",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "tildeslash"
+        ],
+        "matched_tokens": [
+          "tildeslash"
+        ],
+        "reasons": [
+          "single distinctive legal-name token appears in homepage identity evidence with substantive content"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "7c5c3cda8629c3bbef0ce908dfd2f604f1300ccc93d6b119a3dc5953899b2c33"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "992118784",
+      "name": "ACA HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310009Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "913322819",
+      "name": "NM EIENDOM & UTLEIE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310029Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "919185287",
+      "name": "SAMEIET KAMPEN KVARTAL",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310035Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927198940",
+      "name": "REINHARDTSEN HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310039Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933659747",
+      "name": "BWH INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310042Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "988739693",
+      "name": "M3 MEDIA AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310046Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "994864890",
+      "name": "TEKNOBINGO FAUSKE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310049Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "930338923",
+      "name": "TRAFFA INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310053Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "999195717",
+      "name": "TOMMY ROSSBACH AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:37.310058Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "920503551",
+      "name": "TFMC AS",
+      "registry_website": "www.tfmc.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:37.310061Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html",
+      "final_url": "https://tfmc.no/",
+      "error": null,
+      "requested_domain": "tfmc.no",
+      "final_domain": "tfmc.no",
+      "identity": {
+        "status": "related_or_uncertain",
+        "score": 0.3,
+        "publishable": false,
+        "legal_name_tokens": [
+          "tfmc"
+        ],
+        "matched_tokens": [
+          "tfmc"
+        ],
+        "reasons": [
+          "registry-linked URL lacks strong exact-entity identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "6da1180fc75f75d49282143ad15068710f3a87ffe4b207f64dcc3a718e4ebd47"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "926075489",
+      "name": "RØRVIK TAK OG BLIKK AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273491Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "921863160",
+      "name": "LYNGBØ HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273512Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "932684160",
+      "name": "GØTA EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273517Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "824421722",
+      "name": "MULTIMALER AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273521Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "889101032",
+      "name": "E W HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273525Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922625824",
+      "name": "TRONDHEIMSTANNLEGENE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273528Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "926278320",
+      "name": "BHA EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273532Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "934141814",
+      "name": "SOLVENDT UTVIKLING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:38.273536Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "986199055",
+      "name": "RECOVERY BO OG OMSORG AS",
+      "registry_website": "www.incita.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:38.273540Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://www.reboo.no/",
+      "error": null,
+      "requested_domain": "incita.no",
+      "final_domain": "reboo.no",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "recovery",
+          "bo",
+          "omsorg"
+        ],
+        "matched_tokens": [
+          "bo",
+          "omsorg",
+          "recovery"
+        ],
+        "reasons": [
+          "all normalized legal-name tokens appear together in homepage identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "3a3ce58e7b8486664138f8bc7eba6a60990bae0d575f726a90ff1807f17e5ee3"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "934585933",
+      "name": "KLASTUNET AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880074Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "928751198",
+      "name": "ZIMTENTE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880100Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "940577691",
+      "name": "HEER FRISØR AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880109Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "912831817",
+      "name": "FALK M INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880115Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "922366063",
+      "name": "B/R ENERGI AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880122Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "989708651",
+      "name": "HP STADIONBLOKK A AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880128Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927251817",
+      "name": "TØY VINTAGE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880134Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "986337326",
+      "name": "LANDVIK BYGDEHUS AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880141Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "932575272",
+      "name": "TANGEN TORV NÆRING 2 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880146Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927865777",
+      "name": "SAMEIET MARVIKA TORV",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880153Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "820072332",
+      "name": "FNP FELT B VEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880159Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "826977612",
+      "name": "SANDE MEIERI DAGLIGVARE AVD. 2 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880165Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "912965236",
+      "name": "ALNABRU INDUSTRI AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880171Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933488608",
+      "name": "FLATOUT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880177Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "948386283",
+      "name": "ING T HAGEN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880183Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "925603341",
+      "name": "J-DOGG HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880189Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "820604822",
+      "name": "INTERKREDITT KAPITAL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880195Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "923166750",
+      "name": "UAB HTR1",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880202Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "992984848",
+      "name": "PHONERO DISTRIBUSJON AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880208Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "828919652",
+      "name": "BAIA MOBILITY AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880214Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "940612632",
+      "name": "FINVOLD PROSJEKT CONSULT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:39.880220Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "928176703",
+      "name": "SALTEX AS",
+      "registry_website": "www.saltex.eu",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:39.880226Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://saltex.eu/",
+      "error": null,
+      "requested_domain": "saltex.eu",
+      "final_domain": "saltex.eu",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "saltex"
+        ],
+        "matched_tokens": [
+          "saltex"
+        ],
+        "reasons": [
+          "single distinctive legal-name token appears in homepage identity evidence with substantive content"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "0ce2a9e96ef27cde9c977d7b5d0046aa737c41b50ecc68a70504fae2d76623c6"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "936677797",
+      "name": "LINDE-BELLAND INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646837Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "913013476",
+      "name": "TUNGASLETTA 2 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646856Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "897701952",
+      "name": "RIMO AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646862Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "926840371",
+      "name": "PRIMAL AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646866Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997948807",
+      "name": "ADVOKAT TELLESBØ",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646870Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "915833780",
+      "name": "TLANGHOLEN INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646873Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927151375",
+      "name": "KBH INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646877Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "988672432",
+      "name": "RAAEN HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646880Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "929970861",
+      "name": "A JOYFUL CHILD AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646884Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "917431175",
+      "name": "THL HOLDING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646887Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "933586030",
+      "name": "BORETTSLAGET PILESTREDET PARK 21",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646891Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "912123154",
+      "name": "LEL FORVALTNING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646895Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "924640537",
+      "name": "ALL ONBOARD ADVENTURE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:43.646899Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "999593038",
+      "name": "NYE EURO MOBILE AS",
+      "registry_website": "euromobile.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:43.646903Z",
+      "robots": {
+        "state": "parsed",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=UTF-8",
+      "final_url": "https://www.euromobile.no/",
+      "error": null,
+      "requested_domain": "euromobile.no",
+      "final_domain": "euromobile.no",
+      "identity": {
+        "status": "related_or_uncertain",
+        "score": 0.65,
+        "publishable": false,
+        "legal_name_tokens": [
+          "nye",
+          "euro",
+          "mobile"
+        ],
+        "matched_tokens": [
+          "euro",
+          "mobile"
+        ],
+        "reasons": [
+          "partial legal-name overlap only"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "8fc7fd023949ea8adf83f521ace78640ef44aef3752a564196ad4756e8012de0"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "991741984",
+      "name": "SØRNYPAN BRUK AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:48.208112Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "997550641",
+      "name": "OSLAND SETTEFISK AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:48.208133Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "924541490",
+      "name": "DHS AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:48.208138Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "928580644",
+      "name": "HEAVY METALL MEKANISKE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:48.208143Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "931692380",
+      "name": "KERKO EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:48.208147Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "913036913",
+      "name": "KUBEN ARKITEKTUR AS",
+      "registry_website": "www.kuben.no",
+      "status": "robots_unreachable",
+      "retrieved_at": "2026-10-02T21:54:48.208151Z",
+      "robots": {
+        "state": "unreachable",
+        "error": "HTTP 503"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927582740",
+      "name": "KOMA UTLEIE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.266946Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927208997",
+      "name": "MEDI CONSULT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.266971Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "983226051",
+      "name": "FRONT EIENDOM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.266979Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "912676544",
+      "name": "BRAARUD II BORETTSLAG",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.266985Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "920295126",
+      "name": "FLYTAXI NORGE NUF",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.266991Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "931824171",
+      "name": "KPS RENHOLD AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.267012Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "979943172",
+      "name": "HOLMS BILPLEIE AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.267033Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "927352699",
+      "name": "STENSRUD BYGG OG TAKSERING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.267042Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "985183333",
+      "name": "THE GREAT LIFE COMPANY AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.267048Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "930731609",
+      "name": "STUDIO74 AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.267054Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "914137497",
+      "name": "GALLERI ART DESIGN AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.267060Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "911825813",
+      "name": "ADDICTS & HABITS AS",
+      "registry_website": "www.addictsandharbits.com",
+      "status": "robots_unreachable",
+      "retrieved_at": "2026-10-02T21:54:52.267065Z",
+      "robots": {
+        "state": "unreachable",
+        "error": "ValueError: Hostname did not resolve"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "989788892",
+      "name": "VÅGEN KRAFT AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:52.269774Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "929001761",
+      "name": "LOKI LYDSTUDIO AS",
+      "registry_website": "www.lokilyd.no",
+      "status": "responding",
+      "retrieved_at": "2026-10-02T21:54:52.269796Z",
+      "robots": {
+        "state": "no_rules",
+        "error": null
+      },
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "final_url": "https://www.lokilyd.no/",
+      "error": null,
+      "requested_domain": "lokilyd.no",
+      "final_domain": "lokilyd.no",
+      "identity": {
+        "status": "exact",
+        "score": 0.95,
+        "publishable": true,
+        "legal_name_tokens": [
+          "loki",
+          "lydstudio"
+        ],
+        "matched_tokens": [
+          "loki",
+          "lydstudio"
+        ],
+        "reasons": [
+          "all normalized legal-name tokens appear together in homepage identity evidence"
+        ],
+        "method": "deterministic_name_org_evidence_v2"
+      },
+      "page": {
+        "content_sha256": "4ff1e01878afb49466fff80a8d9cc9b934c6ad875753f9fc9bb20f71adc266fa"
+      },
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "935883830",
+      "name": "A KLINIKK AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:53.844286Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "923201718",
+      "name": "EA BYGG INVEST AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:53.844308Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "822796982",
+      "name": "KOEM AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:53.844313Z",
+      "shared_group_domain": false
+    },
+    {
+      "organisation_number": "923526110",
+      "name": "BRODERING AS",
+      "registry_website": null,
+      "status": "missing",
+      "retrieved_at": "2026-10-02T21:54:53.844317Z",
+      "shared_group_domain": false
+    }
+  ]
+}

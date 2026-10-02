@@ -1,0 +1,36 @@
+# Builderr starter component map (M00)
+
+The supplied `signalpost-starter-kit/` is a runnable reference baseline and useful code source. The live challenge contract and audited plan remain authoritative. Starter-local historical POC scores, README examples and output shape do not override either one.
+
+| Component | Decision | Reason / integration boundary |
+|---|---|---|
+| `src/norway_company_agent/official.py` | KEEP + REFACTOR | Valuable BRREG entity, accounts, roles, group and subunit parsers; add snapshot-first source arbitration, current fact/evidence semantics, request ledger and canonical output. |
+| `identity.py` | KEEP + ADAPT | Deterministic legal-name/org-number and social gates are useful. Reconcile thresholds with audited identity fingerprint and exact-site decision table before production use. |
+| `website.py`, `scrapy_crawler.py`, `crawl_events.py` | KEEP + REFACTOR | URL safety, robots handling, bounded extraction, crawl event merging and resume support are proven starting points. Align all physical requests with shared safe gateway/budget accounting; cap pages per M03 contract. |
+| `evidence.py`, `snapshots.py` | KEEP + ADAPT | Preserve hashes, sources and retrieval times; map older status vocabulary and record shape to canonical evidence and claims. |
+| `refresh.py`, `run_refresh_replay.py`, refresh fixture | KEEP + ADAPT | Existing deterministic event diff and idempotent replay directly serve refresh semantics; map to required typed changes and state handoff. |
+| `batch.py`, `run_competition_batch.py`, `operations.py` | REFACTOR | Useful batch guarantee, checkpointing and metrics. Current starter runner takes local manifest/BRREG bulk/profile paths and has no official evaluator adapter or injected budget contract. |
+| `discovery.py`, `run_brave_discovery.py` | ADAPT | Candidate-only discovery, provider response parser and transient result handling are reusable if current provider permissions, credentials, and retention allow them. No search result becomes evidence. |
+| `external_tasks.py`, `external_control.py`, `external_footprint.py` | KEEP as isolated planner/reference, then ADAPT | Shows source task selection and publication validation ideas. Internal task scores/control heuristics cannot override audited batch budgets or deterministic identity/publication decisions. |
+| `research.py`, `workspace.py`, `build_prototype.py` | KEEP as reference; ADAPT later | Useful cited Q&A, local profile workspace and UI prototype. They are not the official evaluator's exact synthesis/UX contract. |
+| `sampling.py`, `select_entry_batch.py`, `data/universe-metadata.json` | KEEP | The hash-stratified registry sampling primitives and frozen universe metadata support reproducible audits. The actual 411,160-row archive was not in the repository; downloaded to `/tmp` during M00. |
+| `scripts/run_google_news_rss_connector.py`, `extract_company_site_news.py`, `extract_company_site_activity.py` | ADAPT | Company-owned site/news parsing and exact title logic may be promoted with source rights, date, evidence and identity gates. RSS/search results alone are candidates. |
+| `scripts/run_youtube_search_connector.py`, `normalize_social_links.py` | ADAPT | Discovery and URL normalization may be reused when acquired under an allowed mode and independently verified; platform facts stay gated. |
+| `scripts/normalize_google_maps_results.py` | QUARANTINE pending current permission | Strong local identity scoring and normalization tests exist, but acquisition/retention mode and official API terms must be declared and approved before publication. |
+| `scripts/run_linkedin_guest_experiment.py`, `run_linkedin_guest_jobs_connector.py`, `discover_linkedin_company_profiles.py` | QUARANTINE as scoring integrations | Useful parser/identity experiments and fixtures, but source policy explicitly disallows assuming guest/unofficial access is permitted. Keep experiments non-publishable pending authorization. |
+| `scripts/run_fagfolkguiden_reviews_connector.py` | QUARANTINE pending rights/reproducibility | Review site acquisition rights and allowed retention are not established by starter code or current contract. Parser tests can remain as reference. |
+| `scripts/run_annual_report_workforce_connector.py` | ADAPT, off by default | Useful Norwegian financial PDF/employee parser; production claims require all-period official PDF acquisition and deterministic evidence/page binding. |
+| `scripts/run_sentiment_model.py`, sentiment fixtures | QUARANTINE as signal source; KEEP abstention logic | Tiny/synthetic label fixtures and a pinned model smoke are not a human-labelled company-event benchmark. The current scoring contract does not require this model. |
+| `scripts/run_brave_discovery.py`, `scripts/run_google_news_rss_connector.py` experiments and all external connector outputs | QUARANTINE until current rights/reproducibility gates pass | Keep code and tests as reference. Do not publish their output or declare a production source without rights, credential, retention and identity proof. |
+| `score_company_completeness.py`, `score_competition_v3.py`, `evaluate_external_footprint.py`, `evaluate_research_agent.py`, historical suites | KEEP for local diagnostics only | They were built for earlier POC rubrics/corpora. Their scores are not Builderr's official score and cannot change release gates. |
+| `tests/test_poc.py` and checked-in fixtures | KEEP | 104 tests plus 5 subtests passed after a clean locked install. Preserve parsers, identity negatives, refresh, evidence, budget and connector regression coverage; add canonical-contract tests in M01+. |
+| `README.md`, `OUTPUT_CONTRACT.md`, `docs/*` | ADAPT | Preserve setup and working examples, but label historic/unofficial scoring and replace compact output example when current schema arrives. Current public contract requires more semantic envelope sections and six terminal states. |
+| dependency lock and `pyproject.toml` | KEEP + audit | Locked baseline installed successfully; Python requirement is 3.12+. Optional Scrapy/browser and model packages remain optional, not a mandatory M00 requirement. |
+
+## Starter implementation evidence inspected
+
+- Source package: official records, identity, evidence, snapshots, website, discovery, refresh, batch, operations, research workspace, external tasks/control/footprint, sentiment and optional Scrapy crawler.
+- Tests and fixtures: saved refresh snapshots, discovery input/results, seven research-suite corpora, sentiment synthetic data, and one-company batch input. These do not include the official full registry CSV or public 411,160-row universe.
+- Existing integrations: BRREG API/bulk CSV; registry-site crawl; Brave search; company-site activity/news; Google Maps normalization; YouTube search; LinkedIn discovery/profile/jobs experiments; Norwegian reviews experiment; annual-report workforce extraction; RSS news; sentiment inference.
+- Refresh: local two-version snapshot replay reports two expected changes, no false positives/negatives, complete evidence and idempotent rerun.
+- Accounting: batch runner includes request/runtime/cost reports and resumable per-company state; individual source modules count requests, but this is not yet the audited plan's single strict physical-request ledger.
