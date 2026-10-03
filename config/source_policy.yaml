@@ -1,0 +1,73 @@
+version: 1
+sources:
+  brreg_ccr:
+    name: Brønnøysund Register Centre Central Coordinating Register
+    hosts:
+      - data.brreg.no
+    endpoints:
+      - /enhetsregisteret/api/enheter/{organisation_number}
+      - /enhetsregisteret/api/enheter/{organisation_number}/roller
+      - /enhetsregisteret/api/underenheter?overordnetEnhet={organisation_number}
+      - /enhetsregisteret/api/konsernstruktur/{organisation_number}
+    acquisition:
+      mode: documented_public_get
+      gateway: signalpost.network.NetworkGateway
+      robots:
+        enforce_explicit_rules: true
+        on_unreachable: allow_only_documented_structured_api_paths
+      redirects: same_host_only
+      user_agent_contact: pending_builderr_contact
+    rights:
+      license: NLOD-2.0
+      reference: https://data.brreg.no/enhetsregisteret/api/dokumentasjon/en/index.html
+      attribution: "Brønnøysund Register Centre (Brønnøysundregistrene), retrieved {date}, NLOD 2.0"
+    retention:
+      response_bodies: run_scoped
+      persistent_raw_cache: false
+      retain_provenance: [source_url, retrieved_at, content_sha256, json_pointer, extraction_method, source_snapshot]
+    personal_data:
+      allow_public_role_name: true
+      allow_public_role_and_business_relation: true
+      retain_birth_date: false
+      retain_national_identifier: false
+      retain_private_address: false
+      retain_private_contact: false
+      enk_registration_addresses: omit
+  brreg_accounts:
+    name: Brønnøysund Register Centre Register of Company Accounts
+    hosts:
+      - data.brreg.no
+    endpoints:
+      - /regnskapsregisteret/regnskap/{organisation_number}
+    acquisition:
+      mode: documented_public_get
+      gateway: signalpost.network.NetworkGateway
+      robots:
+        enforce_explicit_rules: true
+        on_unreachable: allow_only_documented_structured_api_paths
+      redirects: same_host_only
+      user_agent_contact: pending_builderr_contact
+    rights:
+      license: NLOD-2.0
+      reference: https://www.brreg.no/bruke-data-fra-bronnoysundregistrene/datasett-og-api/
+      attribution: "Brønnøysund Register Centre (Brønnøysundregistrene), retrieved {date}, NLOD 2.0"
+    retention:
+      response_bodies: run_scoped
+      persistent_raw_cache: false
+      retain_provenance: [source_url, retrieved_at, content_sha256, json_pointer, extraction_method, source_snapshot]
+  builderr_frozen_registry:
+    name: Builderr evaluator frozen registry snapshot
+    hosts: []
+    endpoints: []
+    acquisition:
+      mode: supplied_local_snapshot
+      streaming: true
+      source_url_required_for_publication: true
+    rights:
+      license: unresolved
+      reference: unresolved
+      attribution: unresolved
+    retention:
+      response_bodies: unresolved
+      persistent_raw_cache: unresolved
+      retain_provenance: [snapshot_sha256, as_of, source_url, matched_row_hash]

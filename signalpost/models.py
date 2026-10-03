@@ -69,7 +69,7 @@ class Claim(StrictModel):
                         self.scope, self.verification_rule_id, self.verification_score)
             if any(value is None for value in required) or not self.source_snapshot_ids:
                 raise ValueError("available claims require entity, section, family, subject, verification, and snapshot provenance")
-        if self.scope is not None and self.scope not in {"legal_entity", "group", "workplace", "person_role", "job", "event"}:
+        if self.scope is not None and self.scope not in {"legal_entity", "group", "unknown", "workplace", "person_role", "job", "event"}:
             raise ValueError("unsupported claim scope")
         return self
 
@@ -150,6 +150,9 @@ class Envelope(StrictModel):
                     raise ValueError("available claims must match the envelope organisation number")
                 if not claim.evidence_ids or not set(claim.evidence_ids) <= evidence_ids:
                     raise ValueError("available claims must reference present evidence with hashes and extraction methods")
+                if any((item.extraction_method.startswith("brreg_") or item.extraction_method == "frozen_registry_jsonl_v1") and not item.json_pointer
+                       for item in self.evidence if item.evidence_id in claim.evidence_ids):
+                    raise ValueError("available structured claims require a source JSON pointer")
                 if not set(claim.source_snapshot_ids) <= snapshot_ids:
                     raise ValueError("available claims must reference present source snapshots")
         return self

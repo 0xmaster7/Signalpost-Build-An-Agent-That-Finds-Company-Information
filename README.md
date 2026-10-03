@@ -11,7 +11,7 @@ This repository starts from Builderr's supplied runnable reference in [`signalpo
 - Builderr questions prepared for follow-up: [`docs/builderr-questions.md`](docs/builderr-questions.md)
 
 The starter README contains setup, sample refresh replay and local run commands. Its historic prototype scorers and compact output example are reference material; they do not supersede the current Builderr evaluator contract or the audited implementation plan.
-## M01 runtime
+## M01/M02 runtime
 
 From the repository root, with the locked starter environment installed:
 
@@ -22,4 +22,14 @@ PYTHONPATH=. signalpost-starter-kit/.venv/bin/python -m signalpost.run \
   --output signalpost_output.jsonl
 ```
 
-The runner accepts JSON, JSONL, CSV, TSV, and plain text inputs. `--previous-state`, `--state-output`, `--config`, `--evidence-cutoff`, and `--network-policy` are available; corresponding input/output/config/cutoff/network settings can be supplied with `SIGNALPOST_*` environment variables. The frozen registry fixture demonstrates deterministic offline operation. Live BRREG integration is the M02 milestone. See [M01 implementation decisions](docs/decisions/M01.md) for contract uncertainty and runtime boundaries.
+The runner accepts JSON, JSONL, CSV, TSV, and plain text inputs. `--previous-state`, `--state-output`, `--config`, `--evidence-cutoff`, and `--network-policy` are available; corresponding input/output/config/cutoff/network settings can be supplied with `SIGNALPOST_*` environment variables. The frozen registry fixture demonstrates deterministic offline operation. Add `--live-brreg` to fetch exact-organisation entity, normalized accounts, roles, and paginated workplaces through the centralized M01 gateway. An optional `--registry-snapshot` is streamed and hashed; set `--registry-snapshot-as-of` and `--registry-source-url` when the supplied Builderr snapshot does not carry those fields per row.
+
+Run the fixed 100-company foundation smoke and save a report outside the checkout:
+
+```sh
+PYTHONPATH=. signalpost-starter-kit/.venv/bin/python \
+  signalpost-starter-kit/scripts/run_m02_foundation_smoke.py \
+  --output /tmp/signalpost-m02-foundation-smoke.json
+```
+
+M02 decisions and unresolved inputs are listed in [the M02 decision record](docs/decisions/M02.md). BRREG source rights and required attribution are documented in [BRREG structured sources](docs/sources/brreg.md).

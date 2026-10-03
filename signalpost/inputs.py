@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import gzip
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -20,10 +22,13 @@ def normalize_org_number(value: Any) -> tuple[str, bool]:
     valid_shape = bool(ORG_RE.fullmatch(text))
     if not valid_shape:
         return text, False
-    weights = (2, 3, 4, 5, 6, 7, 2, 3)
+    # BRREG specifies weights 3, 2, 7, 6, 5, 4, 3, 2 over the first eight digits.
+    weights = (3, 2, 7, 6, 5, 4, 3, 2)
     total = sum(int(digit) * weight for digit, weight in zip(text[:8], weights))
-    check = 11 - total % 11
-    expected = 0 if check == 11 else check
+    remainder = total % 11
+    expected = 0 if remainder == 0 else 11 - remainder
+    if expected == 10:
+        return text, False
     return text, int(text[8]) == expected
 
 
@@ -96,3 +101,54 @@ def registry_fixture(path: str | Path | None) -> dict[str, dict[str, Any]]:
             raise ValueError(f"invalid or duplicate registry fixture row {index}")
         result[org] = record
     return result
+
+
+def stream_registry_matches(path: str | Path | None, requested: set[str]) -> tuple[dict[str, dict[str, Any]], str | None]:
+    """Filter a frozen JSONL/CSV snapshot in streaming passes, retaining only matches.
+
+    The digest is streamed over the compressed or plain source bytes, so reports
+    identify the exact supplied snapshot without retaining the full universe.
+    """
+    if not path:
+        return {}, None
+    source = Path(path)
+    digest = hashlib.sha256()
+    with source.open("rb") as raw:
+        while chunk := raw.read(1024 * 1024):
+            digest.update(chunk)
+    opener = gzip.open if source.suffix.casefold() == ".gz" else open
+    matches: dict[str, dict[str, Any]] = {}
+    with opener(source, "rt", encoding="utf-8-sig", newline="") as stream:
+        first = stream.readline()
+        if not first:
+            return matches, digest.hexdigest()
+        # This API targets documented frozen registry formats: JSONL or CSV.
+        # JSON arrays are deliberately excluded because they require whole-file parsing.
+        if first.lstrip().startswith(("{", "[")):
+            def records():
+                yield first
+                yield from stream
+            for index, line in enumerate(records(), 1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if not isinstance(row, dict):
+                    continue
+                org, _ = normalize_org_number(row.get("organisation_number", row.get("orgnr")))
+                if org in requested:
+                    if org in matches:
+                        raise ValueError(f"duplicate organisation number in registry snapshot at row {index}")
+                    row["__signalpost_snapshot_row_sha256"] = hashlib.sha256(line.encode("utf-8")).hexdigest()
+                    row["__signalpost_snapshot_row_number"] = index
+                    matches[org] = row
+        else:
+            def lines():
+                yield first
+                yield from stream
+            for row in csv.DictReader(lines()):
+                org, _ = normalize_org_number(row.get("organisation_number", row.get("orgnr")))
+                if org in requested:
+                    if org in matches:
+                        raise ValueError(f"duplicate organisation number in registry snapshot: {org}")
+                    matches[org] = dict(row)
+    return matches, digest.hexdigest()

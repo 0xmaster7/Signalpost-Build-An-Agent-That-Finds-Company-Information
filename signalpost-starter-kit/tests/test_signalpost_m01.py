@@ -7,9 +7,11 @@ import json
 import os
 import sys
 import tempfile
+import time
+import tracemalloc
 import unittest
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +24,8 @@ from signalpost.models import Claim, Envelope, Evidence, PublicState, RefreshSta
 from signalpost.network import NetworkGateway, NetworkPolicyError, StructuredLogger, UrlLibTransport, canonical_url, classify_response, registered_domain, robots_directives, validate_public_host
 from signalpost.operations import Budget, OrderedAtomicWriter, RunBudget
 from signalpost.run import main
+from signalpost.brreg import cutoff_identity, financial_records, group_relationships, normalize_entity, role_records, subunit_page, fetch_company
+from signalpost.inputs import stream_registry_matches
 import signalpost.run as run_module
 
 
@@ -47,12 +51,13 @@ def valid_envelope(row: int = 1) -> Envelope:
 
 class InputContractTests(unittest.TestCase):
     def test_mod11_and_leading_zero_are_textual(self):
-        self.assertEqual(normalize_org_number(" 923 609 010 "), ("923609010", True))
+        self.assertEqual(normalize_org_number(" 923 609 016 "), ("923609016", True))
+        self.assertEqual(normalize_org_number("923609010"), ("923609010", False))
         normalized, valid = normalize_org_number("012345676")
         self.assertEqual(normalized, "012345676")
         self.assertIsInstance(normalized, str)
         self.assertFalse(valid)
-        self.assertEqual(normalize_org_number(923609010), ("923609010", True))
+        self.assertEqual(normalize_org_number(923609010), ("923609010", False))
         self.assertEqual(normalize_org_number(123456789.0), ("", False))
 
     def test_duplicates_preserve_input_rows_and_malformed_row_isolated(self):
@@ -171,6 +176,18 @@ class NetworkSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(gateway.ledger.logical_requests, 1)
         self.assertEqual([entry.outcome for entry in gateway.ledger.entries], ["transport_error", "received"])
 
+    async def test_concurrent_requests_respect_per_host_start_rate(self):
+        starts = []
+        class TimedTransport:
+            async def request(self, url, headers, timeout):
+                starts.append(time.monotonic())
+                return 200, {}, b"ok", url
+        gateway = NetworkGateway(TimedTransport(), retries=0)
+        gateway.set_rate_limit("8.8.8.8", 30)
+        await asyncio.gather(*(gateway.fetch(f"https://8.8.8.8/{i}", use_robots=False) for i in range(4)))
+        self.assertEqual(len(starts), 4)
+        self.assertTrue(all(right - left >= 0.025 for left, right in zip(starts, starts[1:])))
+
     async def test_trusted_proxy_mode_uses_configured_proxy_path(self):
         with patch.dict(os.environ, {"http_proxy": "http://proxy.fixture:8080", "https_proxy": "http://proxy.fixture:8080"}):
             transport = UrlLibTransport(trust_env=True)
@@ -187,6 +204,13 @@ class NetworkSecurityTests(unittest.IsolatedAsyncioTestCase):
         gateway = NetworkGateway(fake, retries=0)
         with self.assertRaises(NetworkPolicyError):
             await gateway.fetch("https://8.8.8.8/", use_robots=False)
+        self.assertEqual(gateway.ledger.physical_requests, 1)
+
+    async def test_source_allowlist_rejects_cross_host_redirect(self):
+        fake = FakeTransport([(302, {"Location": "https://1.1.1.1/out"}, b"", "https://8.8.8.8/start")])
+        gateway = NetworkGateway(fake, retries=0)
+        with self.assertRaises(NetworkPolicyError):
+            await gateway.fetch("https://8.8.8.8/start", use_robots=False, allowed_hosts={"8.8.8.8"})
         self.assertEqual(gateway.ledger.physical_requests, 1)
 
     async def test_safe_redirect_hop_is_counted(self):
@@ -208,6 +232,77 @@ class NetworkSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await skip_gateway.robots_allowed("https://8.8.8.8/a", "SignalpostBot"), (False, None))
         oversized = NetworkGateway(FakeTransport([(200, {}, b"x" * (256 * 1024 + 1), "https://8.8.8.8/robots.txt")]), retries=0)
         self.assertEqual(await oversized.robots_allowed("https://8.8.8.8/a", "SignalpostBot"), (False, None))
+
+    async def test_explicit_robots_disallow_remains_blocked_for_website_and_brreg_api(self):
+        robots = (200, {}, b"User-agent: *\nDisallow: /", "https://data.brreg.no/robots.txt")
+        site_gateway = NetworkGateway(FakeTransport([robots]), retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("195.43.63.68",)):
+            site_result = await site_gateway.fetch("https://data.brreg.no/company", purpose="page")
+        self.assertEqual(site_result[-1], "robots_disallowed")
+        api_gateway = NetworkGateway(FakeTransport([robots]), retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("195.43.63.68",)):
+            api_result = await api_gateway.fetch("https://data.brreg.no/enhetsregisteret/api/enheter/923609016",
+                purpose="entity", allowed_hosts={"data.brreg.no"}, access_profile="brreg_structured_api")
+        self.assertEqual(api_result[-1], "robots_disallowed")
+        self.assertEqual(api_gateway.ledger.physical_requests, 1)
+
+    async def test_robots_transport_failure_is_distinct_and_ordinary_crawl_stays_fail_closed(self):
+        fake = FakeTransport([OSError("connection reset after request")])
+        gateway = NetworkGateway(fake, retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("93.184.216.34",)):
+            result = await gateway.fetch("https://example.com/about", purpose="page")
+        self.assertEqual(result[-1], "robots_unreachable")
+        self.assertNotEqual(result[-1], "robots_disallowed")
+        self.assertEqual(fake.urls, ["https://example.com/robots.txt"])
+
+    async def test_brreg_structured_api_only_continues_after_robots_transport_failure(self):
+        fake = FakeTransport([
+            OSError("connection reset after request"),
+            (200, {}, b'{"organisasjonsnummer":"923609016"}',
+             "https://data.brreg.no/enhetsregisteret/api/enheter/923609016"),
+        ])
+        gateway = NetworkGateway(fake, retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("195.43.63.68",)):
+            result = await gateway.fetch("https://data.brreg.no/enhetsregisteret/api/enheter/923609016",
+                purpose="entity", allowed_hosts={"data.brreg.no"}, access_profile="brreg_structured_api")
+        self.assertEqual(result[-1], "ok")
+        self.assertEqual(len(fake.urls), 2)
+        self.assertEqual(fake.urls[0], "https://data.brreg.no/robots.txt")
+        self.assertIn("/enhetsregisteret/api/enheter/923609016", fake.urls[1])
+
+    async def test_brreg_api_does_not_continue_after_unusable_robots_response(self):
+        fake = FakeTransport([
+            (200, {}, b"Just a moment... verify you are human", "https://data.brreg.no/robots.txt"),
+            (200, {}, b'{"organisasjonsnummer":"923609016"}',
+             "https://data.brreg.no/enhetsregisteret/api/enheter/923609016"),
+        ])
+        gateway = NetworkGateway(fake, retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("195.43.63.68",)):
+            result = await gateway.fetch("https://data.brreg.no/enhetsregisteret/api/enheter/923609016",
+                purpose="entity", allowed_hosts={"data.brreg.no"}, access_profile="brreg_structured_api")
+        self.assertEqual(result[-1], "robots_unusable")
+        self.assertEqual(fake.urls, ["https://data.brreg.no/robots.txt"])
+
+    async def test_brreg_api_profile_cannot_be_reused_for_arbitrary_websites(self):
+        fake = FakeTransport([])
+        gateway = NetworkGateway(fake, retries=0)
+        for url, purpose in (
+            ("https://example.com/enhetsregisteret/api/enheter/923609016", "entity"),
+            ("https://data.brreg.no/company/923609016", "entity"),
+            ("https://data.brreg.no/enhetsregisteret/api/enheter/923609016", "page"),
+        ):
+            with self.assertRaises(NetworkPolicyError):
+                await gateway.fetch(url, purpose=purpose, access_profile="brreg_structured_api")
+        self.assertEqual(fake.urls, [])
+
+    async def test_parallel_same_origin_requests_share_one_robots_fetch(self):
+        responses = [(200, {}, b"", "https://8.8.8.8/robots.txt")] + [
+            (200, {}, b"ok", f"https://8.8.8.8/{i}") for i in range(10)]
+        gateway = NetworkGateway(FakeTransport(responses), retries=0)
+        results = await asyncio.gather(*(gateway.fetch(f"https://8.8.8.8/{i}") for i in range(10)))
+        self.assertTrue(all(result[-1] == "ok" for result in results))
+        self.assertEqual(sum(entry.purpose == "robots" for entry in gateway.ledger.entries), 1)
+        self.assertEqual(gateway.ledger.physical_requests, 11)
 
     async def test_robots_rules_crawl_delay_and_200_waf_soft_404(self):
         fake = FakeTransport([(200, {}, b"User-agent: *\nDisallow: /private\nCrawl-delay: 0.1\n", "https://8.8.8.8/robots.txt")])
@@ -291,6 +386,197 @@ class GatewayArchitectureTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
             for pattern in patterns:
                 self.assertNotIn(pattern, content, f"unledgered HTTP path in {path.name}")
+
+
+class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
+    def test_all_financial_history_periods_and_corrections_are_retained(self):
+        rows = []
+        for year in range(2018, 2024):
+            rows.append({"id": f"filing-{year}", "versjon": 1, "regnskapstype": "SELSKAP",
+                         "regnskapsperiode": {"fraDato": f"{year}-04-01", "tilDato": f"{year + 1}-03-31"},
+                         "valuta": "NOK", "resultatregnskapResultat": {"driftsresultat": {
+                             "driftsinntekter": {"sumDriftsinntekter": year * 100}, "driftsresultat": year * 10}}})
+        rows.append({**rows[-1], "versjon": 2, "resultatregnskapResultat": {"driftsresultat": {
+            "driftsinntekter": {"sumDriftsinntekter": 999}, "driftsresultat": 91}}})
+        normalized = financial_records(rows)
+        self.assertEqual(len(normalized), 7)
+        self.assertEqual([item["period_start"] for item in normalized[:2]], ["2018-04-01", "2019-04-01"])
+        self.assertEqual([item["metrics"]["revenue"] for item in normalized[-2:]], [202300, 999])
+        self.assertEqual(normalized[0]["scope"], "legal_entity")
+
+    def test_metric_label_mismatch_does_not_get_promoted(self):
+        records = financial_records([{"regnskapstype": "SELSKAP", "regnskapsperiode": {},
+                                      "resultatregnskapResultat": {"driftsresultat": {
+                                          "driftsinntekter": {"sumAnnenInntekt": 123456}}}}])
+        self.assertIsNone(records[0]["metrics"]["revenue"])
+
+    def test_group_scope_is_explicit_and_separate(self):
+        records = financial_records([
+            {"regnskapstype": "SELSKAP", "regnskapsperiode": {}, "eiendeler": {"sumEiendeler": 10}},
+            {"regnskapstype": "KONSERN", "regnskapsperiode": {}, "eiendeler": {"sumEiendeler": 20}},
+        ])
+        self.assertEqual([row["scope"] for row in records], ["legal_entity", "group"])
+
+    def test_unknown_financial_scope_stays_unknown(self):
+        records = financial_records([{"regnskapstype": "SPECIAL", "regnskapsperiode": {}, "eiendeler": {"sumEiendeler": 20}}])
+        self.assertEqual(records[0]["scope"], "unknown")
+
+    def test_group_tree_keeps_target_and_parent_relationships_separate(self):
+        tree = {"organisasjonsnummer": "923609003", "navn": "Target AS", "children": [{
+            "organisasjonsnummer": "923609016", "navn": "Subsidiary AS", "nivaa": 1, "knytningsform": "SUBSIDIARY",
+            "children": [{"organisasjonsnummer": "923609028", "navn": "Workplace", "nivaa": 2}]}]}
+        relationships = group_relationships(tree, "923609003")
+        self.assertEqual([r["organisation_number"] for r in relationships], ["923609016", "923609028"])
+        self.assertEqual(relationships[0]["parent_organisation_number"], "923609003")
+        self.assertEqual(relationships[1]["parent_organisation_number"], "923609016")
+
+    def test_cutoff_keeps_frozen_identity_when_live_rename_is_after_cutoff(self):
+        cutoff = datetime(2026, 10, 10, tzinfo=timezone.utc)
+        frozen = {"name": "Old Name AS", "as_of": "2026-10-01"}
+        live = {"name": "New Name AS", "retrieved_at": "2026-10-12T00:00:00Z"}
+        selected = cutoff_identity(frozen, live, cutoff)
+        self.assertEqual((selected["name"], selected["source"]), ("Old Name AS", "frozen"))
+        self.assertIsNone(cutoff_identity(frozen, live, datetime(2026, 9, 1, tzinfo=timezone.utc)))
+
+    def test_frozen_snapshot_is_published_if_live_identity_is_post_cutoff(self):
+        env = valid_envelope()
+        env.claims = []
+        env.sections["identity_brand"] = empty_section()
+        env.sections["claims_evidence_states"] = empty_section()
+        env.terminal_state = PublicState.NOT_AVAILABLE
+        cutoff = datetime(2026, 10, 10, tzinfo=timezone.utc)
+        baseline = {"organisation_number": "923609016", "name": "Frozen Name AS", "snapshot_as_of": "2026-10-01",
+                    "source_url": "https://data.brreg.no/snapshot/entity", "__signalpost_snapshot_row_sha256": "b" * 64}
+        env = run_module._attach_frozen_baseline(env, baseline, "a" * 64, cutoff)
+        claim = next(item for item in env.claims if item.field == "legal_name")
+        self.assertEqual(claim.value, "Frozen Name AS")
+        self.assertEqual(claim.as_of, datetime(2026, 10, 1, tzinfo=timezone.utc))
+        self.assertEqual(env.terminal_state, PublicState.AVAILABLE)
+        self.assertEqual(env.source_snapshots[-1].rights_status, "NLOD-2.0")
+
+    def test_roles_keep_holder_subject_and_discard_birth_date(self):
+        result = role_records({"rollegrupper": [{"type": {"kode": "STYR", "beskrivelse": "Board"}, "roller": [{
+            "type": {"kode": "LEDA", "beskrivelse": "Chair"}, "person": {"navn": {"fornavn": "Ada"}, "foedselsdato": "1970-01-01"},
+            "enhet": {"organisasjonsnummer": "923609016", "navn": "Holder AS"}}]}]})
+        self.assertEqual(result[0]["holder_organisation_number"], "923609016")
+        self.assertEqual(result[0]["holder_kind"], "organisation")
+        self.assertNotIn("foedselsdato", json.dumps(result))
+        self.assertEqual(role_records({"rollegrupper": [None, {"roller": [None]}]}), [])
+
+    def test_entity_normalizer_preserves_historical_names_and_multiple_industries(self):
+        normalized = normalize_entity({"organisasjonsnummer": "923609016", "historiskeNavn": [
+            {"navn": "Old AS", "fraDato": "2020-01-01", "tilDato": "2022-01-01"}],
+            "naeringskode1": {"kode": "01.110"}, "naeringskode2": {"kode": "02.100"}})
+        self.assertEqual(normalized["historical_names"][0]["name"], "Old AS")
+        self.assertEqual(len(normalized["industry_codes"]), 2)
+
+    def test_enk_entity_drops_registration_addresses(self):
+        normalized = normalize_entity({"organisasjonsform": {"kode": "ENK"},
+                                       "forretningsadresse": {"adresse": ["Private street 1"], "poststed": "Oslo"},
+                                       "postadresse": {"adresse": ["Private box"]}})
+        self.assertIsNone(normalized["business_address"])
+        self.assertIsNone(normalized["postal_address"])
+
+    def test_subunit_pagination_marks_partial_until_last_page(self):
+        first = {"_embedded": {"underenheter": [{"organisasjonsnummer": "123456785"}]},
+                 "_links": {"next": {"href": "?page=1"}}, "page": {"number": 0, "totalPages": 2}}
+        rows, next_url, complete = subunit_page(first)
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(complete)
+        self.assertEqual(next_url, "?page=1")
+        self.assertTrue(subunit_page({"_embedded": {"underenheter": []}, "page": {"number": 1, "totalPages": 2}})[2])
+
+    async def test_live_entity_404_and_410_have_distinct_states(self):
+        class StatusTransport:
+            def __init__(self, entity_status): self.entity_status = entity_status
+            async def request(self, url, headers, timeout):
+                status = self.entity_status if "/enheter/923609003" in url and not url.endswith("/roller") else 404
+                return status, {}, b"{}", url
+        for status, expected in ((404, PublicState.NOT_AVAILABLE), (410, PublicState.BLOCKED)):
+            gateway = NetworkGateway(StatusTransport(status), retries=0)
+            with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+                result = await fetch_company("923609003", gateway, datetime.now(timezone.utc) + timedelta(days=1))
+            self.assertEqual(result.section_states["identity_brand"], expected)
+            self.assertFalse(any(c.section == "identity_brand" and c.state == PublicState.AVAILABLE for c in result.claims))
+            self.assertEqual(result.section_states["accounts_history"], PublicState.NOT_AVAILABLE)
+            self.assertFalse(any(c.field_family == "financial" for c in result.claims))
+            state_evidence_id = result.observations["identity_state_evidence_id"]
+            state_evidence = next(item for item in result.evidence if item.evidence_id == state_evidence_id)
+            self.assertEqual(state_evidence.extraction_method, "brreg_entity_status_v1")
+            self.assertEqual(next(s.http_status for s in result.snapshots if s.source_url.endswith("/923609003")), status)
+
+    async def test_live_cli_commits_one_official_envelope_per_duplicate_input(self):
+        class FakeGateway:
+            def __init__(self, *args, **kwargs):
+                self.ledger = type("Ledger", (), {"physical_requests": 0, "logical_requests": 0, "entries": []})()
+            def set_rate_limit(self, *args): pass
+            async def fetch(self, url, **kwargs):
+                self.ledger.logical_requests += 1
+                self.ledger.physical_requests += 1
+                if "/roller" in url: body = {"rollegrupper": []}
+                elif "/underenheter?" in url: body = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
+                elif "/regnskap/" in url: body = [{"id": "F1", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "eiendeler": {"sumEiendeler": 5}}]
+                else: body = {"organisasjonsnummer": "923609016", "navn": "Target AS"}
+                self.ledger.entries.append(type("Entry", (), {"purpose": kwargs["purpose"], "url": url, "status": 200, "outcome": "received"})())
+                return 200, {}, json.dumps(body).encode(), url, "ok"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "input.jsonl").write_text('{"organisation_number":"923609016"}\n{"organisation_number":"923609016"}\n')
+            with patch("signalpost.run.NetworkGateway", FakeGateway):
+                code = await asyncio.to_thread(main, ["--input", str(root / "input.jsonl"), "--live-brreg", "--output", str(root / "out.jsonl"),
+                                                       "--state-output", str(root / "state.sqlite"), "--batch-id", "m02-fixture"])
+            output = [json.loads(line) for line in (root / "out.jsonl").read_text().splitlines()]
+            self.assertEqual(code, 0)
+            self.assertEqual(len(output), 2)
+            self.assertEqual([env["organisation_number"] for env in output], ["923609016", "923609016"])
+            self.assertTrue(all(env["sections"]["accounts_history"]["state"] == "available" for env in output))
+            self.assertTrue(all(all(e["json_pointer"] and e["extraction_method"] for e in env["evidence"]) for env in output))
+
+    def test_stream_snapshot_filters_large_jsonl_and_hashes_exact_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.jsonl"
+            with path.open("w") as stream:
+                for i in range(1, 411_161):
+                    stream.write(json.dumps({"organisation_number": f"{i % 1_000_000_000:09d}", "name": str(i)}) + "\n")
+            # Select one unique key appearing in source; output memory is bounded by request count.
+            tracemalloc.start()
+            matches, digest = stream_registry_matches(path, {"000000001", "000000002"})
+            _, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            self.assertLessEqual(len(matches), 2)
+            self.assertEqual(len(digest), 64)
+            self.assertLess(peak, 16 * 1024 * 1024)
+
+    async def test_company_fetch_uses_exact_target_and_keeps_role_holder_distinct(self):
+        entity = {"organisasjonsnummer": "923609003", "navn": "Target AS", "organisasjonsform": {"kode": "AS"}}
+        accounts = [{"id": "x", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-04-01", "tilDato": "2025-03-31"},
+                     "valuta": "NOK", "eiendeler": {"sumEiendeler": 12}}]
+        roles = {"rollegrupper": [{"type": {"kode": "STYR", "beskrivelse": "Board"}, "roller": [{
+            "type": {"kode": "LEDA", "beskrivelse": "Chair"}, "person": {"navn": {"fornavn": "A"}},
+            "enhet": {"organisasjonsnummer": "923609016"}}]}]}
+        subunits = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
+        class RoutingTransport:
+            async def request(self, url, headers, timeout):
+                if "/regnskap/" in url: value = accounts
+                elif url.endswith("/roller"): value = roles
+                elif "/underenheter?" in url: value = subunits
+                else: value = entity
+                return 200, {"Content-Type": "application/json"}, json.dumps(value).encode(), url
+        gateway = NetworkGateway(RoutingTransport(), retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+            result = await fetch_company("923609003", gateway, datetime.now(timezone.utc) + timedelta(days=1))
+        self.assertEqual(gateway.ledger.logical_requests, 4)
+        self.assertTrue(all(claim.organisation_number == "923609003" for claim in result.claims))
+        holder = next(claim for claim in result.claims if claim.field == "role.holder_organisation_number")
+        self.assertEqual(holder.subject_id, "923609003")
+        self.assertEqual(holder.value, "923609016")
+        self.assertEqual(result.observations["financial_records"], 1)
+        self.assertEqual(result.observations["ceo_state"], "not_available")
+        self.assertIn(result.observations["roles_completeness_evidence_id"], {item.evidence_id for item in result.evidence})
+        payload_hashes = {hashlib.sha256(json.dumps(value).encode()).hexdigest()
+                          for value in (entity, accounts, roles, subunits)}
+        self.assertTrue(all(item.json_pointer and len(item.content_sha256) == 64 for item in result.evidence))
+        self.assertTrue(all(item.content_sha256 in payload_hashes for item in result.evidence))
 
 
 if __name__ == "__main__":

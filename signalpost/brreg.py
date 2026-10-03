@@ -1,0 +1,527 @@
+"""BRREG public API adapters. Every response is fetched by NetworkGateway."""
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
+from urllib.parse import urljoin, urlsplit
+
+from .inputs import normalize_org_number
+from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot
+from .network import NetworkGateway
+
+BASE = "https://data.brreg.no/enhetsregisteret/api"
+ACCOUNTS = "https://data.brreg.no/regnskapsregisteret/regnskap"
+UA = "Signalpost/0.2 (public BRREG foundation; contact pending)"
+RIGHTS = "NLOD-2.0"
+
+
+def _get(data: Any, *path: str) -> Any:
+    for part in path:
+        if not isinstance(data, dict):
+            return None
+        data = data.get(part)
+    return data
+
+
+def _date(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+    except ValueError:
+        return None
+
+
+@dataclass
+class BrregResult:
+    claims: list[Claim]
+    evidence: list[Evidence]
+    snapshots: list[SourceSnapshot]
+    errors: list[RunError]
+    section_states: dict[str, PublicState]
+    terminal_state: PublicState
+    observations: dict[str, Any]
+
+
+def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
+    """Keep public legal identity fields and exclude personal identifiers."""
+    legal_form = _get(body, "organisasjonsform", "kode")
+    address = body.get("forretningsadresse") or {}
+    postal = body.get("postadresse") or {}
+    def address_value(value: dict[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(value, dict) or not value:
+            return None
+        return {key: value.get(key) for key in ("adresse", "postnummer", "poststed", "kommunenummer", "kommune") if value.get(key) is not None}
+    hist = body.get("historiskeNavn") or []
+    history = [{"name": h.get("navn"), "from": h.get("fraDato"), "to": h.get("tilDato")} for h in hist if isinstance(h, dict)]
+    return {
+        "organisation_number": body.get("organisasjonsnummer"), "name": body.get("navn"),
+        "legal_form": legal_form, "legal_form_description": _get(body, "organisasjonsform", "beskrivelse"),
+        "status": {key: body.get(key) for key in ("konkurs", "underAvvikling", "underTvangsavviklingEllerTvangsopplosning", "registrertIMvaregisteret", "registrertIForetaksregisteret") if body.get(key) is not None},
+        "status_dates": {key: body.get(key) for key in ("konkursdato", "avviklingsdato", "tvangsavviklingsdato", "registreringsdatoEnhetsregisteret", "stiftelsesdato") if body.get(key) is not None},
+        "historical_names": history,
+        # ENK registration addresses can be an owner's home address; keep them out.
+        "business_address": None if legal_form == "ENK" else address_value(address),
+        "postal_address": None if legal_form == "ENK" else address_value(postal),
+        "industry_codes": [body.get(f"naeringskode{i}") for i in range(1, 4) if body.get(f"naeringskode{i}")],
+        "municipality_number": body.get("kommunenummer"), "municipality": body.get("kommune"),
+        "website": body.get("hjemmeside"), "employees": body.get("antallAnsatte"),
+        "latest_submitted_accounts": body.get("sisteInnsendteAarsregnskap"),
+        "parent_organisation_number": body.get("overordnetEnhet"),
+    }
+
+
+METRICS = {
+    "revenue": "resultatregnskapResultat/driftsresultat/driftsinntekter/sumDriftsinntekter",
+    "operating_result": "resultatregnskapResultat/driftsresultat/driftsresultat",
+    "profit_before_tax": "resultatregnskapResultat/ordinaertResultatFoerSkattekostnad",
+    "annual_result": "resultatregnskapResultat/aarsresultat",
+    "total_assets": "eiendeler/sumEiendeler",
+    "equity": "egenkapitalGjeld/egenkapital/sumEgenkapital",
+    "total_debt": "egenkapitalGjeld/gjeldOversikt/sumGjeld",
+}
+
+
+def financial_records(body: Any) -> list[dict[str, Any]]:
+    """Normalize every returned record; preserve raw source fields and periods."""
+    if isinstance(body, dict):
+        embedded = body.get("_embedded") if isinstance(body.get("_embedded"), dict) else {}
+        records = embedded.get("regnskap") or body.get("regnskap") or []
+        if not records and any(k in body for k in ("regnskapsperiode", "id")):
+            records = [body]
+    elif isinstance(body, list):
+        records = body
+    else:
+        records = []
+    result = []
+    for source_index, record in enumerate(records):
+        if not isinstance(record, dict):
+            continue
+        period = record.get("regnskapsperiode") or {}
+        if not isinstance(period, dict):
+            period = {}
+        account_type = str(record.get("regnskapstype") or "").casefold()
+        scope = "group" if account_type in {"konsern", "konsernregnskap"} else "legal_entity" if account_type in {"selskap", "selskapsregnskap"} else "unknown"
+        values = {}
+        for field, path in METRICS.items():
+            val = _get(record, *path.split("/"))
+            # Numeric field labels are intentionally exact: an unlabelled or mistyped
+            # value is never guessed from a nearby account name.
+            if isinstance(val, dict):
+                raw = val.get("sum") if isinstance(val.get("sum"), (int, float)) else None
+                unit = val.get("enhet") or val.get("valuta")
+            else:
+                raw, unit = val, None
+            values[field] = raw if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None
+            if values[field] is not None:
+                values[field + "_unit"] = unit
+        result.append({
+            "record_id": record.get("id"), "filing_id": record.get("innsendingsId"), "record_version": record.get("versjon"),
+            "source_version_or_filing_id": record.get("versjon") or record.get("innsendingsId") or record.get("id"),
+            "account_type": record.get("regnskapstype"), "scope": scope,
+            "_source_index": source_index,
+            "_source_prefix": (f"/{source_index}" if isinstance(body, list) else
+                               f"/_embedded/regnskap/{source_index}" if isinstance(body.get("_embedded"), dict) else
+                               f"/regnskap/{source_index}" if isinstance(body.get("regnskap"), list) else ""),
+            "period_start": period.get("fraDato"), "period_end": period.get("tilDato"),
+            "filing_timestamp": record.get("innsendingsdato") or record.get("registreringsdato"),
+            "currency": record.get("valuta"), "raw_unit": record.get("enhet"), "metrics": values,
+            "raw": record,
+        })
+    # Exact duplicate payloads may be removed. Different versions/corrections remain.
+    unique: dict[str, dict[str, Any]] = {}
+    for record in result:
+        digest = hashlib.sha256(json.dumps(record["raw"], sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+        unique.setdefault(digest, record)
+    return list(unique.values())
+
+
+def role_records(body: Any) -> list[dict[str, Any]]:
+    result = []
+    for gi, group in enumerate(body.get("rollegrupper", []) if isinstance(body, dict) else []):
+        for ri, item in enumerate(group.get("roller", []) if isinstance(group, dict) else []):
+            if not isinstance(item, dict):
+                continue
+            person, entity = item.get("person") or {}, item.get("enhet") or {}
+            name = person.get("navn") or {}
+            display = " ".join(str(name.get(k)) for k in ("fornavn", "mellomnavn", "etternavn") if name.get(k))
+            # Birth date and identifier fields are never copied into normalized output.
+            result.append({"name": display or entity.get("navn"), "holder_organisation_number": entity.get("organisasjonsnummer"),
+                           "role_code": _get(item, "type", "kode"), "role_description": _get(item, "type", "beskrivelse"),
+                           "role_group_code": _get(group, "type", "kode"), "role_group": _get(group, "type", "beskrivelse"),
+                           "from_date": item.get("fraDato"), "to_date": item.get("tilDato"),
+                           "last_changed": group.get("sistEndret"), "inactive": bool(item.get("avregistrert") or item.get("fratraadt")),
+                           "holder_kind": "organisation" if entity.get("organisasjonsnummer") else "person",
+                           "_source_path": f"/rollegrupper/{gi}/roller/{ri}",
+                           "_source_group_path": f"/rollegrupper/{gi}"})
+    return result
+
+
+def subunit_page(body: Any) -> tuple[list[dict[str, Any]], str | None, bool]:
+    if not isinstance(body, dict):
+        return [], None, False
+    rows = _get(body, "_embedded", "underenheter") or []
+    if not isinstance(rows, list):
+        return [], None, False
+    links = body.get("_links") or {}
+    next_url = _get(links, "next", "href")
+    page = body.get("page") or {}
+    try:
+        complete = not next_url and (not page or int(page.get("number", 0)) + 1 >= int(page.get("totalPages", 1)))
+    except (AttributeError, TypeError, ValueError):
+        complete = False
+    return [row for row in rows if isinstance(row, dict)], next_url, complete
+
+
+def group_relationships(body: Any, target_org: str) -> list[dict[str, Any]]:
+    """Flatten relationship nodes without changing the anchored target entity."""
+    result: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    def walk(node: Any, parent_org: str | None = None, parent_name: str | None = None, path: str = "") -> None:
+        if not isinstance(node, dict):
+            return
+        org = node.get("organisasjonsnummer")
+        if isinstance(org, str) and org and org != target_org:
+            relation = str(node.get("knytningsform") or "unknown")
+            key = (org, parent_org or "", relation)
+            if key not in seen:
+                result.append({"organisation_number": org, "name": node.get("navn"), "parent_organisation_number": parent_org,
+                               "parent_name": parent_name, "relationship": relation, "level": node.get("nivaa"),
+                               "legal_form": _get(node, "organisasjonsform", "kode"), "source_path": path})
+                seen.add(key)
+            next_parent, next_name = org, node.get("navn")
+        else:
+            next_parent, next_name = (org, node.get("navn")) if org == target_org else (parent_org, parent_name)
+        children = node.get("children") or node.get("barn") or []
+        for index, child in enumerate(children):
+            walk(child, next_parent, next_name, f"{path}/children/{index}")
+    root = body.get("enhet") if isinstance(body, dict) and isinstance(body.get("enhet"), dict) else body
+    walk(root)
+    return result
+
+
+def cutoff_identity(frozen: dict[str, Any] | None, live: dict[str, Any] | None, cutoff: datetime) -> dict[str, Any] | None:
+    """Select the latest dated exact-entity identity observation allowed by cutoff."""
+    choices = []
+    for source, item in (("frozen", frozen), ("live", live)):
+        if not isinstance(item, dict):
+            continue
+        observed = _date(item.get("as_of") or item.get("retrieved_at"))
+        if observed is not None and observed <= cutoff:
+            choices.append((observed, 1 if source == "live" else 0, {**item, "source": source}))
+    return max(choices, key=lambda row: (row[0], row[1]))[2] if choices else None
+
+
+def _source_id(section: str, digest: str) -> str:
+    return f"brreg:{section}:{digest[:16]}"
+
+
+def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnapshot], *, org: str, name: str,
+                           url: str, retrieved_at: datetime, status: int, digest: str | None,
+                           pointer: str, method: str, rights: str = RIGHTS) -> str | None:
+    if not digest:
+        return None
+    source_id = _source_id(name, digest)
+    evidence_id = f"{org}:{name}:state:{digest[:12]}"
+    evidence.append(Evidence(evidence_id=evidence_id, source_url=url, retrieved_at=retrieved_at,
+                             content_sha256=digest, extraction_method=method, json_pointer=pointer,
+                             source_class="official"))
+    if not any(item.source_id == source_id for item in snapshots):
+        snapshots.append(SourceSnapshot(source_id=source_id, source_url=url, retrieved_at=retrieved_at,
+            content_sha256=digest, http_status=status, cache_mode="transient", rights_status=rights))
+    return evidence_id
+
+
+async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> BrregResult:
+    claims: list[Claim] = []
+    evidence: list[Evidence] = []
+    snapshots: list[SourceSnapshot] = []
+    errors: list[RunError] = []
+    states: dict[str, PublicState] = {"identity_brand": PublicState.NOT_AVAILABLE, "accounts_history": PublicState.NOT_AVAILABLE,
+                                     "leadership_workplaces": PublicState.NOT_AVAILABLE}
+    observations: dict[str, Any] = {"workplace_count": 0, "workplaces_complete": False, "financial_records": 0,
+                                   "roles_count": 0, "entity_http_status": None, "group_checked": False}
+    target_legal_form: str | None = None
+
+    async def request(url: str, purpose: str, section: str) -> tuple[Any, str | None, int, datetime, str | None]:
+        retrieved = datetime.now(timezone.utc)
+        try:
+            status, headers, payload, final_url, outcome = await gateway.fetch(url, purpose=purpose, user_agent=UA,
+                                                                                max_bytes=4 * 1024 * 1024,
+                                                                                allowed_hosts={"data.brreg.no"},
+                                                                                access_profile="brreg_structured_api")
+        except Exception as exc:
+            detail = str(exc).replace("\n", " ")[:160]
+            errors.append(RunError(code=f"BRREG_{purpose.upper()}_TRANSPORT", message=f"{type(exc).__name__}: {detail}", retryable=True, source_id=section))
+            return None, None, 0, retrieved, None
+        response_digest = hashlib.sha256(payload).hexdigest()
+        if final_url and urlsplit(final_url).hostname != "data.brreg.no":
+            errors.append(RunError(code="BRREG_REDIRECT_HOST_REJECTED", message="BRREG endpoint redirected outside its official API host."))
+            return {"_http_status": status, "_outcome": "redirect_host_rejected"}, final_url, 0, retrieved, response_digest
+        if status == 200 and outcome == "ok":
+            try:
+                return json.loads(payload), final_url, status, retrieved, response_digest
+            except (ValueError, UnicodeDecodeError):
+                errors.append(RunError(code=f"BRREG_{purpose.upper()}_INVALID_JSON", message="Official endpoint returned invalid JSON.", source_id=section))
+                return None, final_url, status, retrieved, response_digest
+        code = f"BRREG_{purpose.upper()}_{status or outcome.upper()}"
+        errors.append(RunError(code=code, message=f"Official source outcome: {outcome}.", retryable=status >= 500 or status == 0, source_id=section))
+        return {"_http_status": status, "_outcome": outcome}, final_url or url, status, retrieved, response_digest
+
+    def add_claim(field: str, value: Any, section: str, family: str, subject: str, scope: str,
+                  url: str, retrieved: datetime, raw_document: Any, pointer: str, source_name: str,
+                  *, unit: str | None = None, currency: str | None = None, start: Any = None, end: Any = None,
+                  as_of: Any = None, source_hash: str | None = None,
+                  extraction_method: str = "brreg_json_pointer_v1") -> None:
+        if value is None:
+            return
+        raw_bytes = json.dumps(raw_document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        digest = source_hash or hashlib.sha256(raw_bytes).hexdigest()
+        sid = _source_id(source_name, digest)
+        eid = f"{org}:{section}:{len(evidence)}:{digest[:12]}"
+        evidence.append(Evidence(evidence_id=eid, source_url=url, retrieved_at=retrieved,
+                                 content_sha256=digest, extraction_method=extraction_method, json_pointer=pointer,
+                                 source_class="official"))
+        if not any(s.source_id == sid for s in snapshots):
+            snapshots.append(SourceSnapshot(source_id=sid, source_url=url, retrieved_at=retrieved, content_sha256=digest,
+                                            http_status=200, cache_mode="transient", rights_status=RIGHTS))
+        claims.append(Claim(claim_id=f"{org}:{section}:{len(claims)}", organisation_number=org, section=section,
+                            field_family=family, subject_id=subject, field=field, value=value, state=PublicState.AVAILABLE,
+                            unit=unit, currency=currency, period_start=_date(start), period_end=_date(end), as_of=_date(as_of),
+                            scope=scope, verification_rule_id="brreg_exact_org_pointer_v1", verification_score="1.0",
+                            evidence_ids=[eid], source_snapshot_ids=[sid]))
+
+    entity_url = f"{BASE}/enheter/{org}"
+    entity, entity_final, entity_status, entity_time, entity_hash = await request(entity_url, "entity", "identity_brand")
+    observations["entity_http_status"] = entity_status
+    if entity_status in {404, 410}:
+        observations["identity_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="entity_state",
+            url=entity_final or entity_url, retrieved_at=entity_time, status=entity_status, digest=entity_hash,
+            pointer="/", method="brreg_entity_status_v1")
+    entity_is_target = isinstance(entity, dict) and entity.get("organisasjonsnummer") == org
+    if entity_is_target and entity_final:
+        identity = normalize_entity(entity)
+        target_legal_form = identity.get("legal_form")
+        identity_source_paths = {
+            "organisation_number": "/organisasjonsnummer", "name": "/navn", "legal_form": "/organisasjonsform/kode",
+            "legal_form_description": "/organisasjonsform/beskrivelse", "website": "/hjemmeside", "employees": "/antallAnsatte",
+            "latest_submitted_accounts": "/sisteInnsendteAarsregnskap", "parent_organisation_number": "/overordnetEnhet",
+            "municipality_number": "/kommunenummer", "municipality": "/kommune",
+            "business_address": "/forretningsadresse", "postal_address": "/postadresse", "status": "/",
+            "status_dates": "/", "industry_codes": "/",
+        }
+        fields = [(k, v) for k, v in identity.items() if v is not None and k not in {"status", "status_dates", "historical_names", "industry_codes", "business_address", "postal_address"}]
+        fields.extend((f"status.{k}", v) for k, v in identity["status"].items())
+        fields.extend((f"status_dates.{k}", v) for k, v in identity["status_dates"].items())
+        fields.extend((f"industry_codes.{i}", v) for i, v in enumerate(identity["industry_codes"]))
+        for key in ("business_address", "postal_address"):
+            if identity[key]: fields.append((key, identity[key]))
+        for key, value in fields:
+            pointer = identity_source_paths.get(key, "/")
+            if key.startswith("status.") or key.startswith("status_dates."):
+                pointer = "/" + key.split(".", 1)[1]
+            elif key.startswith("industry_codes."):
+                pointer = f"/naeringskode{int(key.rsplit('.', 1)[1]) + 1}"
+            add_claim(key, value, "identity_brand", "identity", org, "legal_entity", entity_final, entity_time,
+                      entity, pointer, "entity", source_hash=entity_hash,
+                      extraction_method="brreg_json_pointer_projection_v1" if key in {"business_address", "postal_address"} else "brreg_json_pointer_v1")
+        for i, item in enumerate(identity["historical_names"]):
+            add_claim("historical_name", item["name"], "identity_brand", "identity_history", org, "legal_entity",
+                      entity_final, entity_time, entity, f"/historiskeNavn/{i}/navn", "entity", start=item["from"], end=item["to"], source_hash=entity_hash)
+        states["identity_brand"] = PublicState.AVAILABLE if claims else PublicState.NOT_AVAILABLE
+    elif entity_status == 410:
+        states["identity_brand"] = PublicState.BLOCKED
+        observations["entity_removed_from_disclosure"] = True
+    elif entity_status >= 500 or entity_status == 0:
+        states["identity_brand"] = PublicState.FAILED
+    elif entity_status in {401, 403, 429, 451}:
+        states["identity_brand"] = PublicState.BLOCKED
+    else:
+        states["identity_brand"] = PublicState.NOT_AVAILABLE
+    if isinstance(entity, dict) and entity.get("organisasjonsnummer") and entity.get("organisasjonsnummer") != org:
+        errors.append(RunError(code="BRREG_IDENTITY_ANCHOR_MISMATCH", message="Live registry returned a different organisation number."))
+        states["identity_brand"] = PublicState.AMBIGUOUS
+
+    # Subunit input is atomic. Do not use its parent to fill its legal identity.
+    target_is_subunit = bool(isinstance(entity, dict) and entity.get("overordnetEnhet"))
+    observations["target_is_subunit"] = target_is_subunit
+    accounts_url = f"{ACCOUNTS}/{org}"
+    account_body, account_final, account_status, account_time, account_hash = await request(accounts_url, "accounts", "accounts_history")
+    if account_status != 200:
+        observations["accounts_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="accounts_state",
+            url=account_final or accounts_url, retrieved_at=account_time, status=account_status, digest=account_hash,
+            pointer="/", method="brreg_accounts_endpoint_state_v1")
+    if account_status == 200 and isinstance(account_body, (list, dict)):
+        records = financial_records(account_body)
+        observations["financial_records"] = len(records)
+        if not records:
+            observations["accounts_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="accounts_empty",
+                url=account_final or accounts_url, retrieved_at=account_time, status=account_status, digest=account_hash,
+                pointer="/", method="brreg_empty_account_collection_v1")
+        for ri, record in enumerate(records):
+            raw = account_body
+            record_path = record["_source_prefix"]
+            for metric, value in record["metrics"].items():
+                if metric.endswith("_unit") or value is None:
+                    continue
+                # The record's own labels determine scope and periods. No calendar-year inference.
+                raw_metric = _get(record["raw"], *METRICS[metric].split("/"))
+                metric_pointer = record_path + "/" + METRICS[metric]
+                if isinstance(raw_metric, dict) and isinstance(raw_metric.get("sum"), (int, float)):
+                    metric_pointer += "/sum"
+                add_claim(metric, value, "accounts_history", "financial", org, record["scope"], account_final or accounts_url,
+                          account_time, raw, metric_pointer, "accounts", unit=record["metrics"].get(metric + "_unit"),
+                          currency=record["currency"], start=record["period_start"], end=record["period_end"],
+                          as_of=record["filing_timestamp"], source_hash=account_hash,
+                          extraction_method="brreg_financial_projection_v1" if isinstance(raw_metric, dict) else "brreg_json_pointer_v1")
+            for meta in ("record_id", "filing_id", "record_version", "source_version_or_filing_id", "account_type", "scope",
+                         "period_start", "period_end", "filing_timestamp", "currency", "raw_unit"):
+                if record.get(meta) is not None:
+                    source_pointers = {"record_id": "/id", "filing_id": "/innsendingsId", "record_version": "/versjon",
+                                       "account_type": "/regnskapstype", "scope": "/regnskapstype",
+                                       "period_start": "/regnskapsperiode/fraDato", "period_end": "/regnskapsperiode/tilDato",
+                                       "filing_timestamp": "/innsendingsdato" if record["raw"].get("innsendingsdato") else "/registreringsdato",
+                                       "currency": "/valuta", "raw_unit": "/enhet"}
+                    if meta == "source_version_or_filing_id":
+                        pointer = "/versjon" if record["raw"].get("versjon") else "/innsendingsId" if record["raw"].get("innsendingsId") else "/id"
+                    else:
+                        pointer = source_pointers[meta]
+                    add_claim(f"financial_record.{meta}", record[meta], "accounts_history", "financial_record_metadata", org,
+                              record["scope"], account_final or accounts_url, account_time, raw, record_path + pointer, "accounts",
+                              start=record["period_start"], end=record["period_end"], as_of=record["filing_timestamp"],
+                              currency=record["currency"], source_hash=account_hash,
+                              extraction_method="brreg_scope_normalization_v1" if meta == "scope" else "brreg_json_pointer_v1")
+        states["accounts_history"] = PublicState.AVAILABLE if any(c.section == "accounts_history" for c in claims) else PublicState.NOT_AVAILABLE
+    elif account_status >= 500 or account_status == 0:
+        states["accounts_history"] = PublicState.FAILED
+    elif account_status in {401, 403, 429, 451}:
+        states["accounts_history"] = PublicState.BLOCKED
+    else:
+        states["accounts_history"] = PublicState.NOT_AVAILABLE
+
+    roles_url = f"{BASE}/enheter/{org}/roller"
+    roles_body, roles_final, roles_status, roles_time, roles_hash = await request(roles_url, "roles", "leadership_workplaces")
+    if roles_status != 200:
+        observations["roles_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="roles_state",
+            url=roles_final or roles_url, retrieved_at=roles_time, status=roles_status, digest=roles_hash,
+            pointer="/", method="brreg_roles_endpoint_state_v1")
+    subunits_url = f"{BASE}/underenheter?overordnetEnhet={org}&size=1000"
+    subunit_body, subunit_final, subunit_status, subunit_time, subunit_hash = await request(subunits_url, "subunits", "leadership_workplaces")
+    if subunit_status != 200:
+        observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="subunits_state",
+            url=subunit_final or subunits_url, retrieved_at=subunit_time, status=subunit_status, digest=subunit_hash,
+            pointer="/", method="brreg_subunits_endpoint_state_v1")
+    roles = role_records(roles_body) if roles_status == 200 and isinstance(roles_body, dict) else []
+    observations["roles_count"] = len(roles)
+    observations["role_family_state"] = (
+        PublicState.AVAILABLE.value if roles else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
+        PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
+    ceo_rows = [role for role in roles if str(role.get("role_code") or "").casefold() in {"dagl", "ceo"}
+                or "daglig leder" in str(role.get("role_description") or "").casefold()
+                or "managing director" in str(role.get("role_description") or "").casefold()]
+    observations["ceo_state"] = (PublicState.AVAILABLE.value if ceo_rows else
+                                 PublicState.NOT_AVAILABLE.value if roles_status == 200 else
+                                 PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
+    if roles_status == 200:
+        roles_digest = roles_hash or hashlib.sha256(json.dumps(roles_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        completion_snapshot_id = _source_id("roles", roles_digest)
+        observations["roles_completeness_evidence_id"] = f"{org}:roles-complete:{roles_digest[:12]}"
+        if not roles:
+            observations["roles_state_evidence_id"] = observations["roles_completeness_evidence_id"]
+        evidence.append(Evidence(evidence_id=observations["roles_completeness_evidence_id"], source_url=roles_final or roles_url,
+                                retrieved_at=roles_time, content_sha256=roles_digest,
+                                extraction_method="brreg_complete_role_collection_v1", json_pointer="/rollegrupper"))
+        if not any(item.source_id == completion_snapshot_id for item in snapshots):
+            snapshots.append(SourceSnapshot(source_id=completion_snapshot_id, source_url=roles_final or roles_url,
+                retrieved_at=roles_time, content_sha256=roles_digest, http_status=200, rights_status=RIGHTS))
+    for i, role in enumerate(roles):
+        holder = role.get("holder_organisation_number")
+        if holder:
+            normalized, valid = normalize_org_number(holder)
+            if not valid:
+                errors.append(RunError(code="BRREG_ROLE_HOLDER_INVALID_ORG", message="Role holder organisation number failed checksum."))
+                continue
+            role["holder_organisation_number"] = normalized
+        for key, value in role.items():
+            if value is None or key in {"_source_path", "_source_group_path"}: continue
+            role_source_paths = {"name": "/person/navn", "holder_organisation_number": "/enhet/organisasjonsnummer",
+                                 "role_code": "/type/kode", "role_description": "/type/beskrivelse",
+                                 "role_group_code": "/type/kode", "role_group": "/type/beskrivelse",
+                                 "from_date": "/fraDato", "to_date": "/tilDato", "last_changed": "/sistEndret",
+                                 "inactive": "/", "holder_kind": "/"}
+            role_path = role["_source_group_path"] + role_source_paths.get(key, "/" + key) if key.startswith("role_group") or key == "last_changed" else role["_source_path"] + role_source_paths.get(key, "/" + key)
+            method = "brreg_role_name_join_v1" if key == "name" else "brreg_role_status_normalization_v1" if key in {"inactive", "holder_kind"} else "brreg_json_pointer_v1"
+            add_claim(f"role.{key}", value, "leadership_workplaces", "role", org, "person_role",
+                      roles_final or roles_url, roles_time, roles_body, role_path, "roles", source_hash=roles_hash,
+                      extraction_method=method)
+    locations: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
+    complete = subunit_status == 200
+    current = subunit_body
+    current_url = subunit_final or subunits_url
+    current_hash = subunit_hash
+    current_time = subunit_time
+    page_index = 0
+    while subunit_status == 200 and isinstance(current, dict):
+        rows, next_path, page_complete = subunit_page(current)
+        locations.extend((item, current, current_url, current_hash, current_time, i) for i, item in enumerate(rows))
+        if not rows:
+            observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name=f"subunits_page_{page_index}",
+                url=current_url, retrieved_at=current_time, status=200, digest=current_hash,
+                pointer="/_embedded/underenheter", method="brreg_subunit_page_collection_v1")
+        complete = page_complete
+        if not next_path: break
+        next_url = urljoin(current_url, next_path)
+        current, subunit_final, subunit_status, subunit_time, current_hash = await request(next_url, "subunits_page", "leadership_workplaces")
+        current_time = subunit_time
+        current_url = subunit_final or next_url
+        page_index += 1
+        if page_index >= 100:
+            complete = False
+            errors.append(RunError(code="BRREG_SUBUNITS_PAGE_LIMIT", message="Subunit pagination exceeded 100 pages."))
+            break
+    observations["workplace_count"] = len(locations)
+    observations["workplaces_complete"] = complete
+    for item, page_body, page_url, page_hash, page_time, page_row_index in locations:
+        child_org = item.get("organisasjonsnummer")
+        if not child_org: continue
+        for key in ("organisasjonsnummer", "navn", "beliggenhetsadresse", "postadresse", "naeringskode1", "antallAnsatte", "overordnetEnhet"):
+            if target_legal_form == "ENK" and key in {"beliggenhetsadresse", "postadresse"}:
+                continue
+            val = item.get(key)
+            if val is not None:
+                add_claim(f"workplace.{key}", val, "leadership_workplaces", "workplace", child_org, "workplace",
+                          page_url, page_time, page_body, f"/_embedded/underenheter/{page_row_index}/{key}", "subunits",
+                          source_hash=page_hash)
+    role_claims = any(c.field_family == "role" for c in claims)
+    workplace_claims = any(c.field_family == "workplace" for c in claims)
+    states["leadership_workplaces"] = PublicState.AVAILABLE if role_claims or workplace_claims else (
+        PublicState.FAILED if roles_status >= 500 or subunit_status >= 500 or roles_status == 0 or subunit_status == 0 else
+        PublicState.BLOCKED if roles_status in {401, 403, 429, 451} or subunit_status in {401, 403, 429, 451} else PublicState.NOT_AVAILABLE)
+
+    for section in states:
+        if states[section] == PublicState.NOT_AVAILABLE:
+            errors.append(RunError(code=f"BRREG_{section.upper()}_NO_DATA", message="Official lookup completed without a source record for this section."))
+    evidence_by_id = {item.evidence_id: item for item in evidence}
+    eligible_claims = []
+    excluded_sections: set[str] = set()
+    for claim in claims:
+        observed_at = claim.as_of or claim.period_end
+        if observed_at is None and claim.evidence_ids:
+            observed_at = evidence_by_id[claim.evidence_ids[0]].retrieved_at
+        if observed_at is not None and observed_at <= cutoff:
+            eligible_claims.append(claim)
+        else:
+            excluded_sections.add(claim.section or "unknown")
+    claims = eligible_claims
+    for section_name in excluded_sections:
+        if not any(c.section == section_name for c in claims) and section_name in states:
+            states[section_name] = PublicState.NOT_AVAILABLE
+            errors.append(RunError(code="BRREG_POST_CUTOFF_EXCLUDED", message=f"Undated or post-cutoff {section_name} claims were excluded."))
+    terminal = PublicState.AVAILABLE if any(c.section in states and c.state == PublicState.AVAILABLE for c in claims) else (
+        PublicState.BLOCKED if any(s == PublicState.BLOCKED for s in states.values()) else
+        PublicState.FAILED if any(s == PublicState.FAILED for s in states.values()) else PublicState.NOT_AVAILABLE)
+    return BrregResult(claims, evidence, snapshots, errors, states, terminal, observations)

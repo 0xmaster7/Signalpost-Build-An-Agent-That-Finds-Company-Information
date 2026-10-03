@@ -12,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from email.utils import parsedate_to_datetime
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Protocol
@@ -24,6 +25,24 @@ from .operations import Budget
 
 class NetworkPolicyError(ValueError):
     pass
+
+
+_BRREG_API_PURPOSES = {"entity", "accounts", "roles", "subunits", "subunits_page", "group"}
+_BRREG_ORG_PATH = re.compile(r"^/enhetsregisteret/api/(?:enheter|konsernstruktur)/\d{9}(?:/roller)?/?$")
+_BRREG_ACCOUNTS_PATH = re.compile(r"^/regnskapsregisteret/regnskap/\d{9}/?$")
+
+
+def _brreg_structured_api_url(url: str, purpose: str) -> bool:
+    """Constrain the robots-outage exception to documented BRREG API paths."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https" or parsed.hostname != "data.brreg.no" or purpose not in _BRREG_API_PURPOSES:
+        return False
+    if _BRREG_ORG_PATH.fullmatch(parsed.path) or _BRREG_ACCOUNTS_PATH.fullmatch(parsed.path):
+        return True
+    if parsed.path == "/enhetsregisteret/api/underenheter":
+        query = urllib.parse.parse_qs(parsed.query, strict_parsing=False)
+        return len(query.get("overordnetEnhet", [])) == 1 and re.fullmatch(r"\d{9}", query["overordnetEnhet"][0]) is not None
+    return False
 
 
 class Transport(Protocol):
@@ -208,7 +227,9 @@ class NetworkGateway:
         self._host_slots: dict[str, asyncio.Semaphore] = {}
         self._rates: dict[str, float] = {}
         self._last_request: dict[str, float] = {}
-        self._robots: dict[str, tuple[str, float | None, bool]] = {}
+        self._rate_slots: dict[str, asyncio.Lock] = {}
+        self._robots: dict[str, tuple[str, float | None, str]] = {}
+        self._robots_slots: dict[str, asyncio.Lock] = {}
 
     def set_rate_limit(self, host: str, requests_per_second: float) -> None:
         if requests_per_second <= 0:
@@ -216,14 +237,27 @@ class NetworkGateway:
         self._rates[host.casefold()] = 1.0 / requests_per_second
 
     async def fetch(self, url: str, *, purpose: str = "page", user_agent: str = "SignalpostBot/1.0 (+contact pending)",
-                    max_bytes: int | None = None, use_robots: bool = True) -> tuple[int, dict[str, str], bytes, str, str]:
+                    max_bytes: int | None = None, use_robots: bool = True,
+                    allowed_hosts: set[str] | None = None, access_profile: str | None = None) -> tuple[int, dict[str, str], bytes, str, str]:
         self.ledger.logical_requests += 1
         target = canonical_url(url)
+        if allowed_hosts is not None and (urllib.parse.urlsplit(target).hostname or "").casefold() not in {h.casefold() for h in allowed_hosts}:
+            raise NetworkPolicyError("destination host is outside the caller's source allowlist")
+        if access_profile is not None and access_profile != "brreg_structured_api":
+            raise NetworkPolicyError("unknown source access profile")
+        if access_profile == "brreg_structured_api" and not _brreg_structured_api_url(target, purpose):
+            raise NetworkPolicyError("BRREG structured API profile is limited to documented BRREG endpoints")
         self._assert_proxy_route(target)
         if use_robots and purpose != "robots":
-            allowed, delay = await self.robots_allowed(target, user_agent)
-            if not allowed:
+            robots_state, delay = await self.robots_decision(target, user_agent, allowed_hosts=allowed_hosts)
+            if robots_state == "disallowed":
                 return 0, {}, b"", target, "robots_disallowed"
+            if robots_state == "policy_skip":
+                return 0, {}, b"", target, "robots_policy_skip"
+            if robots_state == "unusable":
+                return 0, {}, b"", target, "robots_unusable"
+            if robots_state == "unreachable" and access_profile != "brreg_structured_api":
+                return 0, {}, b"", target, "robots_unreachable"
         else:
             delay = None
         cap = max_bytes or self.response_cap
@@ -258,13 +292,35 @@ class NetworkGateway:
                             if hop >= self.redirect_limit:
                                 return status, headers, b"", target, "redirect_limit"
                             target = canonical_url(urllib.parse.urljoin(target, location))
+                            if allowed_hosts is not None and (urllib.parse.urlsplit(target).hostname or "").casefold() not in {h.casefold() for h in allowed_hosts}:
+                                raise NetworkPolicyError("redirect host is outside the caller's source allowlist")
+                            if access_profile == "brreg_structured_api" and not _brreg_structured_api_url(target, purpose):
+                                raise NetworkPolicyError("BRREG structured API profile is limited to documented BRREG endpoints")
                             self._assert_proxy_route(target)
                             validate_public_host(target, trusted_proxy=self.trusted_proxy)
                             if use_robots and purpose != "robots":
-                                allowed, delay = await self.robots_allowed(target, user_agent)
-                                if not allowed:
+                                robots_state, delay = await self.robots_decision(target, user_agent, allowed_hosts=allowed_hosts)
+                                if robots_state == "disallowed":
                                     return 0, {}, b"", target, "robots_disallowed"
+                                if robots_state == "policy_skip":
+                                    return 0, {}, b"", target, "robots_policy_skip"
+                                if robots_state == "unusable":
+                                    return 0, {}, b"", target, "robots_unusable"
+                                if robots_state == "unreachable" and access_profile != "brreg_structured_api":
+                                    return 0, {}, b"", target, "robots_unreachable"
                             break
+                        if status in {429, 503} and attempt < self.retries:
+                            retry_after = headers.get("Retry-After") or headers.get("retry-after")
+                            try:
+                                wait_seconds = min(60.0, max(0.0, float(retry_after))) if retry_after else min(1.0 * (attempt + 1), 5.0)
+                            except ValueError:
+                                try:
+                                    retry_at = parsedate_to_datetime(retry_after)
+                                    wait_seconds = min(60.0, max(0.0, retry_at.timestamp() - time.time()))
+                                except (TypeError, ValueError, OverflowError):
+                                    wait_seconds = min(1.0 * (attempt + 1), 5.0)
+                            await asyncio.sleep(wait_seconds)
+                            continue
                         if len(body) > cap:
                             return status, headers, b"", target, "response_too_large"
                         encoding = (headers.get("Content-Encoding") or headers.get("content-encoding") or "").lower()
@@ -308,41 +364,59 @@ class NetworkGateway:
         if parsed.hostname and urllib.request.proxy_bypass(parsed.hostname):
             raise NetworkPolicyError("trusted-proxy destination matches NO_PROXY; direct fallback is forbidden")
 
-    async def robots_allowed(self, url: str, user_agent: str) -> tuple[bool, float | None]:
+    async def robots_allowed(self, url: str, user_agent: str, *, allowed_hosts: set[str] | None = None) -> tuple[bool, float | None]:
+        state, delay = await self.robots_decision(url, user_agent, allowed_hosts=allowed_hosts)
+        return state == "allowed", delay
+
+    async def robots_decision(self, url: str, user_agent: str, *, allowed_hosts: set[str] | None = None) -> tuple[str, float | None]:
+        """Return allowed, disallowed, or unreachable without conflating policy and transport."""
         parsed = urllib.parse.urlsplit(url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
-        cached = self._robots.get(origin)
-        if cached:
-            rules, delay, skip = cached
-            return (not skip and not _robots_disallows(rules, parsed.path or "/", user_agent), delay)
-        robots_url = origin + "/robots.txt"
-        status, headers, body, final_url, outcome = await self.fetch(robots_url, purpose="robots", user_agent=user_agent, use_robots=False, max_bytes=256 * 1024)
-        delay = None
-        if outcome in {"timeout", "transport_error", "response_too_large", "decompression_limit",
-                       "unsupported_encoding", "waf_challenge", "soft_404", "redirect_limit"} or status >= 500:
-            self._robots[origin] = ("", None, True)
-            return False, None
-        if 400 <= status < 500:
-            rules = ""
-        elif 200 <= status < 300:
-            rules = body.decode("utf-8", "replace")
-            delay_values = [float(m.group(1)) for m in re.finditer(r"(?im)^\s*crawl-delay\s*:\s*([0-9.]+)", rules)]
-            delay = max(delay_values, default=None)
-            if delay is not None and delay > 60:
-                self._robots[origin] = (rules, delay, True)
-                return False, delay
-        else:
-            rules = ""
-        self._robots[origin] = (rules, delay, False)
-        return not _robots_disallows(rules, parsed.path or "/", user_agent), delay
+        lock = self._robots_slots.setdefault(origin, asyncio.Lock())
+        async with lock:
+            cached = self._robots.get(origin)
+            if cached:
+                rules, delay, state = cached
+                if state in {"unreachable", "unusable", "policy_skip"}:
+                    return state, delay
+                return ("disallowed" if _robots_disallows(rules, parsed.path or "/", user_agent) else "allowed"), delay
+            robots_url = origin + "/robots.txt"
+            status, headers, body, final_url, outcome = await self.fetch(robots_url, purpose="robots", user_agent=user_agent,
+                                                                         use_robots=False, max_bytes=256 * 1024, allowed_hosts=allowed_hosts)
+            delay = None
+            if outcome in {"timeout", "transport_error"} or status >= 500:
+                self._robots[origin] = ("", None, "unreachable")
+                return "unreachable", None
+            if outcome in {"response_too_large", "decompression_limit", "unsupported_encoding",
+                           "waf_challenge", "soft_404", "redirect_limit"}:
+                self._robots[origin] = ("", None, "unusable")
+                return "unusable", None
+            if 400 <= status < 500:
+                rules = ""
+            elif 200 <= status < 300:
+                rules = body.decode("utf-8", "replace")
+                delay_values = [float(m.group(1)) for m in re.finditer(r"(?im)^\s*crawl-delay\s*:\s*([0-9.]+)", rules)]
+                delay = max(delay_values, default=None)
+                if delay is not None and delay > 60:
+                    self._robots[origin] = (rules, delay, "policy_skip")
+                    return "policy_skip", delay
+            else:
+                rules = ""
+            state = "disallowed" if _robots_disallows(rules, parsed.path or "/", user_agent) else "allowed"
+            self._robots[origin] = (rules, delay, "allowed")
+            return state, delay
 
     async def _pace(self, url: str, minimum: float = 0.0) -> None:
         host = (urllib.parse.urlsplit(url).hostname or "").casefold()
-        delay = max(minimum, self._rates.get(host, 0.0))
-        elapsed = time.monotonic() - self._last_request.get(host, 0)
-        if elapsed < delay:
-            await asyncio.sleep(delay - elapsed)
-        self._last_request[host] = time.monotonic()
+        # Serialize slot reservation as well as the wait. Without holding this
+        # host lock, simultaneous callers wake together and violate the rate.
+        lock = self._rate_slots.setdefault(host, asyncio.Lock())
+        async with lock:
+            delay = max(minimum, self._rates.get(host, 0.0))
+            elapsed = time.monotonic() - self._last_request.get(host, 0)
+            if elapsed < delay:
+                await asyncio.sleep(delay - elapsed)
+            self._last_request[host] = time.monotonic()
 
     def _record(self, url: str, purpose: str, status: int | None, size: int, start: float, outcome: str) -> None:
         self.ledger.entries.append(LedgerEntry(str(uuid.uuid4()), url, purpose, status, size, (time.monotonic() - start) * 1000, outcome))
