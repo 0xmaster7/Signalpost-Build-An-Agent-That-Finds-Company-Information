@@ -925,6 +925,10 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             candidate_row["decision"] = "blocked_robots"
             saw_blocked = True
             continue
+        if state == "budget_skipped":
+            candidate_row["decision"] = "budget_skipped"
+            unresolved = True
+            continue
         if state != "allowed":
             candidate_row["decision"] = "robots_unreachable" if state == "unreachable" else "robots_unusable" if state == "unusable" else "candidate_policy_rejected"
             error_code = "ROBOTS_UNREACHABLE" if state == "unreachable" else "ROBOTS_UNUSABLE" if state == "unusable" else "WEBSITE_POLICY_REJECTED"

@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import sys
+import time
 import uuid
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,9 +16,10 @@ from urllib.parse import urlsplit
 
 from .inputs import load_input, normalize_org_number, registry_fixture, stream_registry_matches
 from .models import Claim, Envelope, Evidence, PublicState, RefreshState, RunError, Section, SourceSnapshot, empty_section
-from .operations import CheckpointStore, OrderedAtomicWriter, RunBudget
+from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
+                         OrderedAtomicWriter, RunBudget)
 from .network import NetworkGateway, StructuredLogger, registered_domain
-from .brreg import RIGHTS, cutoff_identity, fetch_company
+from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company
 
 
 def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[str, Any] | None = None,
@@ -220,6 +223,7 @@ def _cutoff_datetime(value: str) -> datetime | None:
 
 
 def run(args: argparse.Namespace) -> int:
+    run_started = time.monotonic()
     input_path = Path(args.input) if args.input else _find_default_input()
     if not input_path or not input_path.exists():
         print("No input file found; provide --input or create signalpost_input.jsonl", file=sys.stderr)
@@ -247,36 +251,131 @@ def run(args: argparse.Namespace) -> int:
         if not isinstance(config_values, dict):
             raise ValueError("runtime config must be a JSON object")
     budget = RunBudget.from_mapping(config_values.get("budget", config_values), batch_rows=len(rows))
+    run_budget = Budget(budget, started_at=run_started)
+    run_fingerprint = hashlib.sha256(input_path.read_bytes() + json.dumps({
+        "format": args.format, "live_brreg": args.live_brreg, "live_websites": args.live_websites,
+        "registry_snapshot_sha256": registry_hash, "config": config_values,
+        "registry_snapshot_as_of": args.registry_snapshot_as_of,
+        "registry_source_url": args.registry_source_url,
+        "budget": {"hard_seconds": budget.hard_seconds, "soft_seconds": budget.soft_seconds,
+                   "completion_reserve_seconds": budget.completion_reserve_seconds,
+                   "physical_request_limit": budget.physical_request_limit,
+                   "logical_request_limit": budget.logical_request_limit,
+                   "paid_cost_limit": str(budget.paid_cost_limit),
+                   "global_http_concurrency": budget.global_http_concurrency,
+                   "per_host_concurrency": budget.per_host_concurrency},
+        "per_company_physical_limit": budget.per_company_physical_limit,
+        "per_host_physical_limit": budget.per_host_physical_limit,
+        "previous": previous, "evidence_cutoff": args.evidence_cutoff,
+        "network_policy": args.network_policy,
+        "no_keyless": args.no_keyless_websites,
+    }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     batch_id = args.batch_id or str(uuid.uuid4())
     cutoff = (datetime.fromisoformat(args.evidence_cutoff.replace("Z", "+00:00")) if args.evidence_cutoff
               else datetime.fromisoformat("2026-10-17T23:59:00+05:30"))
     # Persist one internal shell per row before running any enrichment. Shells are not
     # evaluator envelopes and therefore do not invent a public terminal result.
     writer = OrderedAtomicWriter(output_path, estimated_bytes=len(rows) * 64 * 1024)  # preflight before enrichment
-    pending_path = writer.write_shells(rows)
+    if args.resume and not checkpoint_path.exists():
+        raise ValueError("--resume requested but the checkpoint does not exist")
     checkpoint = CheckpointStore(checkpoint_path)
-    checkpoint.connection.execute("CREATE TABLE IF NOT EXISTS shells (row_number INTEGER PRIMARY KEY, input_ref TEXT, organisation_number TEXT, execution_state TEXT)")
-    checkpoint.connection.execute("DELETE FROM shells")
-    checkpoint.connection.execute("DELETE FROM envelopes")
-    checkpoint.connection.executemany("INSERT OR REPLACE INTO shells VALUES (?,?,?,?)",
-                                      [(row.row_number, row.input_ref, row.organisation_number, "pending") for row in rows])
-    checkpoint.connection.commit()
+    if args.resume:
+        if checkpoint.get_meta("input_fingerprint") != run_fingerprint:
+            checkpoint.close()
+            raise ValueError("checkpoint input/configuration fingerprint does not match this run")
+        batch_id = checkpoint.get_meta("batch_id") or batch_id
+    else:
+        checkpoint.connection.execute("DELETE FROM shells")
+        checkpoint.connection.execute("DELETE FROM envelopes")
+        checkpoint.connection.execute("DELETE FROM run_meta")
+        checkpoint.connection.executemany("INSERT INTO shells VALUES (?,?,?,?)",
+            [(row.row_number, row.input_ref, row.organisation_number, "pending") for row in rows])
+        checkpoint.set_meta("input_fingerprint", run_fingerprint)
+        checkpoint.set_meta("batch_id", batch_id)
+    pending_path = writer.write_shells(rows, checkpoint.shell_states())
+    prior_terminalized = checkpoint.terminalized() if args.resume else {}
+    baseline_saved = checkpoint.envelopes_for_state("baseline_done") if args.resume else {}
     gateway = None
+    scheduler_report: dict[str, Any] = {}
     live_by_org: dict[str, Any] = {}
     if args.live_brreg or args.live_websites:
-        from .operations import Budget
-        gateway = NetworkGateway(timeout=20, retries=1, budget=Budget(budget),
-                                 trusted_proxy=args.network_policy == "trusted-proxy")
+        gateway = NetworkGateway(timeout=20, retries=1, budget=run_budget,
+                                 trusted_proxy=args.network_policy == "trusted-proxy",
+                                 global_concurrency=budget.global_http_concurrency)
         if args.live_brreg:
             gateway.set_rate_limit("data.brreg.no", 3.0)
         async def enrich():
-            unique = sorted({r.organisation_number for r in rows if len(r.organisation_number) == 9 and r.organisation_number.isdigit()})
+            unique = list(dict.fromkeys(r.organisation_number for r in rows
+                                        if r.row_number not in prior_terminalized and len(r.organisation_number) == 9 and r.organisation_number.isdigit()))
             by_org = {}
             if args.live_brreg:
-                results = await asyncio.gather(*(fetch_company(org, gateway, cutoff) for org in unique))
-                by_org = dict(zip(unique, results))
+                scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
+                baseline_orgs = {org for org in unique if all(
+                    row.row_number in baseline_saved or row.row_number in prior_terminalized
+                    for row in rows if row.organisation_number == org)}
+                works = [Opportunity(key=org, company=org, pass_name="official_foundation",
+                                     expected_company_family_gain=3, expected_atomic_claim_gain=4,
+                                     expected_requests=4.02, expected_seconds=2.888, sequence=index)
+                         for index, org in enumerate(unique) if org not in baseline_orgs]
+                completed_queue: asyncio.Queue[Any] = asyncio.Queue()
+                async def checkpoint_writer():
+                    while True:
+                        payload = await completed_queue.get()
+                        if payload is None:
+                            return
+                        item, result, future = payload
+                        try:
+                            baseline = fixture.get(item.company)
+                            for row in rows:
+                                if row.organisation_number != item.company or row.row_number in prior_terminalized:
+                                    continue
+                                envelope = _live_envelope(row, result, batch_id, cutoff, previous,
+                                                          frozen_match=baseline is not None)
+                                if args.registry_snapshot:
+                                    envelope = _attach_frozen_baseline(envelope, baseline, registry_hash, cutoff,
+                                        args.registry_snapshot_as_of, args.registry_source_url)
+                                checkpoint.put(envelope)
+                                checkpoint.set_shell_state(row.row_number, "baseline_done")
+                            future.set_result(None)
+                        except BaseException as exc:
+                            future.set_exception(exc)
+                checkpoint_task = asyncio.create_task(checkpoint_writer())
+                async def official(item: Opportunity):
+                    try:
+                        return await fetch_company(item.company, gateway, cutoff)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        raise OpportunityFailed(BrregResult(
+                            claims=[], evidence=[], snapshots=[],
+                            errors=[RunError(code="BRREG_ACTION_UNEXPECTED_FAILURE",
+                                message=f"Official work item failed: {type(exc).__name__}.", retryable=True)],
+                            section_states={name: PublicState.FAILED for name in
+                                ("identity_brand", "accounts_history", "leadership_workplaces")},
+                            terminal_state=PublicState.FAILED,
+                            observations={"scheduler_execution_state": "failed", "organisation_number": item.company}))
+                async def checkpoint_completed(item: Opportunity, result: Any) -> None:
+                    future = asyncio.get_running_loop().create_future()
+                    await completed_queue.put((item, result, future))
+                    await future
+                try:
+                    by_org = await scheduler.run(works, official, on_complete=checkpoint_completed)
+                finally:
+                    await completed_queue.put(None)
+                    await checkpoint_task
+                scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
+                    "companies": scheduler.company_metrics}
             output = []
             for row in rows:
+                if row.row_number in prior_terminalized:
+                    output.append(prior_terminalized[row.row_number])
+                    continue
+                if row.row_number in baseline_saved:
+                    envelope = baseline_saved[row.row_number]
+                    live_by_org[row.organisation_number] = SimpleNamespace(
+                        observations=envelope.synthesis.get("brreg_observations", {}), claims=envelope.claims)
+                    output.append(envelope)
+                    continue
                 if args.live_brreg and row.organisation_number not in by_org:
                     output.append(_envelope(row, {}, batch_id, cutoff, previous))
                     continue
@@ -292,7 +391,7 @@ def run(args: argparse.Namespace) -> int:
                     envelope = _envelope(row, fixture, batch_id, cutoff, previous)
                 output.append(envelope)
             if args.live_websites:
-                from .websites import research_company, sanitize_registry_websites
+                from .websites import WebsiteResearchResult, research_company, sanitize_registry_websites
                 # Discover shared roots across input entities before evaluating any one company.
                 profiles = {org: _website_profile(org, live_result=live_by_org.get(org), frozen=fixture.get(org),
                     frozen_sha=registry_hash, frozen_source_url=args.registry_source_url) for org in unique}
@@ -305,12 +404,40 @@ def run(args: argparse.Namespace) -> int:
                                 root = registered_domain(urlsplit(item["url"]).hostname or "")
                                 if root: root_owners.setdefault(root, set()).add(org)
                 shared_roots = {root for root, owners in root_owners.items() if len(owners) > 1}
-                website_results = await asyncio.gather(*(research_company(profile, gateway, shared_domains=shared_roots,
-                    enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff) for profile in profiles.values()))
-                by_website_org = dict(zip(profiles, website_results))
+                scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
+                works = [Opportunity(key=org, company=org, pass_name="website_verify",
+                                     expected_company_family_gain=0.005, expected_atomic_claim_gain=0.0,
+                                     identity_risk=0.05, expected_requests=0.48, expected_seconds=0.344,
+                                     sequence=index) for index, org in enumerate(profiles)]
+                async def website(item: Opportunity):
+                    try:
+                        return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
+                            enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        raise OpportunityFailed(WebsiteResearchResult(state=PublicState.FAILED,
+                            hiring_activity_state=PublicState.FAILED,
+                            errors=[RunError(code="WEBSITE_RESEARCH_UNEXPECTED_FAILURE",
+                                message=f"Optional website action failed: {type(exc).__name__}.", retryable=True)],
+                            audit={"execution_state": "failed", "claims": []}))
+                by_website_org = await scheduler.run(works, website, permitted=lambda _item:
+                    not run_budget.soft_expired and not run_budget.reserve_active
+                    and run_budget.physical_requests_remaining > 0
+                    and run_budget.logical_requests_remaining != 0)
+                scheduler_report["website_verify"] = {"passes": scheduler.metrics,
+                    "companies": scheduler.company_metrics}
                 for envelope in output:
+                    if envelope.row_number in prior_terminalized:
+                        continue
                     result = by_website_org.get(envelope.organisation_number)
                     if not result:
+                        envelope.synthesis["website_research"] = {"execution_state": "budget_skipped",
+                            "reason": "soft_deadline_or_completion_reserve", "claims": []}
+                        envelope.sections["website_owned_profiles"].diagnostics.append(
+                            "scheduler_execution_state:budget_skipped")
+                        envelope.sections["hiring_activity"].diagnostics.append(
+                            "scheduler_execution_state:budget_skipped")
                         continue
                     envelope.claims.extend(result.claims)
                     envelope.evidence.extend(result.evidence)
@@ -328,17 +455,27 @@ def run(args: argparse.Namespace) -> int:
                         envelope.sections["claims_evidence_states"].state = PublicState.AVAILABLE
                     envelope.errors.extend(result.errors)
                     envelope.synthesis["website_research"] = result.audit
-                    # Revalidate the complete canonical envelope and its evidence references.
                     envelope.__class__.model_validate(envelope.model_dump())
+            for envelope in output:
+                checkpoint.put(envelope)
+                checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
+            checkpoint.connection.commit()
             return output
         envelopes = asyncio.run(enrich())
     else:
-        envelopes = [_envelope(row, fixture, batch_id, cutoff, previous) for row in rows]
+        envelopes = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized else
+                     _envelope(row, fixture, batch_id, cutoff, previous) for row in rows]
     for envelope in envelopes:
         checkpoint.put(envelope)
-        checkpoint.connection.execute("UPDATE shells SET execution_state='complete' WHERE row_number=?", (envelope.row_number,))
+        checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
     checkpoint.connection.commit()
+    expected_rows = [(row.row_number, row.input_ref) for row in rows]
+    actual_rows = [(item.row_number, item.input_ref) for item in sorted(envelopes, key=lambda item: item.row_number)]
+    if len(actual_rows) != len(expected_rows) or actual_rows != expected_rows:
+        raise RuntimeError("terminal output does not exactly match input row cardinality/order")
+    finalization_started = time.monotonic()
     writer.write(envelopes)
+    finalization_seconds = time.monotonic() - finalization_started
     pending_path.unlink(missing_ok=True)
     ledger_purposes = {}
     ledger_hosts = {}
@@ -363,8 +500,20 @@ def run(args: argparse.Namespace) -> int:
                                     logical_gateway_requests=(gateway.ledger.logical_requests if gateway else 0),
                                     requests_by_purpose=ledger_purposes, errors_by_code=error_counts,
                                     physical_requests_by_host=ledger_hosts,
+                                    physical_requests_by_company=run_budget.requests_by_company,
                                     physical_request_outcomes=ledger_outcomes,
+                                    scheduler_passes=scheduler_report,
+                                    coalesced_requests=(getattr(gateway, "coalesced_requests", 0) if gateway else 0),
+                                    runtime_seconds=round(time.monotonic() - run_started, 3),
+                                    output_cardinality=len(envelopes),
+                                    finalization_seconds=round(finalization_seconds, 3),
+                                    completion_reserve_remaining_seconds=(
+                                        round(max(0.0, budget.hard_seconds - run_budget.elapsed), 3)),
+                                    completion_reserve_seconds=budget.completion_reserve_seconds,
                                     request_limit=budget.physical_request_limit,
+                                    logical_request_limit=budget.logical_request_limit,
+                                    per_company_physical_limit=budget.per_company_physical_limit,
+                                    per_host_physical_limit=budget.per_host_physical_limit,
                                     paid_cost_limit=str(budget.paid_cost_limit)))
     checkpoint.close()
     return 0
@@ -380,6 +529,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--registry-source-url", default=os.environ.get("SIGNALPOST_REGISTRY_SOURCE_URL"))
     parser.add_argument("--previous-state", default=os.environ.get("SIGNALPOST_PREVIOUS_STATE"))
     parser.add_argument("--state-output")
+    parser.add_argument("--resume", action="store_true", help="Resume matching rows from the SQLite state checkpoint")
     parser.add_argument("--config", help="Reserved for the versioned runtime configuration")
     parser.add_argument("--evidence-cutoff", default=os.environ.get("SIGNALPOST_EVIDENCE_CUTOFF"))
     parser.add_argument("--network-policy", choices=("direct", "trusted-proxy"), default=os.environ.get("SIGNALPOST_NETWORK_POLICY", "direct"))
