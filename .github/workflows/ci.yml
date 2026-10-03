@@ -23,6 +23,11 @@ jobs:
       - name: Run starter tests
         working-directory: signalpost-starter-kit
         run: .venv/bin/python -m pytest -q
+      - name: Run M03 exact-company website gate
+        working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
+        run: .venv/bin/python -m pytest -q tests/test_signalpost_m03.py
       - name: Run M01 offline batch gate
         working-directory: signalpost-starter-kit
         env:

@@ -58,6 +58,7 @@ class LedgerEntry:
     bytes_received: int
     elapsed_ms: float
     outcome: str
+    redirect_location: str | None = None
 
 
 @dataclass
@@ -289,6 +290,7 @@ class NetworkGateway:
                         self._record(target, purpose, status, len(body), start, "received")
                         location = headers.get("Location") or headers.get("location")
                         if status in {301, 302, 303, 307, 308} and location:
+                            self.ledger.entries[-1].redirect_location = canonical_url(urllib.parse.urljoin(target, location))
                             if hop >= self.redirect_limit:
                                 return status, headers, b"", target, "redirect_limit"
                             target = canonical_url(urllib.parse.urljoin(target, location))

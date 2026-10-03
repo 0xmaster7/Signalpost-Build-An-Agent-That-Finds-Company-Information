@@ -15,8 +15,51 @@ from urllib.parse import urlsplit
 from .inputs import load_input, normalize_org_number, registry_fixture, stream_registry_matches
 from .models import Claim, Envelope, Evidence, PublicState, RefreshState, RunError, Section, SourceSnapshot, empty_section
 from .operations import CheckpointStore, OrderedAtomicWriter, RunBudget
-from .network import NetworkGateway, StructuredLogger
+from .network import NetworkGateway, StructuredLogger, registered_domain
 from .brreg import RIGHTS, cutoff_identity, fetch_company
+
+
+def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[str, Any] | None = None,
+                     frozen_sha: str | None = None, frozen_source_url: str | None = None) -> dict[str, Any]:
+    """Build exact-org website inputs without promoting the registry URL itself."""
+    profile: dict[str, Any] = {"organisation_number": org}
+    if live_result:
+        identity = live_result.observations.get("identity_profile") or {}
+        profile.update(identity)
+        profile["website_candidates"] = list(live_result.observations.get("website_candidates", []))
+        profile["registered_roles"] = [str(claim.value) for claim in live_result.claims
+            if claim.section == "leadership_workplaces" and claim.field == "role.role_description" and isinstance(claim.value, str)]
+        parent = identity.get("parent_organisation_number") or live_result.observations.get("parent_organisation_number")
+        if parent:
+            profile["related_organisation_numbers"] = [str(parent)]
+    if frozen and normalize_org_number(frozen.get("organisation_number", frozen.get("orgnr")))[0] == org:
+        name = frozen.get("name") or frozen.get("legal_name") or frozen.get("navn")
+        if not profile.get("name") and name:
+            profile["name"] = name
+        if not profile.get("legal_form"):
+            form = frozen.get("legal_form") or frozen.get("organisationsform")
+            profile["legal_form"] = form.get("kode") if isinstance(form, dict) else form
+        profile.setdefault("historical_names", frozen.get("historical_names") or [])
+        if str(profile.get("legal_form") or "").upper() == "ENK":
+            profile["business_address"] = None
+            profile["postal_address"] = None
+        else:
+            profile.setdefault("business_address", frozen.get("business_address") or frozen.get("forretningsadresse") or frozen.get("registered_address") or {})
+            profile.setdefault("postal_address", frozen.get("postal_address") or frozen.get("postadresse") or {})
+        row_hash = frozen.get("__signalpost_snapshot_row_sha256")
+        if not row_hash:
+            row_hash = hashlib.sha256(json.dumps({k:v for k,v in frozen.items() if not k.startswith("__signalpost_")},
+                ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        source_url = frozen.get("source_url") or frozen_source_url
+        raw_website = frozen.get("website") or frozen.get("website_url") or frozen.get("hjemmeside")
+        if raw_website and source_url and frozen_sha:
+            profile.setdefault("website_candidates", []).append({"raw": raw_website, "source": "registry_frozen",
+                "source_url": source_url, "content_sha256": row_hash,
+                "evidence_id": f"{org}:frozen-website-candidate:{row_hash[:12]}",
+                "source_snapshot_id": f"registry_snapshot:{frozen_sha[:16]}"})
+        elif raw_website:
+            profile.setdefault("website_candidate_without_source_url", True)
+    return profile
 
 
 def _find_default_input() -> Path | None:
@@ -186,14 +229,17 @@ def run(args: argparse.Namespace) -> int:
     if not rows:
         print("Input contains no rows", file=sys.stderr)
         return 2
+    if args.live_websites and not args.live_brreg and not args.registry_snapshot:
+        print("--live-websites requires --live-brreg or --registry-snapshot for exact-company identity anchors", file=sys.stderr)
+        return 2
     output_path = Path(args.output or os.environ.get("SIGNALPOST_OUTPUT", "signalpost_output.jsonl"))
     checkpoint_path = Path(args.state_output or os.environ.get("SIGNALPOST_STATE_OUTPUT", "signalpost_state.sqlite"))
     previous: dict[str, dict[str, Any]] = {}
     if args.previous_state:
         previous = json.loads(Path(args.previous_state).read_text(encoding="utf-8"))
-    fixture = registry_fixture(args.registry_snapshot) if not args.live_brreg else {}
+    fixture = registry_fixture(args.registry_snapshot) if not (args.live_brreg or args.live_websites) else {}
     registry_hash = None
-    if args.live_brreg and args.registry_snapshot:
+    if (args.live_brreg or args.live_websites) and args.registry_snapshot:
         fixture, registry_hash = stream_registry_matches(args.registry_snapshot, {r.organisation_number for r in rows})
     config_values: dict[str, Any] = {}
     if args.config:
@@ -215,26 +261,70 @@ def run(args: argparse.Namespace) -> int:
     checkpoint.connection.executemany("INSERT OR REPLACE INTO shells VALUES (?,?,?,?)",
                                       [(row.row_number, row.input_ref, row.organisation_number, "pending") for row in rows])
     checkpoint.connection.commit()
-    if args.live_brreg:
+    gateway = None
+    live_by_org: dict[str, Any] = {}
+    if args.live_brreg or args.live_websites:
         from .operations import Budget
         gateway = NetworkGateway(timeout=20, retries=1, budget=Budget(budget),
                                  trusted_proxy=args.network_policy == "trusted-proxy")
-        gateway.set_rate_limit("data.brreg.no", 3.0)
+        if args.live_brreg:
+            gateway.set_rate_limit("data.brreg.no", 3.0)
         async def enrich():
             unique = sorted({r.organisation_number for r in rows if len(r.organisation_number) == 9 and r.organisation_number.isdigit()})
-            results = await asyncio.gather(*(fetch_company(org, gateway, cutoff) for org in unique))
-            by_org = dict(zip(unique, results))
+            by_org = {}
+            if args.live_brreg:
+                results = await asyncio.gather(*(fetch_company(org, gateway, cutoff) for org in unique))
+                by_org = dict(zip(unique, results))
             output = []
             for row in rows:
-                if row.organisation_number not in by_org:
+                if args.live_brreg and row.organisation_number not in by_org:
                     output.append(_envelope(row, {}, batch_id, cutoff, previous))
                     continue
                 baseline = fixture.get(row.organisation_number)
-                envelope = _live_envelope(row, by_org[row.organisation_number], batch_id, cutoff, previous, frozen_match=baseline is not None)
-                if args.registry_snapshot:
-                    envelope = _attach_frozen_baseline(envelope, baseline, registry_hash, cutoff,
-                                                       args.registry_snapshot_as_of, args.registry_source_url)
+                if args.live_brreg:
+                    result = by_org[row.organisation_number]
+                    envelope = _live_envelope(row, result, batch_id, cutoff, previous, frozen_match=baseline is not None)
+                    live_by_org[row.organisation_number] = result
+                    if args.registry_snapshot:
+                        envelope = _attach_frozen_baseline(envelope, baseline, registry_hash, cutoff,
+                                                           args.registry_snapshot_as_of, args.registry_source_url)
+                else:
+                    envelope = _envelope(row, fixture, batch_id, cutoff, previous)
                 output.append(envelope)
+            if args.live_websites:
+                from .websites import research_company, sanitize_registry_websites
+                # Discover shared roots across input entities before evaluating any one company.
+                profiles = {org: _website_profile(org, live_result=live_by_org.get(org), frozen=fixture.get(org),
+                    frozen_sha=registry_hash, frozen_source_url=args.registry_source_url) for org in unique}
+                root_owners: dict[str, set[str]] = {}
+                for org, profile in profiles.items():
+                    for candidate in profile.get("website_candidates", []):
+                        raw = candidate.get("raw", "") if isinstance(candidate, dict) else candidate
+                        for item in sanitize_registry_websites(raw):
+                            if item["kind"] == "website":
+                                root = registered_domain(urlsplit(item["url"]).hostname or "")
+                                if root: root_owners.setdefault(root, set()).add(org)
+                shared_roots = {root for root, owners in root_owners.items() if len(owners) > 1}
+                website_results = await asyncio.gather(*(research_company(profile, gateway, shared_domains=shared_roots,
+                    enable_keyless=not args.no_keyless_websites) for profile in profiles.values()))
+                by_website_org = dict(zip(profiles, website_results))
+                for envelope in output:
+                    result = by_website_org.get(envelope.organisation_number)
+                    if not result:
+                        continue
+                    envelope.claims.extend(result.claims)
+                    envelope.evidence.extend(result.evidence)
+                    envelope.source_snapshots.extend(result.snapshots)
+                    section = envelope.sections["website_owned_profiles"]
+                    section.claims.extend(result.claims)
+                    section.state = result.state if not result.claims else PublicState.AVAILABLE
+                    envelope.sections["claims_evidence_states"].claims.extend(result.claims)
+                    if result.claims:
+                        envelope.sections["claims_evidence_states"].state = PublicState.AVAILABLE
+                    envelope.errors.extend(result.errors)
+                    envelope.synthesis["website_research"] = result.audit
+                    # Revalidate the complete canonical envelope and its evidence references.
+                    envelope.__class__.model_validate(envelope.model_dump())
             return output
         envelopes = asyncio.run(enrich())
     else:
@@ -248,7 +338,7 @@ def run(args: argparse.Namespace) -> int:
     ledger_purposes = {}
     ledger_hosts = {}
     ledger_outcomes = {}
-    if args.live_brreg:
+    if gateway:
         for entry in gateway.ledger.entries:
             ledger_purposes[entry.purpose] = ledger_purposes.get(entry.purpose, 0) + 1
             host = urlsplit(entry.url).hostname or ""
@@ -262,10 +352,10 @@ def run(args: argparse.Namespace) -> int:
     print(StructuredLogger.emit("batch_complete", batch_id=batch_id, rows=len(rows),
                                 available=sum(item.terminal_state == PublicState.AVAILABLE for item in envelopes),
                                 failed=sum(item.terminal_state == PublicState.FAILED for item in envelopes),
-                                    physical_requests=(gateway.ledger.physical_requests if args.live_brreg else 0), budget_seconds=budget.hard_seconds,
+                                physical_requests=(gateway.ledger.physical_requests if gateway else 0), budget_seconds=budget.hard_seconds,
                                     registry_snapshot_sha256=registry_hash,
-                                    physical_gateway_requests=(gateway.ledger.physical_requests if args.live_brreg else 0),
-                                    logical_gateway_requests=(gateway.ledger.logical_requests if args.live_brreg else 0),
+                                    physical_gateway_requests=(gateway.ledger.physical_requests if gateway else 0),
+                                    logical_gateway_requests=(gateway.ledger.logical_requests if gateway else 0),
                                     requests_by_purpose=ledger_purposes, errors_by_code=error_counts,
                                     physical_requests_by_host=ledger_hosts,
                                     physical_request_outcomes=ledger_outcomes,
@@ -289,6 +379,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-cutoff", default=os.environ.get("SIGNALPOST_EVIDENCE_CUTOFF"))
     parser.add_argument("--network-policy", choices=("direct", "trusted-proxy"), default=os.environ.get("SIGNALPOST_NETWORK_POLICY", "direct"))
     parser.add_argument("--live-brreg", action="store_true", help="Fetch official BRREG sections through the centralized gateway")
+    parser.add_argument("--live-websites", action="store_true", help="Discover and verify website candidates through the centralized gateway")
+    parser.add_argument("--no-keyless-websites", action="store_true", help="Disable conservative one-candidate .no discovery")
     parser.add_argument("--batch-id")
     return run(parser.parse_args(argv))
 

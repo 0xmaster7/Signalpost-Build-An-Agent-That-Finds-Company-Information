@@ -71,3 +71,49 @@ sources:
       response_bodies: unresolved
       persistent_raw_cache: unresolved
       retain_provenance: [snapshot_sha256, as_of, source_url, matched_row_hash]
+  company_owned_website:
+    name: Exact-company owned public website
+    hosts: []
+    endpoints:
+      - /robots.txt
+      - /
+      - /about
+      - /contact
+      - /legal
+      - /sitemap.xml
+      - public RSS and Atom feeds linked from the verified site
+    acquisition:
+      mode: bounded_public_get
+      gateway: signalpost.network.NetworkGateway
+      candidate_sources: [builderr_frozen_registry, brreg_ccr, conservative_keyless_no]
+      verification_required_before_claims: true
+      search_enabled: false
+      redirects: same_host_and_allowlisted_aliases_only
+      robots:
+        enforce_explicit_rules: true
+        on_unreachable: fail_closed
+        crawl_delay: honor
+      limits:
+        initial_page_target: 6
+        default_pages_per_company: 10
+        absolute_pages_per_company: 25
+        depth: 2
+        page_bytes: 2097152
+        company_bytes: 8388608
+        sitemap_indexes: 5
+        sitemap_urls: 100
+        feeds: 5
+      user_agent_contact: pending_builderr_contact
+    rights:
+      license: site_specific_terms_unreviewed
+      reference: public site terms and robots.txt
+      attribution: source URL and retrieval date retained per claim
+      acquisition_scope: transient factual extraction from public pages
+    retention:
+      response_bodies: run_scoped
+      persistent_raw_cache: false
+      retain_provenance: [source_url, retrieved_at, content_sha256, extraction_method, source_snapshot, deterministic_identity_proof]
+    personal_data:
+      allow_public_company_description: true
+      allow_public_products_and_services: true
+      allow_public_contact_personal_data: false

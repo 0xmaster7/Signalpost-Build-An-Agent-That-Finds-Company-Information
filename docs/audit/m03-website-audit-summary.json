@@ -1,0 +1,78 @@
+{
+  "accepted_domain_count": 1,
+  "audit_run_id": "m03-final-website-audit-v4",
+  "batch_gateway_metrics": {
+    "elapsed_basis": "Shell wall time for the final live run. Per-company elapsed summaries are in m03-website-audit-summary.json.",
+    "logical_requests": 149,
+    "outcomes": {
+      "robots:0:timeout": 2,
+      "robots:0:transport_error": 4,
+      "robots:200:received": 22,
+      "robots:301:received": 8,
+      "robots:404:received": 2,
+      "robots:503:received": 2,
+      "sitemap:404:received": 1,
+      "website_page:200:received": 41,
+      "website_page:301:received": 10,
+      "website_page:429:received": 2
+    },
+    "paid_cost_limit": "0",
+    "physical_requests": 94,
+    "request_limit": 3400,
+    "requests_by_purpose": {
+      "robots": 40,
+      "sitemap": 1,
+      "website_page": 53
+    },
+    "run_elapsed_ms": 71110
+  },
+  "candidate_count": 98,
+  "candidate_decisions": {
+    "accepted": 1,
+    "ambiguous": 12,
+    "candidate_policy_rejected": 1,
+    "duplicate_page": 1,
+    "redirect_or_url_policy_rejected": 1,
+    "rejected_http": 1,
+    "rejected_waf_or_cookie_challenge": 1,
+    "robots_unreachable": 80
+  },
+  "candidate_source_url": "https://builderr.ai/signalpost-company-universe-2025.jsonl.gz",
+  "candidate_sources": {
+    "keyless_no": 77,
+    "registry_frozen": 21
+  },
+  "cohort": "docs/audit/m00-company-sample-200.jsonl",
+  "cohort_sha256": "cee97e17af7e8b2d9dc9f5ee60548b9e186a11a2e485469446219ea10a1e38ed",
+  "company_states": {
+    "ambiguous": 12,
+    "available": 1,
+    "blocked": 2,
+    "failed": 80,
+    "not_available": 105
+  },
+  "content_requests_per_company": {
+    "max": 7,
+    "median": 0.0,
+    "total": 44
+  },
+  "elapsed_ms_per_company": {
+    "max": 66885.854,
+    "median": 0.0035
+  },
+  "input_rows": 200,
+  "pages_per_company": {
+    "max": 7,
+    "median": 0.0,
+    "total": 41
+  },
+  "precision_claim": null,
+  "proof_evidence_failures": 0,
+  "website_claims_by_field": {
+    "verified_website_domain": 1,
+    "verified_website_url": 1,
+    "website_description": 2
+  },
+  "website_claims_without_exact_site_proof": 0,
+  "wrong_company_publications": 0
+}

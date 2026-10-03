@@ -305,7 +305,22 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
     entity_is_target = isinstance(entity, dict) and entity.get("organisasjonsnummer") == org
     if entity_is_target and entity_final:
         identity = normalize_entity(entity)
+        observations["identity_profile"] = identity
         target_legal_form = identity.get("legal_form")
+        if identity.get("website"):
+            candidate_source_id = _source_id("entity", entity_hash or hashlib.sha256(b"").hexdigest())
+            candidate_evidence_id = f"{org}:website-candidate:{(entity_hash or '')[:12]}"
+            if entity_hash:
+                evidence.append(Evidence(evidence_id=candidate_evidence_id, source_url=entity_final,
+                    retrieved_at=entity_time, content_sha256=entity_hash, extraction_method="brreg_website_candidate_v1",
+                    json_pointer="/hjemmeside", source_class="official"))
+                if not any(item.source_id == candidate_source_id for item in snapshots):
+                    snapshots.append(SourceSnapshot(source_id=candidate_source_id, source_url=entity_final,
+                        retrieved_at=entity_time, content_sha256=entity_hash, http_status=entity_status,
+                        cache_mode="transient", rights_status=RIGHTS))
+            observations["website_candidates"] = [{"raw": identity["website"], "source": "registry_live", "rights_status": "NLOD-2.0",
+                "source_url": entity_final, "content_sha256": entity_hash, "evidence_id": candidate_evidence_id,
+                "source_snapshot_id": candidate_source_id}]
         identity_source_paths = {
             "organisation_number": "/organisasjonsnummer", "name": "/navn", "legal_form": "/organisasjonsform/kode",
             "legal_form_description": "/organisasjonsform/beskrivelse", "website": "/hjemmeside", "employees": "/antallAnsatte",
@@ -314,7 +329,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
             "business_address": "/forretningsadresse", "postal_address": "/postadresse", "status": "/",
             "status_dates": "/", "industry_codes": "/",
         }
-        fields = [(k, v) for k, v in identity.items() if v is not None and k not in {"status", "status_dates", "historical_names", "industry_codes", "business_address", "postal_address"}]
+        fields = [(k, v) for k, v in identity.items() if v is not None and k not in {"status", "status_dates", "historical_names", "industry_codes", "business_address", "postal_address", "website"}]
         fields.extend((f"status.{k}", v) for k, v in identity["status"].items())
         fields.extend((f"status_dates.{k}", v) for k, v in identity["status_dates"].items())
         fields.extend((f"industry_codes.{i}", v) for i, v in enumerate(identity["industry_codes"]))

@@ -1,0 +1,25 @@
+{
+  "physical_requests": 94,
+  "logical_requests": 149,
+  "requests_by_purpose": {
+    "robots": 40,
+    "website_page": 53,
+    "sitemap": 1
+  },
+  "outcomes": {
+    "robots:301:received": 8,
+    "robots:0:transport_error": 4,
+    "robots:200:received": 22,
+    "robots:404:received": 2,
+    "robots:503:received": 2,
+    "robots:0:timeout": 2,
+    "website_page:429:received": 2,
+    "website_page:200:received": 41,
+    "website_page:301:received": 10,
+    "sitemap:404:received": 1
+  },
+  "request_limit": 3400,
+  "paid_cost_limit": "0",
+  "run_elapsed_ms": 71110,
+  "elapsed_basis": "Shell wall time for the final live run. Per-company elapsed summaries are in m03-website-audit-summary.json."
+}

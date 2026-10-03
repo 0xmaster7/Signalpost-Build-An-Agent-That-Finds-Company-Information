@@ -34,3 +34,12 @@ The supplied `signalpost-starter-kit/` is a runnable reference baseline and usef
 - Existing integrations: BRREG API/bulk CSV; registry-site crawl; Brave search; company-site activity/news; Google Maps normalization; YouTube search; LinkedIn discovery/profile/jobs experiments; Norwegian reviews experiment; annual-report workforce extraction; RSS news; sentiment inference.
 - Refresh: local two-version snapshot replay reports two expected changes, no false positives/negatives, complete evidence and idempotent rerun.
 - Accounting: batch runner includes request/runtime/cost reports and resumable per-company state; individual source modules count requests, but this is not yet the audited plan's single strict physical-request ledger.
+
+## M03 exact-site implementation decisions
+
+- Reused the accepted M01 `NetworkGateway`, physical request ledger, robots parser/cache, rate pacing, redirect allowlist, SSRF preflight, budget, and canonical evidence/claim models. M03 adds URL-scoped redirect observations to the same ledger.
+- Reused M02's exact-target BRREG normalizer as the live candidate and identity-profile source. `/hjemmeside` now remains a candidate and is not an identity claim.
+- Reused the locked `BeautifulSoup`, `extruct`, and `trafilatura` extraction libraries. The M03 page parser retains JSON-LD, microdata, RDFa, OpenGraph, visible text, and link locators transiently before producing hashed evidence and the deterministic subject-scoped proof.
+- `src/norway_company_agent/website.py` remains a quarantined reference for production networking: it opens HTTP directly, implements a robots-unreachable permissive fallback, and performs DNS/redirect checks outside M01 accounting. Its useful URL and social-normalization cases were treated as reference behavior, then constrained by the M03 identity and gateway contract.
+- `identity.py` remains quarantined from publication because its NFKD ASCII transliteration and token-overlap score can merge distinct Norwegian legal names and do not establish the audited subject-scoped identity proof.
+- `crawl_events.py` and the starter activity/news/scrapy scripts remain parser references. They do not provide M01 gateway accounting, and activity/job/news claim extraction is outside M03. Sitemap/feed parsing in M03 is bounded discovery only; no publication date or activity claim is inferred from `lastmod` or feed discovery.
