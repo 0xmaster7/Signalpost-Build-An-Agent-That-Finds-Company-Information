@@ -41,6 +41,11 @@ SOCIAL_HOSTS = {
     "x.com": "x", "twitter.com": "x", "youtube.com": "youtube", "tiktok.com": "tiktok",
 }
 SOCIAL_ROOTS = {"linkedin.com", "facebook.com", "instagram.com", "x.com", "twitter.com", "youtube.com", "youtu.be", "tiktok.com"}
+THIRD_PARTY_DIRECTORY_ROOTS = {
+    "1881.no", "proff.no", "purehelp.no", "gulesider.no", "kompass.com", "creditsafe.com",
+    "zoominfo.com", "crunchbase.com", "yellowpages.com", "firmainfo.no", "allabolag.se",
+}
+THIRD_PARTY_DIRECTORY_PATHS = {"company", "companies", "business", "listing", "listings", "directory", "profile", "profiles", "search", "reviews"}
 LEGAL_SUFFIXES = {"as", "asa", "enk", "ans", "da", "sa", "nuf", "iks", "sti", "ab", "ltd", "inc", "plc", "limited"}
 GENERIC_KEYLESS = {
     "sameie", "sameiet", "borettslag", "kommune", "fylkeskommune", "forening", "lag", "holding", "holdings",
@@ -556,19 +561,45 @@ def _source_evidence(candidate: dict[str, Any], evidence: list[Evidence], snapsh
     return evidence_id
 
 
+def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidate: dict[str, Any],
+                      *, shared_domain: bool) -> dict[str, Any]:
+    assessment = verify_site_pages(profile, pages, shared_domain=shared_domain,
+                                   candidate_source=str(candidate.get("source") or "registry_live"))
+    if candidate.get("source") == "search_provider" and assessment.get("decision") == "accepted":
+        proof_page = assessment["proof_page"]
+        parsed = urllib.parse.urlsplit(proof_page.final_url)
+        host = registered_domain(parsed.hostname or "") or (parsed.hostname or "")
+        path_segments = {part.casefold() for part in parsed.path.split("/") if part}
+        page_markers = (proof_page.title + " " + proof_page.description).casefold()
+        directory_page = (
+            host in THIRD_PARTY_DIRECTORY_ROOTS
+            or bool(path_segments & THIRD_PARTY_DIRECTORY_PATHS)
+            or any(marker in page_markers for marker in ("business directory", "company directory", "business listing", "company listing", "company profile", "customer reviews"))
+        )
+        if directory_page:
+            return {"decision": "ambiguous", "reason": "search_candidate_is_directory_or_third_party_profile"}
+        if assessment.get("proof", {}).get("method") != "subject_scoped_structured_org_number":
+            return {"decision": "ambiguous", "reason": "search_candidate_requires_subject_scoped_org_proof"}
+    return assessment
+
+
 async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, shared_domains: set[str] | None = None,
                            enable_keyless: bool = True) -> WebsiteResearchResult:
     """Fetch, verify, then shallowly research one target using the central gateway."""
     org = str(profile.get("organisation_number") or "")
     output = WebsiteResearchResult()
-    source_candidates = profile.get("website_candidates") or []
+    source_candidates = list(profile.get("website_candidates") or [])
+    # Search adapters may add URL candidates here. Their titles/snippets are
+    # never accepted by this path, and their provenance stays in the audit.
+    source_candidates.extend(profile.get("discovery_candidates") or [])
     candidates: list[dict[str, Any]] = []
     for item in source_candidates:
         raw = item.get("raw") if isinstance(item, dict) else item
         source = item.get("source", "registry_frozen") if isinstance(item, dict) else "registry_frozen"
         source_ref = item if isinstance(item, dict) else {"raw": raw, "source": source}
         for sanitized in sanitize_registry_websites(raw):
-            candidates.append({**sanitized, "source": source, "source_ref": source_ref})
+            candidates.append({**sanitized, "source": source, "source_ref": source_ref,
+                "discovery": source_ref.get("discovery") if isinstance(source_ref, dict) else None})
     if not any(item["kind"] == "website" for item in candidates) and enable_keyless:
         guessed = keyless_no_candidate(str(profile.get("name") or ""))
         if guessed:
@@ -614,6 +645,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             state, delay = ("unreachable" if "did not resolve" in robots_error else "policy_skip"), None
         candidate_row: dict[str, Any] = {"url": url, "source": candidate["source"], "kind": "website", "registered_domain": root_domain,
             "robots_state": state, "crawl_delay_seconds": delay, "decision": "candidate"}
+        if candidate.get("discovery"):
+            candidate_row["discovery"] = {key: candidate["discovery"].get(key) for key in
+                ("provider_id", "provider_version", "query_id", "result_id", "rank", "response_sha256")}
         if robots_error:
             candidate_row["robots_error"] = robots_error
         output.audit["candidates"].append(candidate_row)
@@ -713,7 +747,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             candidate_row["http_status"] = status
             candidate_row["page_count"] = len(pages)
             # Continue only with likely legal/about/contact identity pages until the gate decides.
-            assessment = verify_site_pages(profile, pages, shared_domain=shared)
+            assessment = _assess_candidate(profile, pages, candidate, shared_domain=shared)
             if assessment["decision"] == "accepted":
                 break
             if assessment["decision"] == "rejected":
@@ -731,7 +765,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 page_queue = page_queue[:MAX_INITIAL_PAGES - 1]
             if len(pages) >= MAX_INITIAL_PAGES or website_page_requests >= MAX_DEFAULT_PAGES or page_limit >= MAX_ABSOLUTE_PAGES:
                 break
-        assessment = verify_site_pages(profile, pages, shared_domain=shared)
+        assessment = _assess_candidate(profile, pages, candidate, shared_domain=shared)
         candidate_row["decision"] = assessment["decision"] if candidate_row["decision"] == "candidate" else candidate_row["decision"]
         if assessment["decision"] == "accepted":
             candidate_row["proof"] = assessment["proof"]

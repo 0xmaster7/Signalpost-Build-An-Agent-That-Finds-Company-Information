@@ -117,3 +117,25 @@ sources:
       allow_public_company_description: true
       allow_public_products_and_services: true
       allow_public_contact_personal_data: false
+  search_discovery:
+    name: Optional reproducible search provider, candidate discovery only
+    hosts: []
+    endpoints: []
+    acquisition:
+      mode: disabled_until_provider_and_rights_approved
+      interface: signalpost.discovery.SearchProvider
+      gateway: signalpost.network.NetworkGateway
+      retry_policy: disabled_or_fully_visible_in_request_ledger
+      result_use: candidate_generation_only
+      snippet_title_rank_as_evidence: false
+      directory_or_third_party_profile_as_owned_site: false
+      search_candidate_strong_proof: subject_scoped_structured_org_number
+      provider_enabled: false
+    rights:
+      license: unresolved
+      reference: unresolved
+      reproducibility: unresolved
+    retention:
+      raw_results: disabled
+      provider_output: candidate_url_and_trace_metadata_only_after_approval
+      retain_provenance: [provider_id, provider_version, query_id, result_id, rank, response_sha256]

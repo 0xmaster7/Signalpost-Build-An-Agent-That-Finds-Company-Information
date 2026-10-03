@@ -1,0 +1,516 @@
+{
+  "cohort_rows": 200,
+  "hard_gates": {
+    "all_accepted_domains_have_exact_proof": true,
+    "all_website_claims_have_exact_proof": true,
+    "same_ordered_cohort": true,
+    "zero_wrong_company_promotions": true
+  },
+  "keyless_increment_vs_registry_only": {
+    "additional_candidate_domains": 77,
+    "additional_candidate_org_domains": [
+      [
+        "820072332",
+        "fnp-felt-vest.no"
+      ],
+      [
+        "820604822",
+        "interkreditt-kapital.no"
+      ],
+      [
+        "821220602",
+        "telemark-forlag.no"
+      ],
+      [
+        "826735082",
+        "energi-nord.no"
+      ],
+      [
+        "826977612",
+        "sande-meieri-dagligvare-avd.no"
+      ],
+      [
+        "828919652",
+        "baia-mobility.no"
+      ],
+      [
+        "888798102",
+        "hinnatrekanten-legesenter.no"
+      ],
+      [
+        "889452862",
+        "kongens-gate.no"
+      ],
+      [
+        "911945169",
+        "olsrod-optikk.no"
+      ],
+      [
+        "912123154",
+        "lel-forvaltning.no"
+      ],
+      [
+        "912965236",
+        "alnabru-industri.no"
+      ],
+      [
+        "914137497",
+        "galleri-art-design.no"
+      ],
+      [
+        "915337694",
+        "manger-bil.no"
+      ],
+      [
+        "918431012",
+        "datahjelp-arendal.no"
+      ],
+      [
+        "919185287",
+        "kampen-kvartal.no"
+      ],
+      [
+        "919215224",
+        "bilverksted-sor.no"
+      ],
+      [
+        "919982128",
+        "thai-corner.no"
+      ],
+      [
+        "920465021",
+        "boddco-lp1.no"
+      ],
+      [
+        "921390246",
+        "aker-utvikling.no"
+      ],
+      [
+        "921390688",
+        "markalleen-utvikling.no"
+      ],
+      [
+        "921548923",
+        "arne-svendsensgate.no"
+      ],
+      [
+        "922342032",
+        "interior-budservice.no"
+      ],
+      [
+        "923082085",
+        "greve-herman-wedel.no"
+      ],
+      [
+        "923166750",
+        "uab-htr1.no"
+      ],
+      [
+        "923795049",
+        "psm-utvikling.no"
+      ],
+      [
+        "923835687",
+        "bernt-ankers-gate.no"
+      ],
+      [
+        "924640537",
+        "all-onboard-adventure.no"
+      ],
+      [
+        "925088188",
+        "jon-geir-tengesdal.no"
+      ],
+      [
+        "925182532",
+        "nobel-medispa.no"
+      ],
+      [
+        "925268771",
+        "algeco-nordics.no"
+      ],
+      [
+        "926075489",
+        "rorvik-tak-blikk.no"
+      ],
+      [
+        "926672029",
+        "atte-atte-null-null.no"
+      ],
+      [
+        "927033674",
+        "christiania-bolig.no"
+      ],
+      [
+        "927208997",
+        "medi-consult.no"
+      ],
+      [
+        "927251817",
+        "toy-vintage.no"
+      ],
+      [
+        "927352699",
+        "stensrud-taksering.no"
+      ],
+      [
+        "927865777",
+        "marvika-torv.no"
+      ],
+      [
+        "928080889",
+        "kgj-viii.no"
+      ],
+      [
+        "928580644",
+        "heavy-metall-mekaniske.no"
+      ],
+      [
+        "929200233",
+        "uv114-utvikling.no"
+      ],
+      [
+        "929252829",
+        "frost-fossum.no"
+      ],
+      [
+        "929970861",
+        "joyful-child.no"
+      ],
+      [
+        "930530549",
+        "harald-norheim.no"
+      ],
+      [
+        "931527983",
+        "sor-varanger-bilteknikk.no"
+      ],
+      [
+        "931824171",
+        "kps-renhold.no"
+      ],
+      [
+        "932575272",
+        "tangen-torv-naering.no"
+      ],
+      [
+        "933296857",
+        "tindan-fiske.no"
+      ],
+      [
+        "933485773",
+        "skanska-gartnersletta.no"
+      ],
+      [
+        "933586030",
+        "borettslaget-pilestredet-park.no"
+      ],
+      [
+        "933954854",
+        "delks-skolekontor.no"
+      ],
+      [
+        "934053664",
+        "ovre-steinaunet-bk2.no"
+      ],
+      [
+        "934141814",
+        "solvendt-utvikling.no"
+      ],
+      [
+        "935054931",
+        "mikkelsen-transport.no"
+      ],
+      [
+        "935562058",
+        "craziux-design.no"
+      ],
+      [
+        "935621771",
+        "yllw-0001.no"
+      ],
+      [
+        "936597858",
+        "arbor-helse.no"
+      ],
+      [
+        "936677797",
+        "linde-belland.no"
+      ],
+      [
+        "940577691",
+        "heer-frisor.no"
+      ],
+      [
+        "940612632",
+        "finvold-prosjekt-consult.no"
+      ],
+      [
+        "948386283",
+        "ing-hagen.no"
+      ],
+      [
+        "951936006",
+        "arktisk-kjokken.no"
+      ],
+      [
+        "979943172",
+        "holms-bilpleie.no"
+      ],
+      [
+        "982521645",
+        "pebo-ror.no"
+      ],
+      [
+        "985183333",
+        "the-great-life.no"
+      ],
+      [
+        "986337326",
+        "landvik-bygdehus.no"
+      ],
+      [
+        "988238449",
+        "sorreisa-vask-som.no"
+      ],
+      [
+        "989788892",
+        "vagen-kraft.no"
+      ],
+      [
+        "989879731",
+        "kvello-castrum.no"
+      ],
+      [
+        "991741984",
+        "sornypan-bruk.no"
+      ],
+      [
+        "992984848",
+        "phonero-distribusjon.no"
+      ],
+      [
+        "994864890",
+        "teknobingo-fauske.no"
+      ],
+      [
+        "995997533",
+        "sletta-bil.no"
+      ],
+      [
+        "997386655",
+        "lille-mei.no"
+      ],
+      [
+        "997550641",
+        "osland-settefisk.no"
+      ],
+      [
+        "997948807",
+        "advokat-tellesbo.no"
+      ],
+      [
+        "998837219",
+        "barnstormer-resource.no"
+      ],
+      [
+        "999195717",
+        "tommy-rossbach.no"
+      ]
+    ],
+    "additional_exact_company_domains": 0,
+    "additional_exact_company_org_domains": []
+  },
+  "m03_committed_baseline": {
+    "accepted_domain_count": 1,
+    "batch_gateway_metrics": {
+      "elapsed_basis": "Shell wall time for the final live run. Per-company elapsed summaries are in m03-website-audit-summary.json.",
+      "logical_requests": 149,
+      "outcomes": {
+        "robots:0:timeout": 2,
+        "robots:0:transport_error": 4,
+        "robots:200:received": 22,
+        "robots:301:received": 8,
+        "robots:404:received": 2,
+        "robots:503:received": 2,
+        "sitemap:404:received": 1,
+        "website_page:200:received": 41,
+        "website_page:301:received": 10,
+        "website_page:429:received": 2
+      },
+      "paid_cost_limit": "0",
+      "physical_requests": 94,
+      "request_limit": 3400,
+      "requests_by_purpose": {
+        "robots": 40,
+        "sitemap": 1,
+        "website_page": 53
+      },
+      "run_elapsed_ms": 71110
+    },
+    "candidate_count": 98,
+    "candidate_decisions": {
+      "accepted": 1,
+      "ambiguous": 12,
+      "candidate_policy_rejected": 1,
+      "duplicate_page": 1,
+      "redirect_or_url_policy_rejected": 1,
+      "rejected_http": 1,
+      "rejected_waf_or_cookie_challenge": 1,
+      "robots_unreachable": 80
+    },
+    "candidate_sources": {
+      "keyless_no": 77,
+      "registry_frozen": 21
+    },
+    "website_claims_without_exact_site_proof": 0,
+    "wrong_company_publications": 0
+  },
+  "m04_delta_vs_m03_keyless_baseline": {
+    "accepted_exact_domains_delta": 0,
+    "additional_exact_company_domains": 0,
+    "additional_exact_company_org_domains": [],
+    "candidate_count_delta": 0,
+    "coverage_gain_rows": 0,
+    "wrong_company_promotion_delta": 0
+  },
+  "precision_claim": null,
+  "registry_only": {
+    "accepted_exact_domains": 1,
+    "accepted_org_domains": [
+      [
+        "929001761",
+        "lokilyd.no"
+      ]
+    ],
+    "accepted_sites_missing_proof": 0,
+    "candidate_count": 21,
+    "candidate_decisions": {
+      "accepted": 1,
+      "ambiguous": 11,
+      "candidate_policy_rejected": 1,
+      "duplicate_page": 1,
+      "redirect_or_url_policy_rejected": 1,
+      "rejected_http": 2,
+      "rejected_waf_or_cookie_challenge": 1,
+      "robots_unreachable": 3
+    },
+    "candidate_sources": {
+      "registry_frozen": 21
+    },
+    "company_states": {
+      "ambiguous": 11,
+      "available": 1,
+      "blocked": 2,
+      "failed": 3,
+      "not_available": 183
+    },
+    "input_rows": 200,
+    "website_claims_without_exact_site_proof": 0,
+    "wrong_company_promotions": 0
+  },
+  "registry_plus_keyless": {
+    "accepted_exact_domains": 1,
+    "accepted_org_domains": [
+      [
+        "929001761",
+        "lokilyd.no"
+      ]
+    ],
+    "accepted_sites_missing_proof": 0,
+    "candidate_count": 98,
+    "candidate_decisions": {
+      "accepted": 1,
+      "ambiguous": 12,
+      "candidate_policy_rejected": 1,
+      "duplicate_page": 1,
+      "redirect_or_url_policy_rejected": 1,
+      "rejected_http": 1,
+      "rejected_waf_or_cookie_challenge": 1,
+      "robots_unreachable": 80
+    },
+    "candidate_sources": {
+      "keyless_no": 77,
+      "registry_frozen": 21
+    },
+    "company_states": {
+      "ambiguous": 12,
+      "available": 1,
+      "blocked": 2,
+      "failed": 80,
+      "not_available": 105
+    },
+    "input_rows": 200,
+    "website_claims_without_exact_site_proof": 0,
+    "wrong_company_promotions": 0
+  },
+  "run_metrics": {
+    "registry-only": {
+      "elapsed_ms": 71330,
+      "errors_by_code": {
+        "ROBOTS_UNREACHABLE": 3,
+        "WEBSITE_POLICY_REJECTED": 1
+      },
+      "logical_requests": 72,
+      "paid_cost_limit": "0",
+      "paid_cost_usd": "0",
+      "physical_request_outcomes": {
+        "robots:0:transport_error": 2,
+        "robots:200:received": 22,
+        "robots:301:received": 8,
+        "robots:404:received": 2,
+        "robots:503:received": 2,
+        "sitemap:404:received": 1,
+        "website_page:200:received": 40,
+        "website_page:301:received": 10,
+        "website_page:429:received": 4
+      },
+      "physical_requests": 91,
+      "request_limit": 3400,
+      "requests_by_purpose": {
+        "robots": 36,
+        "sitemap": 1,
+        "website_page": 54
+      }
+    },
+    "registry-plus-keyless": {
+      "elapsed_ms": 68711,
+      "errors_by_code": {
+        "ROBOTS_UNREACHABLE": 80,
+        "WEBSITE_POLICY_REJECTED": 1
+      },
+      "logical_requests": 149,
+      "paid_cost_limit": "0",
+      "paid_cost_usd": "0",
+      "physical_request_outcomes": {
+        "robots:0:timeout": 2,
+        "robots:0:transport_error": 4,
+        "robots:200:received": 22,
+        "robots:301:received": 8,
+        "robots:404:received": 2,
+        "robots:503:received": 2,
+        "sitemap:404:received": 1,
+        "website_page:200:received": 41,
+        "website_page:301:received": 10,
+        "website_page:429:received": 2
+      },
+      "physical_requests": 94,
+      "request_limit": 3400,
+      "requests_by_purpose": {
+        "robots": 40,
+        "sitemap": 1,
+        "website_page": 53
+      }
+    }
+  },
+  "search": {
+    "accepted_domains": 0,
+    "candidate_count": 0,
+    "cost_usd": "0",
+    "enabled": false,
+    "logical_requests": 0,
+    "physical_requests": 0,
+    "provider": null,
+    "reason": "No reproducible provider with approved source rights is configured; provider stays disabled."
+  }
+}
