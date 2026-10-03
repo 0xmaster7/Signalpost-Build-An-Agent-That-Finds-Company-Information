@@ -81,7 +81,8 @@ sources:
       - /contact
       - /legal
       - /sitemap.xml
-      - public RSS and Atom feeds linked from the verified site
+      - /careers and exact-site job postings
+      - /news, /press, /blog and public RSS and Atom feeds linked from the verified site
     acquisition:
       mode: bounded_public_get
       gateway: signalpost.network.NetworkGateway
@@ -108,7 +109,7 @@ sources:
       license: site_specific_terms_unreviewed
       reference: public site terms and robots.txt
       attribution: source URL and retrieval date retained per claim
-      acquisition_scope: transient factual extraction from public pages
+      acquisition_scope: transient factual extraction from public pages, exact-site jobs and dated company-owned activity
     retention:
       response_bodies: run_scoped
       persistent_raw_cache: false

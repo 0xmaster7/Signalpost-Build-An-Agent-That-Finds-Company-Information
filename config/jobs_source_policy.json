@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "approved_ats_hosts": [],
+  "approved_acquisition_modes": [],
+  "external_activity_providers": [],
+  "default_on_unlisted_origin": "skip_and_record",
+  "employer_identity_required": true,
+  "shared_tenant_requires_exact_employer_identity": true
+}

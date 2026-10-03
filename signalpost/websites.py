@@ -8,13 +8,15 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from pathlib import Path
 import re
 import time
 import unicodedata
 import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 from html import unescape
 from typing import Any
 
@@ -207,6 +209,7 @@ class WebsiteResearchResult:
     snapshots: list[SourceSnapshot] = field(default_factory=list)
     errors: list[RunError] = field(default_factory=list)
     state: PublicState = PublicState.NOT_AVAILABLE
+    hiring_activity_state: PublicState = PublicState.AMBIGUOUS
     audit: dict[str, Any] = field(default_factory=dict)
 
 
@@ -487,7 +490,7 @@ def _public_evidence(page: PageRecord, snapshots: list[SourceSnapshot], evidence
             content_sha256=page.digest, http_status=page.status, cache_mode="transient", rights_status="public_web_factual_extract_transient"))
     if not any(item.evidence_id == evidence_id for item in evidence):
         evidence.append(Evidence(evidence_id=evidence_id, source_url=page.final_url, retrieved_at=page.retrieved_at,
-            content_sha256=page.digest, extraction_method="website_html_extract_v1", json_pointer=locator or page.locator,
+            content_sha256=page.digest, extraction_method=("website_feed_extract_v1" if "xml" in page.content_type.casefold() or "rss" in page.content_type.casefold() or "atom" in page.content_type.casefold() else "website_html_extract_v1"), json_pointer=locator or page.locator,
             excerpt=(excerpt[:500] if excerpt else None), source_class="public_web"))
     return evidence_id
 
@@ -526,22 +529,280 @@ def _parse_sitemap(body: bytes) -> tuple[list[str], list[str]]:
     return urls, indexes
 
 
-def _parse_feed(body: bytes) -> list[str]:
+def _parse_feed(body: bytes) -> list[dict[str, str]]:
+    """Parse bounded RSS/Atom entries retaining only explicit source fields."""
     try:
         root = ET.fromstring(body[:MAX_PAGE_BYTES])
     except (ET.ParseError, ValueError):
         return []
-    urls = []
-    for node in root.iter():
-        tag = node.tag.rsplit("}", 1)[-1].casefold()
-        if tag == "link":
-            href = node.attrib.get("href")
-            rel = node.attrib.get("rel", "alternate").casefold()
-            if href and rel in {"alternate", "self"}:
-                urls.append(href)
-        elif tag == "guid" and node.text and node.text.startswith(("http://", "https://")):
-            urls.append(node.text.strip())
-    return list(dict.fromkeys(urls))[:MAX_SITEMAP_URLS]
+    entries: list[dict[str, str]] = []
+    for item in root.iter():
+        if item.tag.rsplit("}", 1)[-1].casefold() not in {"item", "entry"}:
+            continue
+        row: dict[str, str] = {}
+        for node in list(item):
+            tag = node.tag.rsplit("}", 1)[-1].casefold()
+            value = (node.text or "").strip()
+            if tag == "link":
+                value = node.attrib.get("href") or value
+                if node.attrib.get("rel", "alternate").casefold() not in {"alternate", ""}:
+                    continue
+                row.setdefault("url", value)
+            elif tag in {"guid", "id"} and value.startswith(("http://", "https://")):
+                row.setdefault("url", value)
+            elif tag in {"title", "published", "updated", "pubdate", "date", "summary", "description", "category"} and value:
+                row.setdefault({"pubdate": "published", "date": "published"}.get(tag, tag), value)
+        if row.get("url"):
+            entries.append(row)
+    unique: dict[str, dict[str, str]] = {}
+    for row in entries:
+        unique.setdefault(row["url"], row)
+    return list(unique.values())[:MAX_SITEMAP_URLS]
+
+
+def _date_value(raw: Any) -> datetime | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(raw.strip())
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _source_date_value(parsed: datetime, raw: str) -> dict[str, str]:
+    precision = "second" if re.search(r"[T ]\d{2}:\d{2}:\d{2}", raw) else ("minute" if re.search(r"[T ]\d{2}:\d{2}", raw) else "day")
+    return {"source_value": raw, "normalized_utc": parsed.isoformat(), "precision": precision}
+
+
+def _contains_direct_contact_or_identifier(value: str) -> bool:
+    return bool(re.search(r"(?i)\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|(?<!\d)(?:\+47\s?)?\d{8}(?!\d)|(?<!\d)\d{11}(?!\d)", value))
+
+
+def _schema_nodes(value: Any) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    if isinstance(value, dict):
+        kind = value.get("@type")
+        kinds = [kind] if isinstance(kind, str) else (kind if isinstance(kind, list) else [])
+        if any(str(item).casefold() in {"jobposting", "newsarticle", "article", "blogposting"} for item in kinds):
+            found.append(value)
+        for child in value.values():
+            found.extend(_schema_nodes(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_schema_nodes(child))
+    return found
+
+
+def _schema_text(value: Any) -> str | None:
+    if isinstance(value, dict):
+        value = value.get("name") or value.get("@id")
+    if isinstance(value, list):
+        value = next((_schema_text(item) for item in value if _schema_text(item)), None)
+    if isinstance(value, str):
+        cleaned = " ".join(value.split())
+        return cleaned[:500] if cleaned else None
+    return None
+
+
+def _same_host_url(value: Any, page_url: str) -> str | None:
+    raw = _schema_text(value)
+    if not raw:
+        return None
+    url = urllib.parse.urljoin(page_url, raw)
+    return url if _internal_url(url, _internal_hosts(page_url)) else None
+
+
+def _approved_ats_hosts() -> set[str]:
+    policy_path = Path(__file__).resolve().parent.parent / "config" / "jobs_source_policy.json"
+    try:
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    return {str(host).casefold().strip(".") for host in policy.get("approved_ats_hosts", []) if host}
+
+
+def _make_footprint_claim(org: str, field: str, value: Any, subject: str, scope: str,
+                          page: PageRecord, evidence_id: str, proof_source: str, proof_evidence: str,
+                          as_of: datetime | None = None) -> Claim:
+    key = hashlib.sha256((subject + "\0" + field).encode()).hexdigest()[:16]
+    return Claim(claim_id=f"{org}:footprint:{key}", organisation_number=org, section="hiring_activity",
+        field_family="jobs" if scope == "job" else "public_activity", subject_id=subject, field=field,
+        value=value, state=PublicState.AVAILABLE, scope=scope, as_of=as_of,
+        verification_rule_id="exact_company_owned_site_source_v1", verification_score="1.0",
+        evidence_ids=[evidence_id, proof_evidence], source_snapshot_ids=[f"website:{_page_key(page)}", proof_source])
+
+
+def _job_location(value: Any) -> str | None:
+    if isinstance(value, list):
+        value = value[0] if value else None
+    if not isinstance(value, dict):
+        return _schema_text(value)
+    address = value.get("address") if isinstance(value.get("address"), dict) else value
+    parts = [address.get(key) for key in ("addressLocality", "addressRegion", "addressCountry")]
+    parts = [str(part.get("name") if isinstance(part, dict) else part).strip() for part in parts if part]
+    return ", ".join(dict.fromkeys(part for part in parts if part))[:300] or None
+
+
+def _page_footprints(page: PageRecord, *, org: str, legal_name: str, verified_names: set[str],
+                     cutoff: datetime, lookback_days: int = 365) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    """Extract conservative same-site job and dated activity observations."""
+    jobs: list[dict[str, Any]] = []
+    activities: list[dict[str, Any]] = []
+    counts = {"job_candidates": 0, "job_identity_rejected": 0, "job_future": 0, "activity_candidates": 0,
+              "activity_undated": 0, "activity_future": 0, "activity_outside_window": 0}
+    for node in _schema_nodes(page.structured):
+        kinds = node.get("@type")
+        kinds = [kinds] if isinstance(kinds, str) else (kinds or [])
+        if any(str(kind).casefold() == "jobposting" for kind in kinds):
+            counts["job_candidates"] += 1
+            employer = node.get("hiringOrganization")
+            employer_rows = employer if isinstance(employer, list) else [employer]
+            mismatch = False
+            for employer_row in employer_rows:
+                if not isinstance(employer_row, dict):
+                    continue
+                identifiers = _identifier_values(employer_row.get("identifier")) + _identifier_values(employer_row.get("taxID"))
+                if identifiers and org not in identifiers:
+                    mismatch = True
+                employer_name = _schema_text(employer_row.get("legalName") or employer_row.get("name"))
+                if employer_name and not any(_exact_name([expected], employer_name) for expected in verified_names if expected):
+                    mismatch = True
+            if mismatch:
+                counts["job_identity_rejected"] += 1
+                continue
+            title = _schema_text(node.get("title"))
+            url = _same_host_url(node.get("url") or node.get("sameAs") or page.final_url, page.final_url)
+            if not title or not url:
+                continue
+            posted = _date_value(node.get("datePosted"))
+            deadline = _date_value(node.get("validThrough"))
+            if _contains_direct_contact_or_identifier(title) or (posted and posted > cutoff):
+                counts["job_future"] += int(bool(posted and posted > cutoff))
+                continue
+            status_raw = _schema_text(node.get("jobStatus") or node.get("employmentStatus"))
+            status = status_raw
+            if deadline and deadline < cutoff:
+                status = "closed"
+            elif status_raw:
+                status = status_raw
+            job = {"title": title, "url": url, "location": _job_location(node.get("jobLocation")),
+                   "employment_type": _schema_text(node.get("employmentType")), "posting_date": posted,
+                   "posting_date_raw": node.get("datePosted"), "deadline": deadline,
+                   "deadline_raw": node.get("validThrough"), "status": status}
+            fingerprint = hashlib.sha256(json.dumps([org, title.casefold(), job["location"], url],
+                ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:24]
+            job["subject"] = f"{org}:job:{fingerprint}"
+            job["locator"] = "/structured_data/JobPosting"
+            jobs.append(job)
+        if any(str(kind).casefold() in {"newsarticle", "article", "blogposting"} for kind in kinds):
+            counts["activity_candidates"] += 1
+            title = _schema_text(node.get("headline") or node.get("name"))
+            url = _same_host_url(node.get("url") or node.get("mainEntityOfPage") or page.final_url, page.final_url)
+            raw_date = node.get("datePublished")
+            published = _date_value(raw_date)
+            if not title or not url:
+                continue
+            activity = _activity_record(org, title, url, published, _schema_text(node.get("description")),
+                                        _schema_text(node.get("articleSection")), cutoff, lookback_days, counts, raw_date)
+            if activity:
+                activity["locator"] = "/structured_data/NewsArticle"
+                activities.append(activity)
+    # Visible fallback is limited to explicitly marked JobPosting containers on this verified origin.
+    soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
+    for index, card in enumerate(soup.select('[itemtype*="JobPosting"], article[data-job-posting]')):
+        title_node = card.select_one('[itemprop="title"],h1,h2,h3')
+        link = card.select_one('a[href]')
+        title = " ".join(title_node.get_text(" ", strip=True).split())[:300] if title_node else ""
+        url = _same_host_url(link.get("href") if link else None, page.final_url)
+        if not title or not url or _contains_direct_contact_or_identifier(title):
+            continue
+        def itemprop(*names: str) -> str | None:
+            node = next((card.select_one(f'[itemprop="{name}"]') for name in names if card.select_one(f'[itemprop="{name}"]')), None)
+            return str(node.get("content") or node.get("datetime") or node.get("data-value") or node.get_text(" ", strip=True)).strip() if node else None
+        posted = _date_value(itemprop("datePosted"))
+        deadline = _date_value(itemprop("validThrough"))
+        if posted and posted > cutoff:
+            counts["job_future"] += 1
+            continue
+        location_node = card.select_one('[itemprop="jobLocation"]')
+        location = None
+        if location_node:
+            location_parts = []
+            for prop in ("addressLocality", "addressRegion", "addressCountry"):
+                prop_node = location_node.select_one(f'[itemprop="{prop}"]')
+                if prop_node:
+                    location_parts.append(str(prop_node.get("content") or prop_node.get_text(" ", strip=True)))
+            location = ", ".join(dict.fromkeys(part.strip() for part in location_parts if part.strip()))[:300] or None
+        employment = itemprop("employmentType")
+        status = itemprop("jobStatus") or ("closed" if deadline and deadline < cutoff else None)
+        fingerprint = hashlib.sha256(json.dumps([org, title.casefold(), location, url],
+            ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:24]
+        jobs.append({"subject": f"{org}:job:{fingerprint}", "title": title, "url": url, "location": location,
+            "employment_type": employment, "posting_date": posted,
+            "posting_date_raw": itemprop("datePosted"), "deadline": deadline,
+            "deadline_raw": itemprop("validThrough"), "status": status,
+            "locator": f"/html/body//JobPosting[{index + 1}]"})
+    # Explicit article publication time only; no retrieval or sitemap date fallback.
+    article_nodes = soup.select('article, [itemprop="articleBody"]')
+    for index, article in enumerate(article_nodes):
+        title_node = article.select_one("h1,h2,h3")
+        title = " ".join(title_node.get_text(" ", strip=True).split())[:300] if title_node else ""
+        date_node = article.select_one('time[datetime], [itemprop="datePublished"]')
+        raw_date = (date_node.get("datetime") or date_node.get("content") or date_node.get_text(" ", strip=True)) if date_node else None
+        published = _date_value(raw_date)
+        if not title or not published or _contains_direct_contact_or_identifier(title):
+            if title:
+                counts["activity_undated"] += 1
+            continue
+        summary = " ".join(article.get_text(" ", strip=True).split())[:1200]
+        activity = _activity_record(org, title, page.final_url, published, summary, None, cutoff, lookback_days, counts, raw_date)
+        if activity:
+            activity["locator"] = f"/html/body//article[{index + 1}]"
+            activities.append(activity)
+    return _dedupe_jobs(jobs), _dedupe_activities(activities), counts
+
+
+def _activity_record(org: str, title: str, url: str, published: datetime | None, summary: str | None,
+                     event_type: str | None, cutoff: datetime, lookback_days: int, counts: dict[str, int],
+                     source_date: str | None = None) -> dict[str, Any] | None:
+    if not published:
+        counts["activity_undated"] += 1
+        return None
+    if published > cutoff:
+        counts["activity_future"] += 1
+        return None
+    if published < cutoff - timedelta(days=lookback_days):
+        counts["activity_outside_window"] += 1
+        return None
+    # Summaries are extractive and omit email addresses, phone numbers, and national identifiers.
+    safe_summary = " ".join((summary or "").split())[:500]
+    if _contains_direct_contact_or_identifier(safe_summary):
+        safe_summary = ""
+    fingerprint = hashlib.sha256(json.dumps([org, title.casefold(), published.date().isoformat()],
+        ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:24]
+    return {"subject": f"{org}:event:{fingerprint}", "title": title, "url": url,
+            "published": published, "published_raw": source_date or published.date().isoformat(),
+            "summary": safe_summary or None, "event_type": event_type or "company_announcement"}
+
+
+def _dedupe_jobs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        unique.setdefault(row["subject"], row)
+    return list(unique.values())
+
+
+def _dedupe_activities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        unique.setdefault(row["subject"], row)
+    return list(unique.values())
 
 
 def _source_evidence(candidate: dict[str, Any], evidence: list[Evidence], snapshots: list[SourceSnapshot]) -> str | None:
@@ -584,10 +845,13 @@ def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidat
 
 
 async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, shared_domains: set[str] | None = None,
-                           enable_keyless: bool = True) -> WebsiteResearchResult:
+                           enable_keyless: bool = True, evidence_cutoff: datetime | None = None) -> WebsiteResearchResult:
     """Fetch, verify, then shallowly research one target using the central gateway."""
     org = str(profile.get("organisation_number") or "")
     output = WebsiteResearchResult()
+    cutoff = evidence_cutoff or datetime.now(timezone.utc)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
     source_candidates = list(profile.get("website_candidates") or [])
     # Search adapters may add URL candidates here. Their titles/snippets are
     # never accepted by this path, and their provenance stays in the audit.
@@ -606,12 +870,16 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             candidates.append({"url": guessed, "kind": "website", "source": "keyless_no", "source_ref": {}})
     output.audit = {"organisation_number": org, "candidate_count": len(candidates), "candidates": [],
         "accepted_domains": [], "page_count": 0, "page_requests": 0, "pages": [], "request_count_scope": "batch_gateway_metrics", "request_outcomes": {},
-        "crawl_state": "not_started", "website_claim_families": [], "high_risk_review": []}
+        "crawl_state": "not_started", "website_claim_families": [], "high_risk_review": [],
+        "jobs": {"candidates": 0, "published": 0, "explicit_zero": False},
+        "activity": {"candidates": 0, "published": 0, "undated": 0, "future": 0, "outside_window": 0, "deduplicated": 0},
+        "ats_origins": []}
     started = time.monotonic()
     page_total_bytes = 0
     page_limit = 0
     website_page_requests = 0
     accepted_pages: list[tuple[dict[str, Any], list[PageRecord], dict[str, Any], float | None]] = []
+    feed_observations: list[tuple[str, PageRecord, list[dict[str, str]]]] = []
     unresolved = False
     saw_blocked = False
     saw_failure = False
@@ -898,7 +1166,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             if kind == "news" and item not in feed_candidates:
                 feed_candidates.append(item)
         feed_candidates = list(dict.fromkeys(url for url in feed_candidates if _internal_url(url, allowed_hosts)))[:MAX_FEEDS]
-        feed_entries: list[str] = []
+        feed_entries: list[dict[str, str]] = []
         for feed_url in feed_candidates:
             if len(feed_entries) >= MAX_SITEMAP_URLS or page_limit >= MAX_ABSOLUTE_PAGES or page_total_bytes >= MAX_SITE_BYTES:
                 break
@@ -910,9 +1178,14 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             page_limit += 1
             output.audit["page_requests"] += 1
             if status == 200 and len(body) <= 256 * 1024:
-                feed_entries.extend(_parse_feed(body))
+                parsed_entries = _parse_feed(body)
+                feed_page = PageRecord(requested_url=feed_url, final_url=final_url, status=status,
+                    content_type=next((v for k, v in headers.items() if k.casefold() == "content-type"), "application/xml"),
+                    body=body, digest=hashlib.sha256(body).hexdigest(), retrieved_at=datetime.now(timezone.utc))
+                feed_observations.append((candidate["url"], feed_page, parsed_entries))
+                feed_entries.extend(row for row in parsed_entries if _same_host_url(row.get("url"), final_url))
         seen_page_urls = {page.final_url for page in pages}
-        candidates_for_pages = sitemap_urls + feed_entries + [link["url"] for page in pages if "nofollow" not in page.directives
+        candidates_for_pages = sitemap_urls + [row["url"] for row in feed_entries] + [link["url"] for page in pages if "nofollow" not in page.directives
             for link in page.links if "nofollow" not in link.get("rel", "").casefold().split() and _internal_url(link["url"], allowed_hosts)]
         ranked: dict[str, tuple[int, int, str]] = {}
         for page_url in candidates_for_pages:
@@ -970,8 +1243,171 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                         verification_rule_id="outbound_link_from_exact_verified_site_v1", verification_score="1.0",
                         evidence_ids=[social_eid, proof_evidence], source_snapshot_ids=[f"website:{_page_key(page)}", proof_source]))
                     output.audit["website_claim_families"].append("company_owned_profile")
-        # Re-evaluate only already exact accepted sites; crawl content cannot retroactively verify a different candidate brand.
-        output.audit["accepted_domains"].extend([])
+        # Feed declarations can live on careers/news pages fetched during this pass.
+        observed_feed_urls = {record.final_url for _candidate_url, record, _rows in feed_observations}
+        for page in pages:
+            for node in BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml").select('link[rel~="alternate"][href]'):
+                media_type = str(node.get("type") or "").casefold()
+                if not ("rss" in media_type or "atom" in media_type):
+                    continue
+                feed_url = urllib.parse.urljoin(page.final_url, str(node.get("href")))
+                if feed_url in observed_feed_urls or not _internal_url(feed_url, _internal_hosts(candidate["url"])):
+                    continue
+                if page_limit >= MAX_ABSOLUTE_PAGES or page_total_bytes >= MAX_SITE_BYTES:
+                    break
+                try:
+                    status, headers, body, final_url, _outcome = await _fetch(gateway, feed_url, purpose="feed",
+                        allowed_hosts=_internal_hosts(candidate["url"]), cap=min(256 * 1024, MAX_SITE_BYTES - page_total_bytes))
+                except Exception:
+                    continue
+                page_total_bytes += len(body)
+                page_limit += 1
+                output.audit["page_requests"] += 1
+                observed_feed_urls.add(feed_url)
+                if status == 200 and len(body) <= 256 * 1024:
+                    feed_page = PageRecord(requested_url=feed_url, final_url=final_url, status=status,
+                        content_type=next((v for k, v in headers.items() if k.casefold() == "content-type"), "application/xml"),
+                        body=body, digest=hashlib.sha256(body).hexdigest(), retrieved_at=datetime.now(timezone.utc))
+                    feed_observations.append((candidate["url"], feed_page, _parse_feed(body)))
+        # M05 publishes hiring/activity only from pages still bound to the exact-site proof.
+    emitted_subjects: set[tuple[str, str]] = set()
+    emitted_activity_subjects: set[str] = set()
+    checked_careers = False
+    checked_activity_surface = False
+    for candidate, pages, assessment, _delay in accepted_pages:
+        proof_digest = hashlib.sha256(json.dumps(assessment["proof"], sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+        proof_source = f"website-proof:{proof_digest[:16]}"
+        proof_evidence = f"website-proof-evidence:{proof_digest[:16]}"
+        verified_names = {str(profile.get("name") or "")}
+        for page in pages:
+            if assessment["proof"].get("shared_domain") and verify_site_pages(profile, [page], shared_domain=True,
+                    candidate_source=candidate["source"])["decision"] != "accepted":
+                continue
+            page_kind = _kind(page.final_url, page.title)
+            checked_careers = checked_careers or page_kind == "careers"
+            checked_activity_surface = checked_activity_surface or page_kind == "news"
+            if page_kind == "careers":
+                allowed_ats = _approved_ats_hosts()
+                soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
+                for node in soup.select("iframe[src], a[href]"):
+                    if node.name == "a" and not re.search(r"(?i)\b(apply|application|job|career|position|stilling)\b", node.get_text(" ", strip=True)):
+                        continue
+                    raw_url = node.get("src") or node.get("href")
+                    parsed_url = urllib.parse.urlsplit(urllib.parse.urljoin(page.final_url, str(raw_url)))
+                    host = (parsed_url.hostname or "").casefold().removeprefix("www.")
+                    if host and host not in {item.casefold().removeprefix("www.") for item in _internal_hosts(page.final_url)}:
+                        status = "approved_host_but_mode_disabled" if host in allowed_ats else "unlisted_origin_skipped"
+                        output.audit["ats_origins"].append({"host": host, "status": status, "requested": False})
+            for node in page.schema_organizations:
+                if org in (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID"))):
+                    name = _as_text(node.get("name"))
+                    if name and _exact_name([str(profile.get("name") or "")], _as_text(node.get("legalName"))):
+                        verified_names.add(name)
+            if page_kind == "careers" and re.search(
+                    r"(?i)\b(no (?:current )?(?:open )?(?:positions|roles|vacancies|openings)|no vacancies|ingen ledige stillinger|ingen åpne stillinger)\b",
+                    page.visible_text):
+                output.audit["jobs"]["explicit_zero"] = True
+            jobs, activities, counts = _page_footprints(page, org=org, legal_name=str(profile.get("name") or ""),
+                verified_names=verified_names, cutoff=cutoff)
+            for name, count in counts.items():
+                if name == "job_candidates": output.audit["jobs"]["candidates"] += count
+                elif name == "job_future": output.audit["jobs"].setdefault("future_dated_skipped", 0); output.audit["jobs"]["future_dated_skipped"] += count
+                elif name == "activity_candidates": output.audit["activity"]["candidates"] += count
+                elif name == "activity_undated": output.audit["activity"]["undated"] += count
+                elif name == "activity_future": output.audit["activity"]["future"] += count
+                elif name == "activity_outside_window": output.audit["activity"]["outside_window"] += count
+            evidence_id = _public_evidence(page, output.snapshots, output.evidence)
+            for job in jobs:
+                subject = job["subject"]
+                values = {"job_title": job["title"], "job_location": job["location"],
+                          "employment_type": job["employment_type"], "posting_date": job["posting_date"],
+                          "application_deadline": job["deadline"], "canonical_job_url": job["url"], "job_status": job["status"]}
+                values["posting_date"] = _source_date_value(job["posting_date"], str(job["posting_date_raw"])) if job["posting_date"] else None
+                values["application_deadline"] = _source_date_value(job["deadline"], str(job["deadline_raw"])) if job["deadline"] else None
+                for field_name, value in values.items():
+                    if value is None or (subject, field_name) in emitted_subjects:
+                        continue
+                    emitted_subjects.add((subject, field_name))
+                    if isinstance(value, datetime): value = value.isoformat()
+                    output.claims.append(_make_footprint_claim(org, field_name, value, subject, "job", page,
+                                                               evidence_id, proof_source, proof_evidence,
+                                                               job["posting_date"] if field_name == "posting_date" else (job["deadline"] if field_name == "application_deadline" else None)))
+                    output.audit["jobs"]["published"] += 1
+            for activity in activities:
+                if activity["subject"] not in emitted_activity_subjects and len(emitted_activity_subjects) >= 20:
+                    continue
+                subject = activity["subject"]
+                emitted_activity_subjects.add(subject)
+                values = {"activity_headline": activity["title"], "activity_type": activity["event_type"],
+                          "source_published_at": _source_date_value(activity["published"], activity["published_raw"]),
+                          "activity_source_url": activity["url"], "activity_summary": activity["summary"]}
+                for field_name, value in values.items():
+                    if value is None or (subject, field_name) in emitted_subjects:
+                        continue
+                    emitted_subjects.add((subject, field_name))
+                    output.claims.append(_make_footprint_claim(org, field_name, value, subject, "event", page,
+                                                               evidence_id, proof_source, proof_evidence,
+                                                               activity["published"] if field_name == "source_published_at" else None))
+                    output.audit["activity"]["published"] += 1
+        # Feed item dates are source publication dates; feed retrieval/sitemap dates are never substituted.
+        for feed_candidate, feed_page, entries in feed_observations:
+            if feed_candidate != candidate["url"]:
+                continue
+            if assessment["proof"].get("shared_domain") and verify_site_pages(profile, [feed_page], shared_domain=True,
+                    candidate_source=candidate["source"])["decision"] != "accepted":
+                continue
+            checked_activity_surface = True
+            feed_evidence = _public_evidence(feed_page, output.snapshots, output.evidence, locator="/rss/channel/item")
+            counts = {"activity_undated": 0, "activity_future": 0, "activity_outside_window": 0}
+            observed: list[dict[str, Any]] = []
+            for entry in entries:
+                item_url = _same_host_url(entry.get("url"), feed_page.final_url)
+                title = entry.get("title", "").strip()
+                if not item_url or not title:
+                    continue
+                event = _activity_record(org, title, item_url, _date_value(entry.get("published")),
+                    entry.get("summary") or entry.get("description"), entry.get("category"), cutoff, 365, counts, entry.get("published"))
+                if event:
+                    event["locator"] = "/rss/channel/item"
+                    observed.append(event)
+            unique_events = _dedupe_activities(observed)
+            output.audit["activity"]["deduplicated"] += len(observed) - len(unique_events)
+            output.audit["activity"]["undated"] += counts["activity_undated"]
+            output.audit["activity"]["future"] += counts["activity_future"]
+            output.audit["activity"]["outside_window"] += counts["activity_outside_window"]
+            for activity in unique_events:
+                if activity["subject"] not in emitted_activity_subjects and len(emitted_activity_subjects) >= 100:
+                    continue
+                subject = activity["subject"]
+                emitted_activity_subjects.add(subject)
+                values = {"activity_headline": activity["title"], "activity_type": activity["event_type"],
+                          "source_published_at": _source_date_value(activity["published"], activity["published_raw"]),
+                          "activity_source_url": activity["url"], "activity_summary": activity["summary"]}
+                for field_name, value in values.items():
+                    if value is None or (subject, field_name) in emitted_subjects:
+                        continue
+                    emitted_subjects.add((subject, field_name))
+                    output.claims.append(_make_footprint_claim(org, field_name, value, subject, "event", feed_page,
+                                                               feed_evidence, proof_source, proof_evidence,
+                                                               activity["published"] if field_name == "source_published_at" else None))
+                    output.audit["activity"]["published"] += 1
+    output.audit["jobs"]["published_subjects"] = len({claim.subject_id for claim in output.claims if claim.field_family == "jobs"})
+    output.audit["activity"]["published_subjects"] = len({claim.subject_id for claim in output.claims if claim.field_family == "public_activity"})
+    output.audit["jobs"]["state"] = ("available" if output.audit["jobs"]["published_subjects"] else
+        "not_available" if output.audit["jobs"]["explicit_zero"] else "ambiguous")
+    output.audit["activity"]["lookback_days"] = 365
+    output.audit["activity"]["page_discovery_target"] = 20
+    output.audit["activity"]["max_from_already_fetched_feed_responses"] = 100
+    output.audit["source_policy"] = {"source_class": "verified_company_owned_website", "external_sources_enabled": False,
+        "terms_policy": "skip_if_prohibitive; transient factual extraction; source URL, date and hash retained"}
+    hiring_claims = [claim for claim in output.claims if claim.section == "hiring_activity"]
+    if hiring_claims:
+        output.hiring_activity_state = PublicState.AVAILABLE
+    elif output.audit["jobs"]["explicit_zero"] and checked_activity_surface:
+        output.hiring_activity_state = PublicState.NOT_AVAILABLE
+    else:
+        output.hiring_activity_state = PublicState.AMBIGUOUS
+    output.audit["hiring_activity_state"] = output.hiring_activity_state.value
     output.audit["elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
     output.audit["bytes_received"] = page_total_bytes
     output.audit["max_default_pages"] = MAX_DEFAULT_PAGES

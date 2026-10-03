@@ -306,7 +306,7 @@ def run(args: argparse.Namespace) -> int:
                                 if root: root_owners.setdefault(root, set()).add(org)
                 shared_roots = {root for root, owners in root_owners.items() if len(owners) > 1}
                 website_results = await asyncio.gather(*(research_company(profile, gateway, shared_domains=shared_roots,
-                    enable_keyless=not args.no_keyless_websites) for profile in profiles.values()))
+                    enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff) for profile in profiles.values()))
                 by_website_org = dict(zip(profiles, website_results))
                 for envelope in output:
                     result = by_website_org.get(envelope.organisation_number)
@@ -315,9 +315,14 @@ def run(args: argparse.Namespace) -> int:
                     envelope.claims.extend(result.claims)
                     envelope.evidence.extend(result.evidence)
                     envelope.source_snapshots.extend(result.snapshots)
+                    website_claims = [claim for claim in result.claims if claim.section == "website_owned_profiles"]
+                    footprint_claims = [claim for claim in result.claims if claim.section == "hiring_activity"]
                     section = envelope.sections["website_owned_profiles"]
-                    section.claims.extend(result.claims)
-                    section.state = result.state if not result.claims else PublicState.AVAILABLE
+                    section.claims.extend(website_claims)
+                    section.state = result.state if not website_claims else PublicState.AVAILABLE
+                    hiring = envelope.sections["hiring_activity"]
+                    hiring.claims.extend(footprint_claims)
+                    hiring.state = result.hiring_activity_state
                     envelope.sections["claims_evidence_states"].claims.extend(result.claims)
                     if result.claims:
                         envelope.sections["claims_evidence_states"].state = PublicState.AVAILABLE

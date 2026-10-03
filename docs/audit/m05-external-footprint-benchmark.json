@@ -1,0 +1,94 @@
+{
+  "activity_date_claims_missing_as_of": 0,
+  "atomic_claims_by_family": {},
+  "claim_error_sample": null,
+  "claims_missing_evidence": 0,
+  "claims_missing_source_snapshots": 0,
+  "cohort": {
+    "baseline_commit": "0e681ab8fee2d36f41fb8ceb47af4f5fcc0fb96f",
+    "path": "docs/audit/m00-company-sample-200.jsonl",
+    "sha256": "cee97e17af7e8b2d9dc9f5ee60548b9e186a11a2e485469446219ea10a1e38ed"
+  },
+  "cohort_rows": 200,
+  "company_coverage_by_family": {
+    "jobs": 0,
+    "public_activity": 0
+  },
+  "company_states": {
+    "ambiguous": 13,
+    "available": 1,
+    "blocked": 2,
+    "failed": 80,
+    "hiring_activity:ambiguous": 200,
+    "jobs:ambiguous": 200,
+    "not_available": 104
+  },
+  "gateway_and_runtime_metrics": {
+    "batch_id": "m05-external-footprint-final-200",
+    "completed_at": "2026-10-03T04:56:22.793126+00:00",
+    "errors_by_code": {
+      "ROBOTS_UNREACHABLE": 80,
+      "WEBSITE_POLICY_REJECTED": 1
+    },
+    "logical_requests": 152,
+    "paid_cost_usd": "0",
+    "per_company_website_elapsed_ms": {
+      "max": 67615.43,
+      "sum": 314591.706
+    },
+    "physical_requests": 96,
+    "request_limit": 3400,
+    "request_outcomes": {
+      "robots:0:timeout": 2,
+      "robots:0:transport_error": 4,
+      "robots:200:received": 22,
+      "robots:301:received": 8,
+      "robots:404:received": 2,
+      "robots:503:received": 2,
+      "sitemap:404:received": 1,
+      "website_page:200:received": 45,
+      "website_page:301:received": 10
+    },
+    "requests_by_purpose": {
+      "robots": 40,
+      "sitemap": 1,
+      "website_page": 55
+    },
+    "runtime_seconds": 68.844,
+    "snapshot_sha256": "cee97e17af7e8b2d9dc9f5ee60548b9e186a11a2e485469446219ea10a1e38ed"
+  },
+  "hard_gates": {
+    "activity_dates_have_explicit_as_of": true,
+    "all_claims_have_evidence_and_snapshot": true,
+    "all_claims_have_exact_site_proof": true,
+    "expected_200_company_cohort": true,
+    "external_sources_disabled_until_rights_approved": true,
+    "no_rights_policy_errors_for_published_claims": true,
+    "one_output_per_input": true,
+    "source_policy_configured_for_enabled_source_classes": true,
+    "zero_wrong_company_publications": true
+  },
+  "m04_delta": {
+    "m04_accepted_domains": 1,
+    "m05_accepted_domains": 1,
+    "m05_activity_companies": 0,
+    "m05_jobs_companies": 0,
+    "new_companies_with_hiring_or_activity_claims": 0
+  },
+  "missing_exact_site_proof_claims": 0,
+  "source_rights": {
+    "active_source_classes": [
+      "exact_company_owned_website"
+    ],
+    "external_ats_or_activity_sources_enabled": false,
+    "policy_configured": true,
+    "site_terms_license_status": "site_specific_terms_unreviewed",
+    "site_terms_rule": "site-specific; skip when prohibitive; no third-party acquisition"
+  },
+  "source_rights_errors": 0,
+  "unique_subjects_by_family": {
+    "jobs": 0,
+    "public_activity": 0
+  },
+  "wrong_company_claims": 0
+}

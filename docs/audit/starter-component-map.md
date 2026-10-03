@@ -43,3 +43,21 @@ The supplied `signalpost-starter-kit/` is a runnable reference baseline and usef
 - `src/norway_company_agent/website.py` remains a quarantined reference for production networking: it opens HTTP directly, implements a robots-unreachable permissive fallback, and performs DNS/redirect checks outside M01 accounting. Its useful URL and social-normalization cases were treated as reference behavior, then constrained by the M03 identity and gateway contract.
 - `identity.py` remains quarantined from publication because its NFKD ASCII transliteration and token-overlap score can merge distinct Norwegian legal names and do not establish the audited subject-scoped identity proof.
 - `crawl_events.py` and the starter activity/news/scrapy scripts remain parser references. They do not provide M01 gateway accounting, and activity/job/news claim extraction is outside M03. Sitemap/feed parsing in M03 is bounded discovery only; no publication date or activity claim is inferred from `lastmod` or feed discovery.
+
+## M05 connector-by-connector disposition
+
+| Starter connector | M05 disposition | Production boundary |
+|---|---|---|
+| `scripts/extract_company_site_news.py` | REFACTOR/reference | Reuse only extraction ideas. M05 parses pages only after exact-site identity proof, sends requests through `NetworkGateway`, and binds every atomic claim to page evidence plus the exact-site proof. |
+| `scripts/extract_company_site_activity.py` | REFACTOR/reference | Reuse only deterministic parsing cases. Event dates must be explicit source publication dates, with raw precision and normalized UTC retained; retrieval time and sitemap `lastmod` are excluded. |
+| `scripts/run_google_news_rss_connector.py` | QUARANTINE | Google News is an external aggregator, and rights/reproducibility are not approved. It is not used for production jobs/activity. |
+| M03 sitemap/feed crawl in `signalpost/websites.py` | ADAPT/production | Keep the exact-site bounded crawl and central gateway. RSS/Atom items publish only for a verified company site, same-host source URL, and explicit in-window item date. Sitemaps remain discovery inputs only. |
+| `scripts/run_linkedin_guest_jobs_connector.py`, `run_linkedin_guest_experiment.py`, `discover_linkedin_company_profiles.py` | QUARANTINE | Unofficial guest access, shared-host tenancy and rights are not approved. No LinkedIn request is made. |
+| `scripts/run_fagfolkguiden_reviews_connector.py` | QUARANTINE | Review-source reuse/retention is not authorized by the available policy; no request or claim is produced. |
+| `scripts/run_youtube_search_connector.py` | QUARANTINE | Search rights and deterministic identity are unresolved; YouTube results remain non-publishable observations. |
+| `scripts/normalize_social_links.py` | TEST-ONLY/reference | URL normalization may inform fixtures. M03 exact-site outbound-link extraction remains canonical, and no social profile is fetched. |
+| `scripts/normalize_google_maps_results.py` | QUARANTINE | No current provider/API acquisition rights or retention mode is configured. |
+| `scripts/run_annual_report_workforce_connector.py` | OFF/TEST-ONLY for M05 | Keep as a later workforce parser reference. It opens PDFs outside the M01 gateway and is not needed for jobs/activity. |
+| `signalpost.external_footprint` and starter `external_footprint.py` | KEEP as isolated diagnostics | Use for local observation/claim validation ideas only. Production M05 publication uses canonical `Claim`, `Evidence`, `SourceSnapshot`, exact-org checks and the M01 gateway. |
+
+The active M05 source set is exact-company-owned pages and feeds already reachable through M03's bounded verified-site pass. `config/jobs_source_policy.json` has no approved ATS hosts or acquisition modes. An ATS iframe or application link on a careers page is logged but not fetched until both are explicitly configured; unlisted/shared tenants cannot enter company claims. External activity providers remain disabled. No paid source or model dependency was introduced.
