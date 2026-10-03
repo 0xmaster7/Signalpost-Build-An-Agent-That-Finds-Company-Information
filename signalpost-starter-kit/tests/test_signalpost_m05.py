@@ -6,6 +6,7 @@ import json
 import unittest
 from datetime import datetime, timezone
 
+from signalpost.models import PublicState
 from signalpost.websites import (
     PageRecord, _activity_record, _dedupe_activities, _date_value, _page_footprints,
     _parse_feed, _parse_page, research_company,
@@ -50,8 +51,7 @@ def job(title="Engineer", url="/jobs/engineer", *, deadline="2026-01-01", employ
     row = {"@type": "JobPosting", "title": title, "url": url, "datePosted": "2026-02-01",
            "validThrough": deadline, "jobLocation": {"address": {"addressLocality": "Oslo", "addressCountry": "NO"}},
            "employmentType": "FULL_TIME"}
-    if employer is not None:
-        row["hiringOrganization"] = employer
+    row["hiringOrganization"] = employer or {"@type": "Organization", "name": LEGAL, "identifier": ORG}
     return {"@context": "https://schema.org", **row}
 
 
@@ -61,6 +61,62 @@ class M05HiringActivityTests(unittest.TestCase):
             verified_names={LEGAL}, cutoff=CUTOFF)
         self.assertEqual(jobs[0]["status"], "closed")
         self.assertEqual(jobs[0]["deadline"].date().isoformat(), "2026-01-01")
+
+    def test_closed_only_postings_do_not_make_current_jobs_available(self):
+        home = f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><a href="/careers">Careers</a></body></html>'''
+        career = f'<html><head><title>Careers</title><script type="application/ld+json">{json.dumps(job())}</script></head><body><h1>Careers</h1></body></html>'
+        gateway = FakeGateway({"https://company.no/": (200, {"Content-Type": "text/html"}, home.encode()),
+            "https://company.no/careers": (200, {"Content-Type": "text/html"}, career.encode())})
+        result = asyncio.run(research_company({"organisation_number": ORG, "name": LEGAL,
+            "website_candidates": [{"raw": "https://company.no/", "source": "registry_frozen"}]}, gateway,
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertGreater(result.audit["jobs"]["published_subjects"], 0)
+        self.assertEqual(result.audit["jobs"]["current_subjects"], 0)
+        self.assertEqual(result.audit["jobs"]["state"], "ambiguous")
+
+    def test_real_company_site_does_not_scope_employerless_jobs_or_rival_articles(self):
+        home = f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><a href="/careers">Careers</a><a href="/news">News</a></body></html>'''
+        employerless = job(deadline="2026-12-01")
+        employerless.pop("hiringOrganization")
+        careers = f'<html><head><title>Careers</title><script type="application/ld+json">{json.dumps(employerless)}</script></head><body><h1>Careers</h1></body></html>'
+        rival_article = {"@type": "NewsArticle", "headline": "Rival update", "datePublished": "2026-09-20",
+            "about": {"@type": "Organization", "name": "Rival AS", "identifier": "987654321"},
+            "url": "https://company.no/news/rival"}
+        news = f'<html><head><title>News</title><script type="application/ld+json">{json.dumps(rival_article)}</script></head><body><h1>News</h1></body></html>'
+        gateway = FakeGateway({"https://company.no/": (200, {"Content-Type": "text/html"}, home.encode()),
+            "https://company.no/careers": (200, {"Content-Type": "text/html"}, careers.encode()),
+            "https://company.no/news": (200, {"Content-Type": "text/html"}, news.encode())})
+        result = asyncio.run(research_company({"organisation_number": ORG, "name": LEGAL,
+            "website_candidates": [{"raw": "https://company.no/", "source": "registry_frozen"}]}, gateway,
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field_family in {"jobs", "public_activity"} for claim in result.claims))
+        self.assertEqual(result.audit["jobs"]["identity_rejected"], 1)
+        self.assertEqual(result.audit["activity"]["subject_rejected"], 1)
+
+    def test_global_website_pass_stages_preserve_the_single_company_result(self):
+        home = f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><a href="/careers">Careers</a></body></html>'''
+        career = f'<html><head><title>Careers</title><script type="application/ld+json">{json.dumps(job(deadline="2026-12-01"))}</script></head><body><h1>Careers</h1></body></html>'
+        pages = {"https://company.no/": (200, {"Content-Type": "text/html"}, home.encode()),
+            "https://company.no/careers": (200, {"Content-Type": "text/html"}, career.encode())}
+        profile = {"organisation_number": ORG, "name": LEGAL,
+            "website_candidates": [{"raw": "https://company.no/", "source": "registry_frozen"}]}
+        staged_gateway = FakeGateway(pages)
+        verified = asyncio.run(research_company(profile, staged_gateway, enable_keyless=False,
+            evidence_cutoff=CUTOFF, phase="verify"))
+        verify_claim_count = len(verified.claims)
+        verify_state = verified.state
+        shallow = asyncio.run(research_company(profile, staged_gateway, enable_keyless=False,
+            evidence_cutoff=CUTOFF, phase="shallow", previous=verified))
+        shallow_claim_count = len(shallow.claims)
+        staged = asyncio.run(research_company(profile, staged_gateway, enable_keyless=False,
+            evidence_cutoff=CUTOFF, phase="jobs", previous=shallow))
+        single = asyncio.run(research_company(profile, FakeGateway(pages), enable_keyless=False,
+            evidence_cutoff=CUTOFF))
+        self.assertEqual({claim.claim_id for claim in staged.claims}, {claim.claim_id for claim in single.claims})
+        self.assertEqual(staged.audit["jobs"]["published_subjects"], single.audit["jobs"]["published_subjects"])
+        self.assertEqual(verify_claim_count, 0)
+        self.assertGreater(shallow_claim_count, 0)
+        self.assertEqual(verify_state, PublicState.AMBIGUOUS)
 
     def test_future_posted_job_is_not_published_at_cutoff(self):
         observation = job(deadline="2027-01-01")
@@ -77,8 +133,26 @@ class M05HiringActivityTests(unittest.TestCase):
         self.assertEqual(jobs, [])
         self.assertEqual(counts["job_identity_rejected"], 1)
 
+    def test_job_without_hiring_organization_is_rejected(self):
+        observation = job(deadline=None)
+        observation.pop("hiringOrganization")
+        jobs, _, counts = _page_footprints(page("", structured=observation), org=ORG, legal_name=LEGAL,
+            verified_names={LEGAL}, cutoff=CUTOFF)
+        self.assertEqual(jobs, [])
+        self.assertEqual(counts["job_identity_rejected"], 1)
+
+    def test_multiple_hiring_organizations_with_foreign_entity_are_rejected(self):
+        observation = job(deadline=None, employer=[
+            {"@type": "Organization", "name": LEGAL, "identifier": ORG},
+            {"@type": "Organization", "name": "Subsidiary AS", "identifier": "987654321"},
+        ])
+        jobs, _, counts = _page_footprints(page("", structured=observation), org=ORG, legal_name=LEGAL,
+            verified_names={LEGAL}, cutoff=CUTOFF)
+        self.assertEqual(jobs, [])
+        self.assertEqual(counts["job_identity_rejected"], 1)
+
     def test_duplicate_job_cards_collapse_by_target_title_location_and_url(self):
-        html = '''<article itemscope itemtype="https://schema.org/JobPosting"><h2 itemprop="title">Engineer</h2><span itemprop="jobLocation"><span itemprop="addressLocality">Oslo</span><span itemprop="addressCountry">NO</span></span><a href="/jobs/engineer">Apply</a></article>'''
+        html = f'''<article itemscope itemtype="https://schema.org/JobPosting"><span itemprop="hiringOrganization" itemscope itemtype="https://schema.org/Organization"><span itemprop="name">{LEGAL}</span><meta itemprop="identifier" content="{ORG}"></span><h2 itemprop="title">Engineer</h2><span itemprop="jobLocation"><span itemprop="addressLocality">Oslo</span><span itemprop="addressCountry">NO</span></span><a href="/jobs/engineer">Apply</a></article>'''
         observation = {"@context": "https://schema.org", "@type": "JobPosting", "title": "Engineer", "url": "/jobs/engineer",
                        "jobLocation": {"address": {"addressLocality": "Oslo", "addressCountry": "NO"}}}
         jobs, _, _ = _page_footprints(page(html, structured={"a": job(deadline=None), "b": observation}),
@@ -136,8 +210,25 @@ class M05HiringActivityTests(unittest.TestCase):
         jobs, activities, _ = _page_footprints(page("", "https://company.no/news/1", {"@graph": [event]}),
             org=ORG, legal_name=LEGAL, verified_names={LEGAL}, cutoff=CUTOFF)
         self.assertEqual(jobs, [])
-        self.assertEqual(len(activities), 1)
-        self.assertEqual(activities[0]["subject"].split(":")[0], ORG)
+        self.assertEqual(len(activities), 0)
+
+    def test_article_subject_requires_exact_target_and_rejects_other_entities(self):
+        date = "2026-09-20"
+        target = {"@type": "NewsArticle", "headline": "ÆØÅ Industri public update", "datePublished": date,
+                  "about": {"@type": "Organization", "name": LEGAL, "identifier": ORG}}
+        foreign_articles = [
+            {"@type": "NewsArticle", "headline": f"{entity} update", "datePublished": date,
+             "about": {"@type": "Organization", "name": entity, "identifier": str(number)}}
+            for entity, number in (("Customer AS", "987654321"), ("Competitor AS", "987654322"),
+                                   ("Subsidiary AS", "987654323"))
+        ]
+        multi = {"@type": "NewsArticle", "headline": "Joint update", "datePublished": date,
+                 "about": [target["about"], foreign_articles[0]["about"]]}
+        for observation, expected in ((target, 1), *((item, 0) for item in foreign_articles), (multi, 0)):
+            with self.subTest(headline=observation["headline"]):
+                _, events, _ = _page_footprints(page("", structured=observation), org=ORG,
+                    legal_name=LEGAL, verified_names={LEGAL}, cutoff=CUTOFF)
+                self.assertEqual(len(events), expected)
 
     def test_future_undated_and_sitemap_dates_never_become_activity_dates(self):
         counts = {"activity_undated": 0, "activity_future": 0, "activity_outside_window": 0}
@@ -165,7 +256,7 @@ class M05HiringActivityTests(unittest.TestCase):
     def test_exact_site_feed_activity_publishes_with_explicit_date_and_source_evidence(self):
         home = f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><a href="/news">News</a></body></html>'''
         news = '<html><head><title>News</title><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head><body><h1>News</h1></body></html>'
-        feed = b'<rss><channel><item><title>Factory opened</title><link>https://company.no/news/opening</link><pubDate>Tue, 15 Sep 2026 10:00:00 GMT</pubDate><description>A company-owned update.</description></item></channel></rss>'
+        feed = f'<rss><channel><item><title>{LEGAL} factory opened</title><link>https://company.no/news/opening</link><pubDate>Tue, 15 Sep 2026 10:00:00 GMT</pubDate><description>A company-owned update.</description></item></channel></rss>'.encode()
         gateway = FakeGateway({"https://company.no/": (200, {"Content-Type": "text/html"}, home.encode()),
             "https://company.no/news": (200, {"Content-Type": "text/html"}, news.encode()),
             "https://company.no/feed.xml": (200, {"Content-Type": "application/rss+xml"}, feed)})

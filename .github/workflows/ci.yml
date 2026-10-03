@@ -22,7 +22,14 @@ jobs:
         run: uv pip install --python .venv/bin/python pytest==9.1.1
       - name: Run starter tests
         working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
         run: .venv/bin/python -m pytest -q
+      - name: Compile and import production package
+        working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
+        run: .venv/bin/python -m compileall -q ../signalpost
       - name: Run M03 exact-company website gate
         working-directory: signalpost-starter-kit
         env:
@@ -54,3 +61,22 @@ jobs:
       - name: Run deterministic refresh replay
         working-directory: signalpost-starter-kit
         run: .venv/bin/python scripts/run_refresh_replay.py --manifest tests/fixtures/refresh-snapshots.json --output /tmp/signalpost-refresh-ci.json
+      - name: Run M06 deterministic scale and offline runner gate
+        working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
+        run: .venv/bin/python scripts/run_m06_scale_gate.py > /tmp/signalpost-m06-scale.json
+      - name: Verify M06 benchmark provenance and no synthetic identity claims
+        run: python3 signalpost-starter-kit/scripts/verify_m06_scale_gate.py /tmp/signalpost-m06-scale.json
+      - name: Run evaluator launcher from unrelated directory without PYTHONPATH
+        working-directory: /tmp
+        run: >-
+          env -u PYTHONPATH
+          $GITHUB_WORKSPACE/signalpost-starter-kit/.venv/bin/python
+          $GITHUB_WORKSPACE/signalpost-starter-kit/run_signalpost.py
+          --input $GITHUB_WORKSPACE/signalpost-starter-kit/tests/fixtures/m01/offline-batch.jsonl
+          --registry-snapshot $GITHUB_WORKSPACE/signalpost-starter-kit/tests/fixtures/m01/registry.jsonl
+          --output /tmp/signalpost-clean-cwd.jsonl
+          --state-output /tmp/signalpost-clean-cwd.sqlite
+      - name: Verify clean CWD evaluator cardinality
+        run: test "$(wc -l < /tmp/signalpost-clean-cwd.jsonl | tr -d ' ')" = "4"

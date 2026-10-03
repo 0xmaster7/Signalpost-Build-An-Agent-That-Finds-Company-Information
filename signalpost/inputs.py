@@ -49,14 +49,15 @@ def parse_records(text: str, fmt: str | None = None) -> list[InputRow]:
     mode = (fmt or "auto").lower()
     if mode == "auto":
         stripped = text.lstrip()
-        mode = "json" if stripped.startswith(("[", "{")) else "csv" if "\t" in text.partition("\n")[0] else "csv" if "," in text.partition("\n")[0] else "plain"
+        header = text.partition("\n")[0]
+        mode = "json" if stripped.startswith(("[", "{")) else "tsv" if "\t" in header else "csv" if "," in header else "plain"
     if mode == "jsonl":
         values = []
         for line in text.splitlines():
             if not line.strip():
                 continue
             try:
-                values.append(json.loads(line))
+                values.append({"_malformed": line, "_parse_error": "invalid UTF-8"} if "\ufffd" in line else json.loads(line))
             except json.JSONDecodeError as exc:
                 values.append({"_malformed": line, "_parse_error": str(exc)})
     elif mode == "json":
@@ -70,13 +71,16 @@ def parse_records(text: str, fmt: str | None = None) -> list[InputRow]:
                 if not line.strip():
                     continue
                 try:
-                    values.append(json.loads(line))
+                    values.append({"_malformed": line, "_parse_error": "invalid UTF-8"} if "\ufffd" in line else json.loads(line))
                 except json.JSONDecodeError as exc:
                     values.append({"_malformed": line, "_parse_error": str(exc)})
     elif mode in {"csv", "tsv"}:
         delimiter = "\t" if mode == "tsv" else ","
         reader = csv.DictReader(text.splitlines(), delimiter=delimiter)
-        values = list(reader)
+        values = []
+        for row in reader:
+            values.append({"_malformed": str(row), "_parse_error": "invalid UTF-8"}
+                          if "\ufffd" in json.dumps(row, ensure_ascii=False) else row)
     elif mode == "plain":
         values = [line.strip() for line in text.splitlines() if line.strip()]
     else:
@@ -85,7 +89,7 @@ def parse_records(text: str, fmt: str | None = None) -> list[InputRow]:
 
 
 def load_input(path: str | Path, fmt: str | None = None) -> list[InputRow]:
-    return parse_records(Path(path).read_text(encoding="utf-8-sig"), fmt)
+    return parse_records(Path(path).read_bytes().decode("utf-8-sig", errors="replace"), fmt)
 
 
 def registry_fixture(path: str | Path | None) -> dict[str, dict[str, Any]]:

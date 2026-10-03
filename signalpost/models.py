@@ -37,6 +37,8 @@ class Evidence(StrictModel):
     json_pointer: str | None = None
     excerpt: str | None = None
     source_class: str = "official"
+    subject_organisation_number: str | None = None
+    source_snapshot_ids: list[str] = Field(default_factory=list)
 
 
 class Claim(StrictModel):
@@ -144,6 +146,12 @@ class Envelope(StrictModel):
             raise ValueError("envelope must contain the seven canonical sections")
         evidence_ids = {item.evidence_id for item in self.evidence}
         snapshot_ids = {item.source_id for item in self.source_snapshots}
+        if len(evidence_ids) != len(self.evidence):
+            raise ValueError("evidence identifiers must be unique within an envelope")
+        if len(snapshot_ids) != len(self.source_snapshots):
+            raise ValueError("source snapshot identifiers must be unique within an envelope")
+        evidence_by_id = {item.evidence_id: item for item in self.evidence}
+        snapshots_by_id = {item.source_id: item for item in self.source_snapshots}
         for claim in self.claims:
             if claim.state == PublicState.AVAILABLE:
                 if claim.organisation_number != self.organisation_number:
@@ -155,6 +163,21 @@ class Envelope(StrictModel):
                     raise ValueError("available structured claims require a source JSON pointer")
                 if not set(claim.source_snapshot_ids) <= snapshot_ids:
                     raise ValueError("available claims must reference present source snapshots")
+                for evidence_id in claim.evidence_ids:
+                    item = evidence_by_id[evidence_id]
+                    if item.subject_organisation_number != claim.organisation_number:
+                        raise ValueError("available claim evidence must be explicitly bound to the same organisation")
+                    if not item.source_snapshot_ids or not set(item.source_snapshot_ids) <= snapshot_ids:
+                        raise ValueError("available claim evidence must reference present source snapshots")
+                    if not set(item.source_snapshot_ids) <= set(claim.source_snapshot_ids):
+                        raise ValueError("claim source snapshots must include every evidence snapshot")
+                    for source_id in item.source_snapshot_ids:
+                        snapshot = snapshots_by_id[source_id]
+                        if item.source_url != snapshot.source_url:
+                            raise ValueError("evidence URL must match its source snapshot URL")
+                        if (item.content_sha256 != snapshot.content_sha256
+                                and item.extraction_method != "frozen_registry_jsonl_v1"):
+                            raise ValueError("evidence hash must match its source snapshot hash")
         return self
 
     @field_validator("organisation_number")

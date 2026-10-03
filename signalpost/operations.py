@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import shutil
 import sqlite3
@@ -29,14 +30,16 @@ class RunBudget:
     per_host_physical_limit: int | None = None
 
     def __post_init__(self) -> None:
-        if self.hard_seconds <= 0 or self.soft_seconds < 0 or self.completion_reserve_seconds < 0:
+        if (not all(math.isfinite(value) for value in
+                    (self.hard_seconds, self.soft_seconds, self.completion_reserve_seconds))
+                or self.hard_seconds <= 0 or self.soft_seconds < 0 or self.completion_reserve_seconds < 0):
             raise ValueError("budget durations must be non-negative and hard_seconds positive")
         if self.soft_seconds + self.completion_reserve_seconds > self.hard_seconds:
             raise ValueError("soft deadline plus completion reserve exceeds hard deadline")
         if (self.physical_request_limit < 0 or (self.logical_request_limit is not None and self.logical_request_limit < 0)
                 or (self.per_company_physical_limit is not None and self.per_company_physical_limit < 0)
                 or (self.per_host_physical_limit is not None and self.per_host_physical_limit < 0)
-                or self.paid_cost_limit < 0):
+                or not self.paid_cost_limit.is_finite() or self.paid_cost_limit < 0):
             raise ValueError("request and cost limits must be non-negative")
         if min(self.global_http_concurrency, self.per_host_concurrency) < 1:
             raise ValueError("global and per-host concurrency limits must be positive")
@@ -102,6 +105,9 @@ class Budget:
 
     async def reserve_request(self, cost: Decimal = Decimal("0"), *, required: bool = False,
                               company: str | None = None, host: str | None = None) -> bool:
+        cost = Decimal(str(cost))
+        if not cost.is_finite() or cost < 0:
+            raise ValueError("request cost must be finite and non-negative")
         async with self._lock:
             if self.hard_expired or self.reserve_active:
                 return False
@@ -377,7 +383,7 @@ class OrderedAtomicWriter:
         if shutil.disk_usage(self.output_path.parent).free < required:
             raise OSError(f"insufficient free space for atomic output (need {required} bytes)")
 
-    def write(self, envelopes: Iterable[Envelope]) -> None:
+    def write(self, envelopes: Iterable[Envelope], *, serializer: Callable[[Envelope], dict[str, object]] | None = None) -> None:
         ordered = sorted(envelopes, key=lambda item: item.row_number)
         if len({item.row_number for item in ordered}) != len(ordered):
             raise ValueError("duplicate row_number in output")
@@ -385,7 +391,8 @@ class OrderedAtomicWriter:
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
                 for envelope in ordered:
-                    stream.write(envelope.model_dump_json() + "\n")
+                    payload = serializer(envelope) if serializer else envelope.model_dump(mode="json")
+                    stream.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.output_path)

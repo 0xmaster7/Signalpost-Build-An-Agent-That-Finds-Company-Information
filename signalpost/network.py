@@ -35,13 +35,31 @@ _BRREG_ACCOUNTS_PATH = re.compile(r"^/regnskapsregisteret/regnskap/\d{9}/?$")
 def _brreg_structured_api_url(url: str, purpose: str) -> bool:
     """Constrain the robots-outage exception to documented BRREG API paths."""
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or parsed.hostname != "data.brreg.no" or purpose not in _BRREG_API_PURPOSES:
+    if (parsed.scheme != "https" or parsed.hostname != "data.brreg.no"
+            or parsed.port not in {None, 443} or parsed.username or parsed.password
+            or purpose not in _BRREG_API_PURPOSES):
         return False
-    if _BRREG_ORG_PATH.fullmatch(parsed.path) or _BRREG_ACCOUNTS_PATH.fullmatch(parsed.path):
-        return True
+    org_match = _BRREG_ORG_PATH.fullmatch(parsed.path)
+    if org_match:
+        if parsed.query:
+            return False
+        if parsed.path.startswith("/regnskapsregisteret/"):
+            return purpose == "accounts"
+        if "/konsernstruktur/" in parsed.path:
+            return purpose == "group"
+        if parsed.path.endswith("/roller"):
+            return purpose == "roles"
+        return purpose == "entity"
+    if _BRREG_ACCOUNTS_PATH.fullmatch(parsed.path):
+        return purpose == "accounts" and not parsed.query
     if parsed.path == "/enhetsregisteret/api/underenheter":
         query = urllib.parse.parse_qs(parsed.query, strict_parsing=False)
-        return len(query.get("overordnetEnhet", [])) == 1 and re.fullmatch(r"\d{9}", query["overordnetEnhet"][0]) is not None
+        allowed = {"overordnetEnhet", "size", "page", "sort"}
+        if set(query) - allowed or len(query.get("overordnetEnhet", [])) != 1:
+            return False
+        if not re.fullmatch(r"\d{9}", query["overordnetEnhet"][0]):
+            return False
+        return purpose in {"subunits", "subunits_page"}
     return False
 
 
@@ -190,7 +208,10 @@ def canonical_url(raw: str) -> str:
     netloc = f"[{host}]" if ":" in host else host
     if port and not ((parsed.scheme.lower() == "http" and port == 80) or (parsed.scheme.lower() == "https" and port == 443)):
         netloc += f":{port}"
-    path = urllib.parse.quote(urllib.parse.unquote(parsed.path or "/"), safe="/%:@!$&'()*+,;=-._~")
+    safe_path = "/:@!$&'()*+,;=-._~"
+    path = "".join((part.upper() if re.fullmatch(r"%[0-9a-fA-F]{2}", part)
+                    else urllib.parse.quote(part, safe=safe_path))
+                   for part in re.split(r"(%[0-9a-fA-F]{2})", parsed.path or "/"))
     return urllib.parse.urlunsplit((parsed.scheme.lower(), netloc, path, parsed.query, ""))
 
 
@@ -363,6 +384,7 @@ class NetworkGateway:
                     body = b""
                     headers: dict[str, str] = {}
                     outcome = "transport_error"
+                    response_recorded = False
                     try:
                         status, headers, body, _ = await asyncio.wait_for(
                             self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity"}, self.timeout,
@@ -371,6 +393,7 @@ class NetworkGateway:
                             timeout=self.timeout,
                         )
                         self._record(target, purpose, status, len(body), start, "received")
+                        response_recorded = True
                         location = headers.get("Location") or headers.get("location")
                         if status in {301, 302, 303, 307, 308} and location:
                             self.ledger.entries[-1].redirect_location = canonical_url(urllib.parse.urljoin(target, location))
@@ -431,7 +454,8 @@ class NetworkGateway:
                             await self._recover_host_rate(parsed.hostname or "")
                         return status, headers, body, target, classify_response(status, headers, body)
                     except asyncio.CancelledError:
-                        self._record(target, purpose, status, len(body), start, "cancelled")
+                        if not response_recorded:
+                            self._record(target, purpose, status, len(body), start, "cancelled")
                         raise
                     except (asyncio.TimeoutError, OSError, urllib.error.URLError) as exc:
                         outcome = "timeout" if isinstance(exc, asyncio.TimeoutError) else "transport_error"
@@ -492,7 +516,8 @@ class NetworkGateway:
                 rules, delay, state = cached
                 if state in {"unreachable", "unusable", "policy_skip", "budget_skipped"}:
                     return state, delay
-                return ("disallowed" if _robots_disallows(rules, parsed.path or "/", user_agent) else "allowed"), delay
+                request_path = (parsed.path or "/") + (("?" + parsed.query) if parsed.query else "")
+                return ("disallowed" if _robots_disallows(rules, request_path, user_agent) else "allowed"), delay
             robots_url = origin + "/robots.txt"
             status, headers, body, final_url, outcome = await self.fetch(robots_url, purpose="robots", user_agent=user_agent,
                                                                          use_robots=False, max_bytes=256 * 1024, allowed_hosts=allowed_hosts)
@@ -518,7 +543,8 @@ class NetworkGateway:
                     return "policy_skip", delay
             else:
                 rules = ""
-            state = "disallowed" if _robots_disallows(rules, parsed.path or "/", user_agent) else "allowed"
+            request_path = (parsed.path or "/") + (("?" + parsed.query) if parsed.query else "")
+            state = "disallowed" if _robots_disallows(rules, request_path, user_agent) else "allowed"
             self._robots[origin] = (rules, delay, "allowed")
             return state, delay
 
@@ -539,33 +565,63 @@ class NetworkGateway:
 
 
 def _robots_disallows(text: str, path: str, user_agent: str) -> bool:
-    agents: list[tuple[str, list[str]]] = []
-    current: list[str] | None = None
+    groups: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    rules_started = False
     for raw in text.splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line or ":" not in line:
             continue
         key, value = (part.strip() for part in line.split(":", 1))
         if key.casefold() == "user-agent":
-            if current is None or agents[-1][1]:
-                current = []
-                agents.append((value.casefold(), current))
-            else:
-                agents[-1] = (agents[-1][0] + " " + value.casefold(), current)
+            if current is None or rules_started:
+                current = {"agents": [], "rules": []}
+                groups.append(current)
+                rules_started = False
+            current["agents"].append(value.casefold())
         elif current is not None and key.casefold() in {"allow", "disallow"}:
-            current.append(f"{key.casefold()}\t{value}")
+            current["rules"].append((key.casefold(), value))
+            rules_started = True
     ua = user_agent.casefold()
-    matched = [(agent, rules) for agent, rules in agents if agent == "*" or agent in ua]
-    if not matched:
+    matched_groups = [group for group in groups
+                      if any(agent == "*" or agent in ua for agent in group["agents"])]
+    if not matched_groups:
         return False
-    specificity = max(len(agent) for agent, _ in matched)
-    rules = [rule for agent, group in matched if len(agent) == specificity for rule in group]
-    decisions = []
-    for rule in rules:
-        directive, value = rule.split("\t", 1)
-        if value and path.startswith(value):
-            decisions.append((len(value), directive == "allow"))
-    return bool(decisions) and not max(decisions)[1]
+    specificity = max((len(agent) for group in matched_groups for agent in group["agents"]
+                       if agent != "*" and agent in ua), default=0)
+    rules = [rule for group in matched_groups
+             if any((specificity == 0 and agent == "*") or (agent != "*" and agent in ua and len(agent) == specificity)
+                    for agent in group["agents"])
+             for rule in group["rules"]]
+    normalized_path = _robots_percent_normalize(path)
+    decisions: list[tuple[int, bool]] = []
+    for directive, raw_pattern in rules:
+        if not raw_pattern:
+            continue
+        pattern = _robots_percent_normalize(raw_pattern)
+        anchored = pattern.endswith("$")
+        if anchored:
+            pattern = pattern[:-1]
+        pieces = pattern.split("*")
+        expression = "^" + ".*".join(re.escape(piece) for piece in pieces)
+        if anchored:
+            expression += "$"
+        if re.search(expression, normalized_path):
+            literal_bytes = len("".join(pieces).encode("utf-8"))
+            decisions.append((literal_bytes, directive == "allow"))
+    return bool(decisions) and not max(decisions, key=lambda item: (item[0], item[1]))[1]
+
+
+def _robots_percent_normalize(value: str) -> str:
+    """Normalize percent escapes per robots matching while retaining reserved bytes."""
+    def escape(match: re.Match[str]) -> str:
+        byte = int(match.group(1), 16)
+        char = chr(byte)
+        if char.isascii() and (char.isalnum() or char in "-._~"):
+            return char
+        return f"%{byte:02X}"
+    value = re.sub(r"%([0-9a-fA-F]{2})", escape, value)
+    return urllib.parse.quote(value, safe="/%*-$!~'();:@&=+,?%")
 
 
 class _RobotsMetaParser(HTMLParser):

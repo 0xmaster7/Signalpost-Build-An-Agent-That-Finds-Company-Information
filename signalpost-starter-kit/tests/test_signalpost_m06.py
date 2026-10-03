@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
+import os
+import subprocess
 import tempfile
 import time
 import unittest
@@ -10,14 +13,28 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "signalpost-starter-kit" / "scripts"))
 
 from signalpost.network import NetworkGateway
 from signalpost.operations import Budget, Opportunity, OpportunityDeferred, OpportunityFailed, OpportunityScheduler, RunBudget
+from signalpost import run as run_module
 from signalpost.run import main
 from test_signalpost_m01 import FakeTransport, valid_envelope
+from run_m06_scale_gate import simulate
 
 
 class SchedulerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_synthetic_scale_gate_does_not_claim_exact_identity_success(self):
+        result = await simulate(4)
+        self.assertEqual(result["measurement_kind"], "scheduler_simulation")
+        self.assertEqual(result["exact_identity_anchors"], 0)
+        self.assertEqual(result["simulated_identity_attempts"], result["terminal_official_work_items"])
+        self.assertEqual(set(result["optional_pass_completions"]), {"website_verify", "website_shallow", "jobs_activity"})
+        self.assertGreaterEqual(result["logical_requests_denied"], 0)
+        self.assertLessEqual(result["logical_requests_reserved"], result["logical_requests"])
+        self.assertGreater(result["modeled_physical_reservations"], 0)
+        self.assertNotIn("physical_requests", result)
+
     async def test_thousand_companies_fast_slow_hosts_no_starvation(self):
         scheduler = OpportunityScheduler(concurrency=8)
         work = [Opportunity(str(i), "official_foundation", f"company-{i}",
@@ -99,6 +116,46 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DeadlineAndBudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_hard_deadline_cancels_active_work_before_output_reserve(self):
+        budget = Budget(RunBudget(hard_seconds=0.08, soft_seconds=0.03, completion_reserve_seconds=0.05))
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+        async def active():
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        result, deadline_hit = await run_module._run_before_completion_reserve(active(), budget)
+        self.assertEqual(result, {})
+        self.assertTrue(deadline_hit)
+        self.assertTrue(started.is_set())
+        self.assertTrue(cancelled.is_set())
+
+    async def test_deadline_cancellation_preserves_one_terminal_output_per_input(self):
+        class FakeGateway:
+            def __init__(self, *args, **kwargs):
+                self.ledger = type("Ledger", (), {"entries": [], "physical_requests": 0, "logical_requests": 0})()
+                self.coalesced_requests = 0
+            def set_rate_limit(self, *args): pass
+        async def hanging_fetch(*_args, **_kwargs):
+            await asyncio.Event().wait()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, output, state, config = (root / name for name in ("input.txt", "out.jsonl", "state.sqlite", "config.json"))
+            source.write_text("923609016\n923609016\n", encoding="utf-8")
+            config.write_text(json.dumps({"budget": {"hard_seconds": 0.08, "soft_seconds": 0.03,
+                "completion_reserve_seconds": 0.05, "physical_request_limit": 10}}), encoding="utf-8")
+            with patch("signalpost.run.NetworkGateway", FakeGateway), patch("signalpost.run.fetch_company", hanging_fetch):
+                code = await asyncio.to_thread(main, ["--input", str(source), "--output", str(output),
+                    "--state-output", str(state), "--config", str(config), "--live-websites"])
+            rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(code, 0)
+            self.assertEqual([row["input_ref"] for row in rows], ["row:1", "row:2"])
+            self.assertTrue(all(row["terminal_state"] == "failed" for row in rows))
+            self.assertTrue(all(row["sections"]["website_owned_profiles"]["state"] == "ambiguous" for row in rows))
+            self.assertTrue(all(row["sections"]["hiring_activity"]["state"] == "ambiguous" for row in rows))
+
     async def test_monotonic_rollback_does_not_extend_budget(self):
         now = [100.0]
         budget = Budget(RunBudget(hard_seconds=20, soft_seconds=10, completion_reserve_seconds=5,
@@ -278,8 +335,43 @@ class GatewayM06Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(gateway.ledger.physical_requests, 1)
         self.assertEqual(gateway.ledger.entries[0].outcome, "cancelled")
 
+    async def test_cancel_after_response_does_not_double_count_physical_request(self):
+        class ImmediateTransport:
+            async def request(self, url, headers, timeout):
+                return 200, {}, b"received", url
+        gateway = NetworkGateway(ImmediateTransport(), retries=0)
+        entered_recovery = asyncio.Event()
+        async def hold_recovery(_host):
+            entered_recovery.set()
+            await asyncio.Event().wait()
+        with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "_recover_host_rate", hold_recovery):
+            task = asyncio.create_task(gateway.fetch("https://8.8.8.8/a", use_robots=False))
+            await entered_recovery.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        self.assertEqual(gateway.ledger.physical_requests, 1)
+        self.assertEqual(gateway.ledger.entries[0].outcome, "received")
+
 
 class CheckpointResumeTests(unittest.TestCase):
+    def test_evaluator_launcher_runs_from_unrelated_working_directory_without_pythonpath(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, registry, output, state = (root / name for name in ("input.txt", "registry.jsonl", "out.jsonl", "state.sqlite"))
+            source.write_text("923609016\n", encoding="utf-8")
+            registry.write_text('{"orgnr":"923609016","name":"Clean Run AS"}\n', encoding="utf-8")
+            env = dict(os.environ)
+            env.pop("PYTHONPATH", None)
+            completed = subprocess.run([sys.executable, str(ROOT / "signalpost-starter-kit" / "run_signalpost.py"),
+                "--input", str(source), "--format", "plain", "--registry-snapshot", str(registry),
+                "--output", str(output), "--state-output", str(state)], cwd=root, env=env,
+                capture_output=True, text=True, timeout=20)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([row["input_ref"] for row in rows], ["row:1"])
+            self.assertEqual(rows[0]["terminal_state"], "available")
+
     def test_terminalized_checkpoint_resume_has_no_duplicate_facts(self):
         from signalpost.operations import CheckpointStore
         for terminal_count in (25, 50, 90):
@@ -320,11 +412,54 @@ class CheckpointResumeTests(unittest.TestCase):
             self.assertEqual(main(options + ["--resume"]), 0)
             second = output.read_text(encoding="utf-8")
             import json
-            self.assertEqual([json.loads(line)["row_number"] for line in first.splitlines()], [1, 2])
-            self.assertEqual([json.loads(line)["row_number"] for line in second.splitlines()], [1, 2])
+            self.assertEqual([json.loads(line)["input_ref"] for line in first.splitlines()], ["row:1", "row:2"])
+            self.assertEqual([json.loads(line)["input_ref"] for line in second.splitlines()], ["row:1", "row:2"])
             self.assertEqual([len(json.loads(line)["claims"]) for line in first.splitlines()],
                              [len(json.loads(line)["claims"]) for line in second.splitlines()])
             for before, after in zip(first.splitlines(), second.splitlines()):
                 a, b = json.loads(before), json.loads(after)
                 self.assertEqual([(c["claim_id"], c["value"]) for c in a["claims"]],
                                  [(c["claim_id"], c["value"]) for c in b["claims"]])
+
+    def test_resume_rejects_changed_authoritative_snapshot_bytes_at_same_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, output, state, registry = (Path(directory) / name for name in ("input.txt", "output.jsonl", "state.sqlite", "registry.jsonl"))
+            source.write_text("923609016\n", encoding="utf-8")
+            registry.write_text('{"orgnr":"923609016","name":"Fixture AS"}\n', encoding="utf-8")
+            options = ["--input", str(source), "--format", "plain", "--output", str(output),
+                       "--state-output", str(state), "--registry-snapshot", str(registry)]
+            self.assertEqual(main(options), 0)
+            registry.write_text('{"orgnr":"923609016","name":"Changed Fixture AS"}\n', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "fingerprint does not match"):
+                main(options + ["--resume"])
+
+    def test_resume_reuses_run_start_cutoff_and_snapshot_is_fingerprinted_in_offline_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, output, state, registry = (Path(directory) / name for name in ("input.txt", "output.jsonl", "state.sqlite", "registry.jsonl"))
+            source.write_text("923609016\n", encoding="utf-8")
+            registry.write_text('{"orgnr":"923609016","name":"Fixture AS"}\n', encoding="utf-8")
+            options = ["--input", str(source), "--format", "plain", "--output", str(output),
+                       "--state-output", str(state), "--registry-snapshot", str(registry)]
+            self.assertEqual(main(options), 0)
+            first = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(first["batch"]["evidence_cutoff"], first["synthesis"]["evidence_cutoff"])
+            self.assertEqual(first["synthesis"]["evidence_cutoff_source"], "run_start")
+            self.assertEqual(main(options + ["--resume"]), 0)
+            second = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(first["batch"]["evidence_cutoff"], second["batch"]["evidence_cutoff"])
+
+    def test_evaluator_cutoff_precedes_release_config_and_records_its_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, registry, output, state, config = (root / name for name in ("input.txt", "registry.jsonl", "out.jsonl", "state.sqlite", "config.json"))
+            source.write_text("923609016\n", encoding="utf-8")
+            registry.write_text('{"orgnr":"923609016","name":"Cutoff AS"}\n', encoding="utf-8")
+            config.write_text(json.dumps({"evidence_cutoff": "2026-01-01T00:00:00Z",
+                "budget": {"hard_seconds": 10, "soft_seconds": 1, "completion_reserve_seconds": 1}}), encoding="utf-8")
+            options = ["--input", str(source), "--format", "plain", "--registry-snapshot", str(registry),
+                "--output", str(output), "--state-output", str(state), "--config", str(config),
+                "--evidence-cutoff", "2026-02-01T00:00:00Z"]
+            self.assertEqual(main(options), 0)
+            result = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(result["batch"]["evidence_cutoff"], "2026-02-01T00:00:00+00:00")
+            self.assertEqual(result["synthesis"]["evidence_cutoff_source"], "evaluator")

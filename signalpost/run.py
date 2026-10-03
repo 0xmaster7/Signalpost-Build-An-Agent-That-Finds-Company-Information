@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from .adapter import to_evaluator
 from .inputs import load_input, normalize_org_number, registry_fixture, stream_registry_matches
 from .models import Claim, Envelope, Evidence, PublicState, RefreshState, RunError, Section, SourceSnapshot, empty_section
 from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
@@ -59,7 +60,8 @@ def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[s
             profile.setdefault("website_candidates", []).append({"raw": raw_website, "source": "registry_frozen",
                 "source_url": source_url, "content_sha256": row_hash,
                 "evidence_id": f"{org}:frozen-website-candidate:{row_hash[:12]}",
-                "source_snapshot_id": f"registry_snapshot:{frozen_sha[:16]}"})
+                "source_snapshot_id": f"registry_snapshot:{frozen_sha[:16]}",
+                "source_snapshot_sha256": frozen_sha})
         elif raw_website:
             profile.setdefault("website_candidate_without_source_url", True)
     return profile
@@ -95,7 +97,9 @@ def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutof
         source_url = str(record.get("source_url") or "urn:signalpost:registry-fixture")
         evidence.append(Evidence(evidence_id=f"{row.input_ref}:registry", source_url=source_url,
                                  retrieved_at=fetched, content_sha256=digest,
-                                 extraction_method="frozen_registry_fixture", json_pointer="/"))
+                                 extraction_method="frozen_registry_fixture", json_pointer="/",
+                                 subject_organisation_number=row.organisation_number,
+                                 source_snapshot_ids=["registry_fixture"]))
         snapshots.append(SourceSnapshot(source_id="registry_fixture", source_url=source_url,
                                         retrieved_at=fetched, content_sha256=digest, rights_status="fixture"))
         name = str(record.get("name") or record.get("legal_name") or "")
@@ -200,7 +204,8 @@ def _attach_frozen_baseline(envelope: Envelope, record: dict[str, Any] | None, s
             evidence_id = f"{envelope.organisation_number}:frozen:{key}"
             envelope.evidence.append(Evidence(evidence_id=evidence_id, source_url=source_url,
                 retrieved_at=datetime.now(timezone.utc), content_sha256=row_hash, extraction_method="frozen_registry_jsonl_v1",
-                json_pointer=pointer, source_class="official"))
+                json_pointer=pointer, source_class="official", subject_organisation_number=envelope.organisation_number,
+                source_snapshot_ids=[source_id]))
             claim = Claim(claim_id=f"{envelope.organisation_number}:frozen:{key}", organisation_number=envelope.organisation_number,
                 section="identity_brand", field_family="identity", subject_id=envelope.organisation_number, field=key,
                 value=value, state=PublicState.AVAILABLE, scope="legal_entity", verification_rule_id="frozen_exact_org_snapshot_v1",
@@ -222,8 +227,22 @@ def _cutoff_datetime(value: str) -> datetime | None:
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
 
+async def _run_before_completion_reserve(awaitable: Any, budget: Budget) -> tuple[Any, bool]:
+    """Cancel active source work before the hard deadline's atomic-output reserve."""
+    remaining = max(0.0, budget.config.hard_seconds - budget.elapsed - budget.config.completion_reserve_seconds)
+    if remaining <= 0:
+        if hasattr(awaitable, "close"):
+            awaitable.close()
+        return {}, True
+    try:
+        return await asyncio.wait_for(awaitable, timeout=remaining), False
+    except asyncio.TimeoutError:
+        return {}, True
+
+
 def run(args: argparse.Namespace) -> int:
     run_started = time.monotonic()
+    run_start_utc = datetime.now(timezone.utc)
     input_path = Path(args.input) if args.input else _find_default_input()
     if not input_path or not input_path.exists():
         print("No input file found; provide --input or create signalpost_input.jsonl", file=sys.stderr)
@@ -233,27 +252,45 @@ def run(args: argparse.Namespace) -> int:
     if not rows:
         print("Input contains no rows", file=sys.stderr)
         return 2
-    if args.live_websites and not args.live_brreg and not args.registry_snapshot:
-        print("--live-websites requires --live-brreg or --registry-snapshot for exact-company identity anchors", file=sys.stderr)
-        return 2
+    rows_by_org: dict[str, list[Any]] = {}
+    for row in rows:
+        rows_by_org.setdefault(row.organisation_number, []).append(row)
     output_path = Path(args.output or os.environ.get("SIGNALPOST_OUTPUT", "signalpost_output.jsonl"))
     checkpoint_path = Path(args.state_output or os.environ.get("SIGNALPOST_STATE_OUTPUT", "signalpost_state.sqlite"))
     previous: dict[str, dict[str, Any]] = {}
     if args.previous_state:
         previous = json.loads(Path(args.previous_state).read_text(encoding="utf-8"))
-    fixture = registry_fixture(args.registry_snapshot) if not (args.live_brreg or args.live_websites) else {}
-    registry_hash = None
-    if (args.live_brreg or args.live_websites) and args.registry_snapshot:
-        fixture, registry_hash = stream_registry_matches(args.registry_snapshot, {r.organisation_number for r in rows})
     config_values: dict[str, Any] = {}
+    config_bytes = b""
     if args.config:
-        config_values = json.loads(Path(args.config).read_text(encoding="utf-8"))
+        config_bytes = Path(args.config).read_bytes()
+        config_values = json.loads(config_bytes.decode("utf-8"))
         if not isinstance(config_values, dict):
             raise ValueError("runtime config must be a JSON object")
+    live_brreg = bool(args.live_brreg or not args.registry_snapshot)
+    live_websites = bool(args.live_websites)
+    fixture = registry_fixture(args.registry_snapshot) if not (live_brreg or live_websites) else {}
+    registry_hash = None
+    if args.registry_snapshot:
+        fixture, registry_hash = stream_registry_matches(args.registry_snapshot, {r.organisation_number for r in rows})
     budget = RunBudget.from_mapping(config_values.get("budget", config_values), batch_rows=len(rows))
     run_budget = Budget(budget, started_at=run_started)
-    run_fingerprint = hashlib.sha256(input_path.read_bytes() + json.dumps({
-        "format": args.format, "live_brreg": args.live_brreg, "live_websites": args.live_websites,
+    cutoff_value = args.evidence_cutoff or config_values.get("evidence_cutoff")
+    cutoff_source = "evaluator" if args.evidence_cutoff else "config" if cutoff_value else "run_start"
+    if args.resume and not cutoff_value and checkpoint_path.exists():
+        resume_store = CheckpointStore(checkpoint_path)
+        saved_cutoff = resume_store.get_meta("effective_cutoff")
+        resume_store.close()
+        if saved_cutoff:
+            cutoff_value = saved_cutoff
+            cutoff_source = "run_start"
+    cutoff = (datetime.fromisoformat(str(cutoff_value).replace("Z", "+00:00")) if cutoff_value
+              else run_start_utc)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    cutoff = cutoff.astimezone(timezone.utc)
+    run_fingerprint = hashlib.sha256(input_path.read_bytes() + config_bytes + json.dumps({
+        "format": args.format, "live_brreg": live_brreg, "live_websites": live_websites,
         "registry_snapshot_sha256": registry_hash, "config": config_values,
         "registry_snapshot_as_of": args.registry_snapshot_as_of,
         "registry_source_url": args.registry_source_url,
@@ -266,13 +303,11 @@ def run(args: argparse.Namespace) -> int:
                    "per_host_concurrency": budget.per_host_concurrency},
         "per_company_physical_limit": budget.per_company_physical_limit,
         "per_host_physical_limit": budget.per_host_physical_limit,
-        "previous": previous, "evidence_cutoff": args.evidence_cutoff,
+        "previous": previous, "evidence_cutoff": cutoff.isoformat(), "evidence_cutoff_source": cutoff_source,
         "network_policy": args.network_policy,
         "no_keyless": args.no_keyless_websites,
     }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     batch_id = args.batch_id or str(uuid.uuid4())
-    cutoff = (datetime.fromisoformat(args.evidence_cutoff.replace("Z", "+00:00")) if args.evidence_cutoff
-              else datetime.fromisoformat("2026-10-17T23:59:00+05:30"))
     # Persist one internal shell per row before running any enrichment. Shells are not
     # evaluator envelopes and therefore do not invent a public terminal result.
     writer = OrderedAtomicWriter(output_path, estimated_bytes=len(rows) * 64 * 1024)  # preflight before enrichment
@@ -292,23 +327,25 @@ def run(args: argparse.Namespace) -> int:
             [(row.row_number, row.input_ref, row.organisation_number, "pending") for row in rows])
         checkpoint.set_meta("input_fingerprint", run_fingerprint)
         checkpoint.set_meta("batch_id", batch_id)
+        checkpoint.set_meta("effective_cutoff", cutoff.isoformat())
+        checkpoint.set_meta("evidence_cutoff_source", cutoff_source)
     pending_path = writer.write_shells(rows, checkpoint.shell_states())
     prior_terminalized = checkpoint.terminalized() if args.resume else {}
     baseline_saved = checkpoint.envelopes_for_state("baseline_done") if args.resume else {}
     gateway = None
     scheduler_report: dict[str, Any] = {}
     live_by_org: dict[str, Any] = {}
-    if args.live_brreg or args.live_websites:
+    if live_brreg or live_websites:
         gateway = NetworkGateway(timeout=20, retries=1, budget=run_budget,
                                  trusted_proxy=args.network_policy == "trusted-proxy",
                                  global_concurrency=budget.global_http_concurrency)
-        if args.live_brreg:
+        if live_brreg:
             gateway.set_rate_limit("data.brreg.no", 3.0)
         async def enrich():
             unique = list(dict.fromkeys(r.organisation_number for r in rows
                                         if r.row_number not in prior_terminalized and len(r.organisation_number) == 9 and r.organisation_number.isdigit()))
             by_org = {}
-            if args.live_brreg:
+            if live_brreg:
                 scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
                 baseline_orgs = {org for org in unique if all(
                     row.row_number in baseline_saved or row.row_number in prior_terminalized
@@ -326,8 +363,8 @@ def run(args: argparse.Namespace) -> int:
                         item, result, future = payload
                         try:
                             baseline = fixture.get(item.company)
-                            for row in rows:
-                                if row.organisation_number != item.company or row.row_number in prior_terminalized:
+                            for row in rows_by_org.get(item.company, ()):
+                                if row.row_number in prior_terminalized:
                                     continue
                                 envelope = _live_envelope(row, result, batch_id, cutoff, previous,
                                                           frozen_match=baseline is not None)
@@ -342,7 +379,8 @@ def run(args: argparse.Namespace) -> int:
                 checkpoint_task = asyncio.create_task(checkpoint_writer())
                 async def official(item: Opportunity):
                     try:
-                        return await fetch_company(item.company, gateway, cutoff)
+                        return await fetch_company(item.company, gateway, cutoff,
+                            allow_current_identity_after_run_start=cutoff_source == "run_start")
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:
@@ -359,12 +397,14 @@ def run(args: argparse.Namespace) -> int:
                     await completed_queue.put((item, result, future))
                     await future
                 try:
-                    by_org = await scheduler.run(works, official, on_complete=checkpoint_completed)
+                    by_org, official_deadline_cancelled = await _run_before_completion_reserve(
+                        scheduler.run(works, official, on_complete=checkpoint_completed), run_budget)
                 finally:
                     await completed_queue.put(None)
                     await checkpoint_task
                 scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
-                    "companies": scheduler.company_metrics}
+                    "companies": scheduler.company_metrics,
+                    "hard_deadline_cancelled": official_deadline_cancelled}
             output = []
             for row in rows:
                 if row.row_number in prior_terminalized:
@@ -376,11 +416,11 @@ def run(args: argparse.Namespace) -> int:
                         observations=envelope.synthesis.get("brreg_observations", {}), claims=envelope.claims)
                     output.append(envelope)
                     continue
-                if args.live_brreg and row.organisation_number not in by_org:
+                if live_brreg and row.organisation_number not in by_org:
                     output.append(_envelope(row, {}, batch_id, cutoff, previous))
                     continue
                 baseline = fixture.get(row.organisation_number)
-                if args.live_brreg:
+                if live_brreg:
                     result = by_org[row.organisation_number]
                     envelope = _live_envelope(row, result, batch_id, cutoff, previous, frozen_match=baseline is not None)
                     live_by_org[row.organisation_number] = result
@@ -405,14 +445,11 @@ def run(args: argparse.Namespace) -> int:
                                 if root: root_owners.setdefault(root, set()).add(org)
                 shared_roots = {root for root, owners in root_owners.items() if len(owners) > 1}
                 scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
-                works = [Opportunity(key=org, company=org, pass_name="website_verify",
-                                     expected_company_family_gain=0.005, expected_atomic_claim_gain=0.0,
-                                     identity_risk=0.05, expected_requests=0.48, expected_seconds=0.344,
-                                     sequence=index) for index, org in enumerate(profiles)]
-                async def website(item: Opportunity):
+                async def website(item: Opportunity, phase: str, previous: WebsiteResearchResult | None = None):
                     try:
                         return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
-                            enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff)
+                            enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
+                            phase=phase, previous=previous)
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:
@@ -421,12 +458,38 @@ def run(args: argparse.Namespace) -> int:
                             errors=[RunError(code="WEBSITE_RESEARCH_UNEXPECTED_FAILURE",
                                 message=f"Optional website action failed: {type(exc).__name__}.", retryable=True)],
                             audit={"execution_state": "failed", "claims": []}))
-                by_website_org = await scheduler.run(works, website, permitted=lambda _item:
-                    not run_budget.soft_expired and not run_budget.reserve_active
-                    and run_budget.physical_requests_remaining > 0
-                    and run_budget.logical_requests_remaining != 0)
-                scheduler_report["website_verify"] = {"passes": scheduler.metrics,
-                    "companies": scheduler.company_metrics}
+                def website_permitted(_item: Opportunity) -> bool:
+                    return (not run_budget.soft_expired and not run_budget.reserve_active
+                        and run_budget.physical_requests_remaining > 0
+                        and run_budget.logical_requests_remaining != 0)
+                verify_works = [Opportunity(key=org, company=org, pass_name="website_verify",
+                    expected_company_family_gain=0.15, expected_atomic_claim_gain=0.2,
+                    identity_risk=0.05, expected_requests=0.2, expected_seconds=0.15, sequence=index)
+                    for index, org in enumerate(profiles)]
+                verified_by_org, verify_deadline_cancelled = await _run_before_completion_reserve(
+                    scheduler.run(verify_works, lambda item: website(item, "verify"), permitted=website_permitted), run_budget)
+                shallow_works = [Opportunity(key=org, company=org, pass_name="website_shallow",
+                    expected_company_family_gain=0.3, expected_atomic_claim_gain=1.0,
+                    identity_risk=0.02, expected_requests=0.2, expected_seconds=0.15, sequence=index)
+                    for index, org in enumerate(profiles) if org in verified_by_org
+                    and verified_by_org[org].phase_state.get("accepted_pages")]
+                shallow_by_org, shallow_deadline_cancelled = await _run_before_completion_reserve(
+                    scheduler.run(shallow_works, lambda item: website(item, "shallow", verified_by_org[item.company]), permitted=website_permitted), run_budget)
+                activity_works = [Opportunity(key=org, company=org, pass_name="jobs_activity",
+                    expected_company_family_gain=0.1, expected_atomic_claim_gain=0.5,
+                    identity_risk=0.04, expected_requests=0.08, expected_seconds=0.1, sequence=index)
+                    for index, org in enumerate(profiles) if org in shallow_by_org
+                    and shallow_by_org[org].phase_state.get("accepted_pages")]
+                activity_by_org, activity_deadline_cancelled = await _run_before_completion_reserve(
+                    scheduler.run(activity_works, lambda item: website(item, "jobs", shallow_by_org[item.company]), permitted=website_permitted), run_budget)
+                scheduler_report["website_opportunity_passes"] = {"passes": scheduler.metrics,
+                    "companies": scheduler.company_metrics,
+                    "hard_deadline_cancelled": {"website_verify": verify_deadline_cancelled,
+                        "website_shallow": shallow_deadline_cancelled, "jobs_activity": activity_deadline_cancelled},
+                    "stage_results": {"verified": len(verified_by_org), "shallow": len(shallow_by_org),
+                        "jobs_activity": len(activity_by_org)}}
+                by_website_org = {org: activity_by_org.get(org, shallow_by_org.get(org, verified_by_org.get(org)))
+                    for org in set(verified_by_org) | set(shallow_by_org) | set(activity_by_org)}
                 for envelope in output:
                     if envelope.row_number in prior_terminalized:
                         continue
@@ -434,6 +497,8 @@ def run(args: argparse.Namespace) -> int:
                     if not result:
                         envelope.synthesis["website_research"] = {"execution_state": "budget_skipped",
                             "reason": "soft_deadline_or_completion_reserve", "claims": []}
+                        envelope.sections["website_owned_profiles"].state = PublicState.AMBIGUOUS
+                        envelope.sections["hiring_activity"].state = PublicState.AMBIGUOUS
                         envelope.sections["website_owned_profiles"].diagnostics.append(
                             "scheduler_execution_state:budget_skipped")
                         envelope.sections["hiring_activity"].diagnostics.append(
@@ -466,6 +531,8 @@ def run(args: argparse.Namespace) -> int:
         envelopes = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized else
                      _envelope(row, fixture, batch_id, cutoff, previous) for row in rows]
     for envelope in envelopes:
+        envelope.synthesis["evidence_cutoff"] = cutoff.isoformat()
+        envelope.synthesis["evidence_cutoff_source"] = cutoff_source
         checkpoint.put(envelope)
         checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
     checkpoint.connection.commit()
@@ -474,7 +541,7 @@ def run(args: argparse.Namespace) -> int:
     if len(actual_rows) != len(expected_rows) or actual_rows != expected_rows:
         raise RuntimeError("terminal output does not exactly match input row cardinality/order")
     finalization_started = time.monotonic()
-    writer.write(envelopes)
+    writer.write(envelopes, serializer=to_evaluator)
     finalization_seconds = time.monotonic() - finalization_started
     pending_path.unlink(missing_ok=True)
     ledger_purposes = {}
@@ -496,6 +563,8 @@ def run(args: argparse.Namespace) -> int:
                                 failed=sum(item.terminal_state == PublicState.FAILED for item in envelopes),
                                 physical_requests=(gateway.ledger.physical_requests if gateway else 0), budget_seconds=budget.hard_seconds,
                                     registry_snapshot_sha256=registry_hash,
+                                    evidence_cutoff=cutoff.isoformat(),
+                                    evidence_cutoff_source=cutoff_source,
                                     physical_gateway_requests=(gateway.ledger.physical_requests if gateway else 0),
                                     logical_gateway_requests=(gateway.ledger.logical_requests if gateway else 0),
                                     requests_by_purpose=ledger_purposes, errors_by_code=error_counts,

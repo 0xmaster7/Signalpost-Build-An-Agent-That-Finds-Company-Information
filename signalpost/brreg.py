@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -116,7 +118,8 @@ def financial_records(body: Any) -> list[dict[str, Any]]:
                 unit = val.get("enhet") or val.get("valuta")
             else:
                 raw, unit = val, None
-            values[field] = raw if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None
+            values[field] = raw if (isinstance(raw, (int, float)) and not isinstance(raw, bool)
+                                    and math.isfinite(float(raw))) else None
             if values[field] is not None:
                 values[field + "_unit"] = unit
         result.append({
@@ -177,6 +180,35 @@ def subunit_page(body: Any) -> tuple[list[dict[str, Any]], str | None, bool]:
     return [row for row in rows if isinstance(row, dict)], next_url, complete
 
 
+def _account_collection_shape(body: Any) -> bool:
+    if isinstance(body, list):
+        return all(isinstance(item, dict) for item in body)
+    if not isinstance(body, dict):
+        return False
+    embedded = body.get("_embedded")
+    if isinstance(embedded, dict) and "regnskap" in embedded:
+        rows = embedded["regnskap"]
+        return isinstance(rows, list) and all(isinstance(item, dict) for item in rows)
+    if "regnskap" in body:
+        rows = body["regnskap"]
+        return isinstance(rows, list) and all(isinstance(item, dict) for item in rows)
+    return "id" in body and isinstance(body.get("regnskapsperiode"), dict)
+
+
+def _role_collection_shape(body: Any) -> bool:
+    if not isinstance(body, dict) or not isinstance(body.get("rollegrupper"), list):
+        return False
+    return all(isinstance(group, dict) and isinstance(group.get("roller", []), list)
+               and all(isinstance(role, dict) for role in group.get("roller", []))
+               for group in body["rollegrupper"])
+
+
+def _subunit_collection_shape(body: Any) -> bool:
+    return (isinstance(body, dict) and isinstance(body.get("_embedded"), dict)
+            and isinstance(body["_embedded"].get("underenheter"), list)
+            and all(isinstance(item, dict) for item in body["_embedded"]["underenheter"]))
+
+
 def group_relationships(body: Any, target_org: str) -> list[dict[str, Any]]:
     """Flatten relationship nodes without changing the anchored target entity."""
     result: list[dict[str, Any]] = []
@@ -229,14 +261,16 @@ def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnaps
     evidence_id = f"{org}:{name}:state:{digest[:12]}"
     evidence.append(Evidence(evidence_id=evidence_id, source_url=url, retrieved_at=retrieved_at,
                              content_sha256=digest, extraction_method=method, json_pointer=pointer,
-                             source_class="official"))
+                             source_class="official", subject_organisation_number=org,
+                             source_snapshot_ids=[source_id]))
     if not any(item.source_id == source_id for item in snapshots):
         snapshots.append(SourceSnapshot(source_id=source_id, source_url=url, retrieved_at=retrieved_at,
             content_sha256=digest, http_status=status, cache_mode="transient", rights_status=rights))
     return evidence_id
 
 
-async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> BrregResult:
+async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
+                        allow_current_identity_after_run_start: bool = False) -> BrregResult:
     claims: list[Claim] = []
     evidence: list[Evidence] = []
     snapshots: list[SourceSnapshot] = []
@@ -285,7 +319,8 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
         eid = f"{org}:{section}:{len(evidence)}:{digest[:12]}"
         evidence.append(Evidence(evidence_id=eid, source_url=url, retrieved_at=retrieved,
                                  content_sha256=digest, extraction_method=extraction_method, json_pointer=pointer,
-                                 source_class="official"))
+                                 source_class="official", subject_organisation_number=org,
+                                 source_snapshot_ids=[sid]))
         if not any(s.source_id == sid for s in snapshots):
             snapshots.append(SourceSnapshot(source_id=sid, source_url=url, retrieved_at=retrieved, content_sha256=digest,
                                             http_status=200, cache_mode="transient", rights_status=RIGHTS))
@@ -313,7 +348,8 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
             if entity_hash:
                 evidence.append(Evidence(evidence_id=candidate_evidence_id, source_url=entity_final,
                     retrieved_at=entity_time, content_sha256=entity_hash, extraction_method="brreg_website_candidate_v1",
-                    json_pointer="/hjemmeside", source_class="official"))
+                    json_pointer="/hjemmeside", source_class="official", subject_organisation_number=org,
+                    source_snapshot_ids=[candidate_source_id]))
                 if not any(item.source_id == candidate_source_id for item in snapshots):
                     snapshots.append(SourceSnapshot(source_id=candidate_source_id, source_url=entity_final,
                         retrieved_at=entity_time, content_sha256=entity_hash, http_status=entity_status,
@@ -370,7 +406,10 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
         observations["accounts_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="accounts_state",
             url=account_final or accounts_url, retrieved_at=account_time, status=account_status, digest=account_hash,
             pointer="/", method="brreg_accounts_endpoint_state_v1")
-    if account_status == 200 and isinstance(account_body, (list, dict)):
+    accounts_malformed = account_status == 200 and not _account_collection_shape(account_body)
+    if accounts_malformed:
+        errors.append(RunError(code="BRREG_ACCOUNTS_MALFORMED", message="Official accounts endpoint returned an invalid collection shape.", source_id="accounts_history"))
+    if account_status == 200 and _account_collection_shape(account_body):
         records = financial_records(account_body)
         observations["financial_records"] = len(records)
         if not records:
@@ -380,8 +419,24 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
         for ri, record in enumerate(records):
             raw = account_body
             record_path = record["_source_prefix"]
+            period_start = _date(record.get("period_start"))
+            period_end = _date(record.get("period_end"))
+            currency_valid = (isinstance(record.get("currency"), str)
+                              and re.fullmatch(r"[A-Z]{3}", record["currency"]) is not None)
+            metadata_valid = (period_start is not None and period_end is not None and period_start <= period_end
+                              and currency_valid and record.get("scope") in {"legal_entity", "group"})
+            if any(value is not None for key, value in record["metrics"].items() if not key.endswith("_unit")) and not metadata_valid:
+                missing = []
+                if period_start is None or period_end is None or period_start > period_end: missing.append("period")
+                if not currency_valid: missing.append("currency")
+                if record.get("scope") not in {"legal_entity", "group"}: missing.append("scope")
+                errors.append(RunError(code="BRREG_FINANCIAL_METADATA_INCOMPLETE",
+                    message="Financial metrics were withheld because source metadata is missing or invalid: " + ",".join(missing),
+                    source_id="accounts_history"))
             for metric, value in record["metrics"].items():
                 if metric.endswith("_unit") or value is None:
+                    continue
+                if not metadata_valid:
                     continue
                 # The record's own labels determine scope and periods. No calendar-year inference.
                 raw_metric = _get(record["raw"], *METRICS[metric].split("/"))
@@ -410,8 +465,9 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
                               start=record["period_start"], end=record["period_end"], as_of=record["filing_timestamp"],
                               currency=record["currency"], source_hash=account_hash,
                               extraction_method="brreg_scope_normalization_v1" if meta == "scope" else "brreg_json_pointer_v1")
-        states["accounts_history"] = PublicState.AVAILABLE if any(c.section == "accounts_history" for c in claims) else PublicState.NOT_AVAILABLE
-    elif account_status >= 500 or account_status == 0:
+        states["accounts_history"] = (PublicState.AVAILABLE if any(c.section == "accounts_history" for c in claims)
+            else PublicState.AMBIGUOUS if records else PublicState.NOT_AVAILABLE)
+    elif accounts_malformed or account_status >= 500 or account_status == 0:
         states["accounts_history"] = PublicState.FAILED
     elif account_status in {401, 403, 429, 451}:
         states["accounts_history"] = PublicState.BLOCKED
@@ -430,16 +486,19 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
         observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="subunits_state",
             url=subunit_final or subunits_url, retrieved_at=subunit_time, status=subunit_status, digest=subunit_hash,
             pointer="/", method="brreg_subunits_endpoint_state_v1")
-    roles = role_records(roles_body) if roles_status == 200 and isinstance(roles_body, dict) else []
+    roles_malformed = roles_status == 200 and not _role_collection_shape(roles_body)
+    if roles_malformed:
+        errors.append(RunError(code="BRREG_ROLES_MALFORMED", message="Official roles endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
+    roles = role_records(roles_body) if roles_status == 200 and not roles_malformed else []
     observations["roles_count"] = len(roles)
     observations["role_family_state"] = (
-        PublicState.AVAILABLE.value if roles else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
+        PublicState.AVAILABLE.value if roles else PublicState.FAILED.value if roles_malformed else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
         PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
     ceo_rows = [role for role in roles if str(role.get("role_code") or "").casefold() in {"dagl", "ceo"}
                 or "daglig leder" in str(role.get("role_description") or "").casefold()
                 or "managing director" in str(role.get("role_description") or "").casefold()]
     observations["ceo_state"] = (PublicState.AVAILABLE.value if ceo_rows else
-                                 PublicState.NOT_AVAILABLE.value if roles_status == 200 else
+                                 PublicState.FAILED.value if roles_malformed else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
                                  PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
     if roles_status == 200:
         roles_digest = roles_hash or hashlib.sha256(json.dumps(roles_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -449,7 +508,8 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
             observations["roles_state_evidence_id"] = observations["roles_completeness_evidence_id"]
         evidence.append(Evidence(evidence_id=observations["roles_completeness_evidence_id"], source_url=roles_final or roles_url,
                                 retrieved_at=roles_time, content_sha256=roles_digest,
-                                extraction_method="brreg_complete_role_collection_v1", json_pointer="/rollegrupper"))
+                                extraction_method="brreg_complete_role_collection_v1", json_pointer="/rollegrupper",
+                                subject_organisation_number=org, source_snapshot_ids=[completion_snapshot_id]))
         if not any(item.source_id == completion_snapshot_id for item in snapshots):
             snapshots.append(SourceSnapshot(source_id=completion_snapshot_id, source_url=roles_final or roles_url,
                 retrieved_at=roles_time, content_sha256=roles_digest, http_status=200, rights_status=RIGHTS))
@@ -474,13 +534,16 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
                       roles_final or roles_url, roles_time, roles_body, role_path, "roles", source_hash=roles_hash,
                       extraction_method=method)
     locations: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
-    complete = subunit_status == 200
+    subunits_malformed = subunit_status == 200 and not _subunit_collection_shape(subunit_body)
+    if subunits_malformed:
+        errors.append(RunError(code="BRREG_SUBUNITS_MALFORMED", message="Official subunit endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
+    complete = subunit_status == 200 and not subunits_malformed
     current = subunit_body
     current_url = subunit_final or subunits_url
     current_hash = subunit_hash
     current_time = subunit_time
     page_index = 0
-    while subunit_status == 200 and isinstance(current, dict):
+    while subunit_status == 200 and isinstance(current, dict) and _subunit_collection_shape(current):
         rows, next_path, page_complete = subunit_page(current)
         locations.extend((item, current, current_url, current_hash, current_time, i) for i, item in enumerate(rows))
         if not rows:
@@ -501,8 +564,14 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
     observations["workplace_count"] = len(locations)
     observations["workplaces_complete"] = complete
     for item, page_body, page_url, page_hash, page_time, page_row_index in locations:
-        child_org = item.get("organisasjonsnummer")
-        if not child_org: continue
+        child_org, child_valid = normalize_org_number(item.get("organisasjonsnummer"))
+        parent_org, parent_valid = normalize_org_number(item.get("overordnetEnhet"))
+        if not child_valid or not parent_valid or parent_org != org:
+            observations["workplaces_complete"] = False
+            errors.append(RunError(code="BRREG_SUBUNIT_RELATION_INVALID",
+                message="A returned workplace had an invalid organisation number or did not name the requested parent."))
+            continue
+        item["organisasjonsnummer"] = child_org
         for key in ("organisasjonsnummer", "navn", "beliggenhetsadresse", "postadresse", "naeringskode1", "antallAnsatte", "overordnetEnhet"):
             if target_legal_form == "ENK" and key in {"beliggenhetsadresse", "postadresse"}:
                 continue
@@ -514,7 +583,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
     role_claims = any(c.field_family == "role" for c in claims)
     workplace_claims = any(c.field_family == "workplace" for c in claims)
     states["leadership_workplaces"] = PublicState.AVAILABLE if role_claims or workplace_claims else (
-        PublicState.FAILED if roles_status >= 500 or subunit_status >= 500 or roles_status == 0 or subunit_status == 0 else
+        PublicState.FAILED if roles_malformed or subunits_malformed or roles_status >= 500 or subunit_status >= 500 or roles_status == 0 or subunit_status == 0 else
         PublicState.BLOCKED if roles_status in {401, 403, 429, 451} or subunit_status in {401, 403, 429, 451} else PublicState.NOT_AVAILABLE)
 
     for section in states:
@@ -527,7 +596,15 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime) -> 
         observed_at = claim.as_of or claim.period_end
         if observed_at is None and claim.evidence_ids:
             observed_at = evidence_by_id[claim.evidence_ids[0]].retrieved_at
-        if observed_at is not None and observed_at <= cutoff:
+        current_live_identity = (
+            allow_current_identity_after_run_start
+            and claim.section == "identity_brand"
+            and claim.as_of is None
+            and claim.period_end is None
+            and claim.evidence_ids
+            and evidence_by_id[claim.evidence_ids[0]].retrieved_at >= cutoff
+        )
+        if (observed_at is not None and observed_at <= cutoff) or current_live_identity:
             eligible_claims.append(claim)
         else:
             excluded_sections.add(claim.section or "unknown")

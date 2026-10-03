@@ -29,6 +29,18 @@ def sha(path: Path) -> str:
     return digest.hexdigest()
 
 
+def source_tree_provenance() -> tuple[str, bool, str]:
+    revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    status = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT)
+    diff = subprocess.check_output(["git", "diff", "--binary", "HEAD"], cwd=ROOT)
+    untracked = subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=ROOT).split(b"\0")
+    digest = hashlib.sha256(diff)
+    for raw_path in sorted(item for item in untracked if item):
+        path = ROOT / os.fsdecode(raw_path)
+        digest.update(raw_path + b"\0" + path.read_bytes())
+    return revision, bool(status.strip()), digest.hexdigest()
+
+
 def main_cli() -> int:
     parser = __import__("argparse").ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
@@ -51,11 +63,13 @@ def main_cli() -> int:
                               "--output", str(output), "--state-output", str(state), "--batch-id", "m02-foundation-smoke"])
         runtime_ms = int((time.monotonic() - started) * 1000)
         envelopes = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+        output_sha256 = sha(output)
         events = [json.loads(line) for line in captured.getvalue().splitlines() if line.startswith("{")]
         event = next((item for item in reversed(events) if item.get("event") == "batch_complete"), {})
 
-    row_count_ok = len(envelopes) == 100 and [row["row_number"] for row in envelopes] == list(range(1, 101))
-    input_to_output_ok = row_count_ok and all(e["organisation_number"] == source_rows[e["row_number"] - 1]["organisation_number"] for e in envelopes)
+    row_count_ok = len(envelopes) == 100 and [row["input_ref"] for row in envelopes] == [f"row:{i}" for i in range(1, 101)]
+    input_to_output_ok = row_count_ok and all(e["organisation_number"] == source_rows[index]["organisation_number"]
+        for index, e in enumerate(envelopes))
     available_claims = [claim for env in envelopes for claim in env.get("claims", []) if claim.get("state") == "available"]
     evidence_by_id = {e["evidence_id"]: e for env in envelopes for e in env.get("evidence", [])}
     snapshots_by_id = {s["source_id"]: s for env in envelopes for s in env.get("source_snapshots", [])}
@@ -103,10 +117,14 @@ def main_cli() -> int:
         hard_gates.append("100_envelopes")
     if exit_code != 0:
         hard_gates.append("runner_exit_code")
+    code_commit, working_tree_dirty, working_tree_diff_sha256 = source_tree_provenance()
     report = {
         "run_id": "m02-foundation-smoke-2026-10-03",
-        "code_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        "code_commit": code_commit, "working_tree_dirty": working_tree_dirty,
+        "working_tree_diff_sha256": working_tree_diff_sha256,
+        "measurement_kind": "live_brreg_source_smoke",
         "config_sha256": hashlib.sha256(config).hexdigest(), "input_sha256": sha(fixture),
+        "output_sha256": output_sha256,
         "registry_snapshot_sha256": None, "input_rows": 100, "terminal_envelopes": len(envelopes),
         "runtime_ms": runtime_ms,
         "requests": {"strict_physical_total": event.get("physical_gateway_requests", 0),

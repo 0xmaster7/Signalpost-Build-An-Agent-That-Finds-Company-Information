@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from signalpost.adapter import to_evaluator, validate_vendor_payload
-from signalpost.inputs import normalize_org_number, parse_records
+from signalpost.inputs import load_input, normalize_org_number, parse_records
 from signalpost.models import Claim, Envelope, Evidence, PublicState, RefreshState, Section, SourceSnapshot, empty_section
 from signalpost.network import NetworkGateway, NetworkPolicyError, StructuredLogger, UrlLibTransport, canonical_url, classify_response, registered_domain, robots_directives, validate_public_host
 from signalpost.operations import Budget, OrderedAtomicWriter, RunBudget
@@ -37,7 +37,8 @@ SECTIONS = {name: empty_section() for name in (
 def valid_envelope(row: int = 1) -> Envelope:
     now = datetime.now(timezone.utc)
     evidence = Evidence(evidence_id="e1", source_url="https://data.brreg.no/x", retrieved_at=now,
-                        content_sha256="a" * 64, extraction_method="json_pointer")
+                        content_sha256="a" * 64, extraction_method="json_pointer",
+                        subject_organisation_number="923609016", source_snapshot_ids=["registry_fixture"])
     claim = Claim(claim_id="c1", organisation_number="923609016", section="identity_brand", field_family="identity",
                   subject_id="923609016", field="legal_name", value="Example AS", state=PublicState.AVAILABLE,
                   scope="legal_entity", verification_rule_id="fixture_exact_org_v1", verification_score="1",
@@ -72,6 +73,19 @@ class InputContractTests(unittest.TestCase):
         self.assertEqual(rows[0].organisation_number, "923609016")
         self.assertEqual(rows[1].organisation_number, "")
 
+    def test_auto_detects_tsv_and_invalid_utf8_row_isolated(self):
+        rows = parse_records("organisation_number\tname\n923609016\tValid AS\n", "auto")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].organisation_number, "923609016")
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "bad.jsonl"
+            source.write_bytes(b'{"organisation_number":"923609016"}\n{\xff}\n{"organisation_number":"923609016"}\n')
+            parsed = load_input(source, "jsonl")
+        self.assertEqual(len(parsed), 3)
+        self.assertEqual(parsed[0].organisation_number, "923609016")
+        self.assertEqual(parsed[1].organisation_number, "")
+        self.assertEqual(parsed[2].organisation_number, "923609016")
+
 
 class EnvelopeContractTests(unittest.TestCase):
     def test_seven_sections_states_and_adapter_fixture(self):
@@ -91,11 +105,35 @@ class EnvelopeContractTests(unittest.TestCase):
                           scope="legal_entity", verification_rule_id="test", verification_score="1", evidence_ids=["missing"],
                           source_snapshot_ids=["snapshot"])
             evidence = Evidence(evidence_id="present", source_url="https://example.com", retrieved_at=now,
-                                content_sha256="a" * 64, extraction_method="test")
+                                content_sha256="a" * 64, extraction_method="test",
+                                subject_organisation_number="923609016", source_snapshot_ids=["snapshot"])
             Envelope(input_ref="r", row_number=1, organisation_number="923609016", terminal_state=PublicState.AVAILABLE,
                      sections=SECTIONS, refresh=RefreshState(), claims=[claim], evidence=[evidence],
                      source_snapshots=[SourceSnapshot(source_id="snapshot", source_url="https://example.com", retrieved_at=now,
                                                       content_sha256="b" * 64)], batch_id="b", evidence_cutoff=now)
+
+    def test_evidence_must_bind_to_the_claim_subject_snapshot_url_and_hash(self):
+        mutations = (
+            lambda env: setattr(env.evidence[0], "source_snapshot_ids", ["missing"]),
+            lambda env: setattr(env.evidence[0], "source_url", "https://other.example/x"),
+            lambda env: setattr(env.evidence[0], "content_sha256", "b" * 64),
+            lambda env: setattr(env.evidence[0], "subject_organisation_number", "923609028"),
+        )
+        for mutate in mutations:
+            env = valid_envelope().model_copy(deep=True)
+            mutate(env)
+            with self.subTest(mutation=mutate), self.assertRaises(ValueError):
+                Envelope.model_validate(env.model_dump())
+
+    def test_duplicate_evidence_and_snapshot_identifiers_are_rejected(self):
+        env = valid_envelope().model_copy(deep=True)
+        env.evidence.append(env.evidence[0].model_copy(deep=True))
+        with self.assertRaisesRegex(ValueError, "evidence identifiers must be unique"):
+            Envelope.model_validate(env.model_dump())
+        env = valid_envelope().model_copy(deep=True)
+        env.source_snapshots.append(env.source_snapshots[0].model_copy(deep=True))
+        with self.assertRaisesRegex(ValueError, "snapshot identifiers must be unique"):
+            Envelope.model_validate(env.model_dump())
 
     def test_seven_sections_are_required(self):
         with self.assertRaisesRegex(ValueError, "seven canonical sections"):
@@ -124,7 +162,7 @@ class OutputAndBudgetTests(unittest.IsolatedAsyncioTestCase):
                     OrderedAtomicWriter(path).write([valid_envelope(2), valid_envelope(1)])
             self.assertEqual(path.read_text(), "old\n")
             OrderedAtomicWriter(path).write([valid_envelope(2), valid_envelope(1)])
-            self.assertEqual([json.loads(line)["row_number"] for line in path.read_text().splitlines()], [1, 2])
+            self.assertEqual([json.loads(line)["input_ref"] for line in path.read_text().splitlines()], ["row:1", "row:2"])
 
     async def test_budget_request_reservation_is_atomic(self):
         budget = Budget(RunBudget(hard_seconds=10, soft_seconds=1, completion_reserve_seconds=1, physical_request_limit=7))
@@ -140,6 +178,15 @@ class OutputAndBudgetTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await budget.reserve_request(cost=Decimal("0.1")))
         self.assertFalse(await budget.reserve_request(cost=Decimal("0.0001")))
         self.assertEqual(str(budget.cost), "0.3")
+
+    async def test_negative_or_non_finite_paid_cost_is_rejected(self):
+        for value in (Decimal("-0.01"), Decimal("NaN"), Decimal("Infinity")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                RunBudget(paid_cost_limit=value)
+        budget = Budget(RunBudget(hard_seconds=10, soft_seconds=1, completion_reserve_seconds=1))
+        for value in (Decimal("-0.01"), Decimal("NaN"), Decimal("Infinity")):
+            with self.subTest(request_cost=value), self.assertRaises(ValueError):
+                await budget.reserve_request(cost=value)
 
 
 class FakeTransport:
@@ -295,6 +342,28 @@ class NetworkSecurityTests(unittest.IsolatedAsyncioTestCase):
                 await gateway.fetch(url, purpose=purpose, access_profile="brreg_structured_api")
         self.assertEqual(fake.urls, [])
 
+    async def test_brreg_api_profile_rejects_port_credentials_queries_and_unapproved_redirects(self):
+        gateway = NetworkGateway(FakeTransport([]), retries=0)
+        invalid = (
+            "https://data.brreg.no:8443/enhetsregisteret/api/enheter/923609016",
+            "https://user@data.brreg.no/enhetsregisteret/api/enheter/923609016",
+            "https://data.brreg.no/enhetsregisteret/api/enheter/923609016?unrelated=1",
+            "https://data.brreg.no/enhetsregisteret/api/underenheter?overordnetEnhet=923609016&evil=1",
+        )
+        for url in invalid:
+            with self.subTest(url=url), self.assertRaises(NetworkPolicyError):
+                await gateway.fetch(url, purpose="subunits" if "underenheter" in url else "entity",
+                    access_profile="brreg_structured_api")
+        redirect = FakeTransport([
+            (302, {"Location": "https://example.com/attacker"}, b"", "https://data.brreg.no/enhetsregisteret/api/enheter/923609016"),
+        ])
+        gateway = NetworkGateway(redirect, retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("195.43.63.68",)):
+            with self.assertRaises(NetworkPolicyError):
+                await gateway.fetch("https://data.brreg.no/enhetsregisteret/api/enheter/923609016",
+                    purpose="entity", allowed_hosts={"data.brreg.no"}, access_profile="brreg_structured_api", use_robots=False)
+        self.assertEqual(len(gateway.ledger.entries), 1)
+
     async def test_parallel_same_origin_requests_share_one_robots_fetch(self):
         responses = [(200, {}, b"", "https://8.8.8.8/robots.txt")] + [
             (200, {}, b"ok", f"https://8.8.8.8/{i}") for i in range(10)]
@@ -310,6 +379,30 @@ class NetworkSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await gateway.robots_allowed("https://8.8.8.8/private/x", "SignalpostBot"), (False, 0.1))
         self.assertEqual(classify_response(200, {}, b"Just a moment..."), "waf_challenge")
         self.assertEqual(classify_response(200, {}, b"<title>404 Not Found</title>"), "soft_404")
+
+    async def test_real_gateway_robots_wildcards_end_anchor_user_agent_and_allow_precedence(self):
+        async def outcome(rules: bytes, url: str, agent: str = "SignalpostBot"):
+            host = "https://8.8.8.8"
+            fake = FakeTransport([(200, {}, rules, host + "/robots.txt"), (200, {}, b"ok", url)])
+            gateway = NetworkGateway(fake, retries=0)
+            result = await gateway.fetch(url, user_agent=agent)
+            return result[-1], fake.urls
+
+        blocked, requested = await outcome(b"User-agent: *\nDisallow: /private$\n", "https://8.8.8.8/private")
+        self.assertEqual(blocked, "robots_disallowed")
+        self.assertEqual(requested, ["https://8.8.8.8/robots.txt"])
+        allowed, _ = await outcome(b"User-agent: *\nDisallow: /private$\n", "https://8.8.8.8/private/more")
+        self.assertEqual(allowed, "ok")
+        wildcard, _ = await outcome(b"User-agent: *\nDisallow: /private/*/secret\n", "https://8.8.8.8/private/a/secret")
+        self.assertEqual(wildcard, "robots_disallowed")
+        tie_allow, _ = await outcome(b"User-agent: *\nDisallow: /private\nAllow: /private\n", "https://8.8.8.8/private")
+        self.assertEqual(tie_allow, "ok")
+        specificity, _ = await outcome(b"User-agent: *\nDisallow: /\nUser-agent: SignalpostBot\nDisallow: /private\n", "https://8.8.8.8/public")
+        self.assertEqual(specificity, "ok")
+        encoded, _ = await outcome(b"User-agent: *\nDisallow: /private/%2Fsecret\n", "https://8.8.8.8/private/%2fsecret")
+        self.assertEqual(encoded, "robots_disallowed")
+        root, _ = await outcome(b"User-agent: *\nDisallow: /\n", "https://8.8.8.8/")
+        self.assertEqual(root, "robots_disallowed")
 
     def test_meta_header_directives_and_public_suffix(self):
         directives = robots_directives({"X-Robots-Tag": "SignalpostBot: noarchive"},
@@ -370,10 +463,11 @@ class OfflineCliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             envelopes = [json.loads(line) for line in (root / "out.jsonl").read_text().splitlines()]
             self.assertEqual(len(envelopes), 2)
-            self.assertEqual([item["row_number"] for item in envelopes], [1, 2])
+            self.assertEqual([item["input_ref"] for item in envelopes], ["row:1", "row:2"])
             self.assertTrue(all(item["terminal_state"] == "available" for item in envelopes))
             self.assertTrue(all(len(item["sections"]) == 7 for item in envelopes))
-            self.assertTrue(all(item["evidence_cutoff"] == "2026-10-17T23:59:00+05:30" for item in envelopes))
+            self.assertTrue(all(item["batch"]["evidence_cutoff"] == item["synthesis"]["evidence_cutoff"] for item in envelopes))
+            self.assertTrue(all(item["synthesis"]["evidence_cutoff_source"] == "run_start" for item in envelopes))
             self.assertFalse((root / "out.jsonl.pending.jsonl").exists())
 
 
@@ -389,6 +483,30 @@ class GatewayArchitectureTests(unittest.TestCase):
 
 
 class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_run_start_fallback_allows_current_live_identity_but_not_without_explicit_policy(self):
+        entity = {"organisasjonsnummer": "923609003", "navn": "Target AS", "organisasjonsform": {"kode": "AS"}}
+        accounts = [{"id": "x", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"},
+                     "valuta": "NOK", "eiendeler": {"sumEiendeler": 12}}]
+        class RoutingTransport:
+            async def request(self, url, headers, timeout):
+                if "/regnskap/" in url: value = accounts
+                elif url.endswith("/roller"): value = {"rollegrupper": []}
+                elif "/underenheter?" in url: value = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
+                else: value = entity
+                return 200, {"Content-Type": "application/json"}, json.dumps(value).encode(), url
+        cutoff = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        def gateway(): return NetworkGateway(RoutingTransport(), retries=0)
+        async def fetch(allow):
+            item = gateway()
+            with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(item, "robots_decision", return_value=("allowed", None)):
+                return await fetch_company("923609003", item, cutoff, allow_current_identity_after_run_start=allow)
+        excluded = await fetch(False)
+        included = await fetch(True)
+        self.assertFalse(any(c.section == "identity_brand" for c in excluded.claims))
+        self.assertTrue(any(c.field == "organisation_number" and c.value == "923609003" for c in included.claims))
+        self.assertTrue(any(c.field == "name" and c.value == "Target AS" for c in included.claims))
+        self.assertTrue(all(c.period_end is None or c.period_end <= cutoff for c in included.claims if c.section != "identity_brand"))
+
     def test_all_financial_history_periods_and_corrections_are_retained(self):
         rows = []
         for year in range(2018, 2024):
@@ -420,6 +538,14 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
     def test_unknown_financial_scope_stays_unknown(self):
         records = financial_records([{"regnskapstype": "SPECIAL", "regnskapsperiode": {}, "eiendeler": {"sumEiendeler": 20}}])
         self.assertEqual(records[0]["scope"], "unknown")
+
+    def test_non_finite_and_malformed_financial_metrics_are_not_parsed_as_numbers(self):
+        records = financial_records([{"id": "bad", "regnskapstype": "SELSKAP",
+            "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK",
+            "eiendeler": {"sumEiendeler": float("nan")},
+            "resultatregnskapResultat": {"driftsresultat": {"driftsresultat": "12.0"}}}])
+        self.assertIsNone(records[0]["metrics"]["total_assets"])
+        self.assertIsNone(records[0]["metrics"]["operating_result"])
 
     def test_group_tree_keeps_target_and_parent_relationships_separate(self):
         tree = {"organisasjonsnummer": "923609003", "navn": "Target AS", "children": [{
@@ -505,7 +631,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(state_evidence.extraction_method, "brreg_entity_status_v1")
             self.assertEqual(next(s.http_status for s in result.snapshots if s.source_url.endswith("/923609003")), status)
 
-    async def test_live_cli_commits_one_official_envelope_per_duplicate_input(self):
+    async def test_default_cli_uses_live_brreg_without_frozen_snapshot_and_preserves_duplicate_rows(self):
         class FakeGateway:
             def __init__(self, *args, **kwargs):
                 self.ledger = type("Ledger", (), {"physical_requests": 0, "logical_requests": 0, "entries": []})()
@@ -515,7 +641,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
                 self.ledger.physical_requests += 1
                 if "/roller" in url: body = {"rollegrupper": []}
                 elif "/underenheter?" in url: body = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
-                elif "/regnskap/" in url: body = [{"id": "F1", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "eiendeler": {"sumEiendeler": 5}}]
+                elif "/regnskap/" in url: body = [{"id": "F1", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 5}}]
                 else: body = {"organisasjonsnummer": "923609016", "navn": "Target AS"}
                 self.ledger.entries.append(type("Entry", (), {"purpose": kwargs["purpose"], "url": url, "status": 200, "outcome": "received"})())
                 return 200, {}, json.dumps(body).encode(), url, "ok"
@@ -523,7 +649,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             (root / "input.jsonl").write_text('{"organisation_number":"923609016"}\n{"organisation_number":"923609016"}\n')
             with patch("signalpost.run.NetworkGateway", FakeGateway):
-                code = await asyncio.to_thread(main, ["--input", str(root / "input.jsonl"), "--live-brreg", "--output", str(root / "out.jsonl"),
+                code = await asyncio.to_thread(main, ["--input", str(root / "input.jsonl"), "--output", str(root / "out.jsonl"),
                                                        "--state-output", str(root / "state.sqlite"), "--batch-id", "m02-fixture"])
             output = [json.loads(line) for line in (root / "out.jsonl").read_text().splitlines()]
             self.assertEqual(code, 0)
@@ -577,6 +703,77 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
                           for value in (entity, accounts, roles, subunits)}
         self.assertTrue(all(item.json_pointer and len(item.content_sha256) == 64 for item in result.evidence))
         self.assertTrue(all(item.content_sha256 in payload_hashes for item in result.evidence))
+
+    async def test_subunit_children_are_individually_parent_and_identifier_validated(self):
+        target = "923609016"
+        valid_child = {"organisasjonsnummer": "923609024", "overordnetEnhet": target, "navn": "Valid subunit"}
+        wrong_parent = {"organisasjonsnummer": "923609008", "overordnetEnhet": "923609024", "navn": "Wrong parent"}
+        malformed_child = {"organisasjonsnummer": "12", "overordnetEnhet": target, "navn": "Malformed"}
+
+        async def fetch_with(rows):
+            class RoutingTransport:
+                async def request(self, url, headers, timeout):
+                    if "/regnskap/" in url: body = []
+                    elif url.endswith("/roller"): body = {"rollegrupper": []}
+                    elif "/underenheter?" in url:
+                        body = {"_embedded": {"underenheter": rows}, "page": {"number": 0, "totalPages": 1}}
+                    else: body = {"organisasjonsnummer": target, "navn": "Target AS", "organisasjonsform": {"kode": "AS"}}
+                    return 200, {"Content-Type": "application/json"}, json.dumps(body).encode(), url
+            gateway = NetworkGateway(RoutingTransport(), retries=0)
+            with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+                return await fetch_company(target, gateway, datetime.now(timezone.utc) + timedelta(days=1))
+
+        wrong_only = await fetch_with([wrong_parent])
+        self.assertFalse(any(claim.field_family == "workplace" for claim in wrong_only.claims))
+        self.assertFalse(wrong_only.observations["workplaces_complete"])
+        self.assertIn("BRREG_SUBUNIT_RELATION_INVALID", {error.code for error in wrong_only.errors})
+
+        mixed = await fetch_with([valid_child, wrong_parent, malformed_child])
+        workplace_orgs = {claim.value for claim in mixed.claims if claim.field == "workplace.organisasjonsnummer"}
+        self.assertEqual(workplace_orgs, {"923609024"})
+        self.assertFalse(mixed.observations["workplaces_complete"])
+
+    async def test_http_200_malformed_collection_is_failure_not_absence(self):
+        class MalformedTransport:
+            async def request(self, url, headers, timeout):
+                if "/regnskap/" in url: body = {"unexpected": "shape"}
+                elif url.endswith("/roller"): body = {"rollegrupper": "bad"}
+                elif "/underenheter?" in url: body = {"_embedded": {"underenheter": "bad"}}
+                else: body = {"organisasjonsnummer": "923609003", "navn": "Target AS"}
+                return 200, {"Content-Type": "application/json"}, json.dumps(body).encode(), url
+        gateway = NetworkGateway(MalformedTransport(), retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+            result = await fetch_company("923609003", gateway, datetime.now(timezone.utc) + timedelta(days=1))
+        codes = {error.code for error in result.errors}
+        self.assertTrue({"BRREG_ACCOUNTS_MALFORMED", "BRREG_ROLES_MALFORMED", "BRREG_SUBUNITS_MALFORMED"} <= codes)
+        self.assertEqual(result.section_states["accounts_history"], PublicState.FAILED)
+        self.assertEqual(result.observations["role_family_state"], PublicState.FAILED.value)
+        self.assertFalse(result.observations["workplaces_complete"])
+        self.assertFalse(any(claim.state == PublicState.AVAILABLE and claim.field_family == "financial" for claim in result.claims))
+
+    async def test_financial_metadata_is_mandatory_and_valid_zero_is_retained(self):
+        target = "923609003"
+        accounts = [
+            {"id": "missing-period", "regnskapstype": "SELSKAP", "valuta": "NOK", "eiendeler": {"sumEiendeler": 11}},
+            {"id": "missing-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "eiendeler": {"sumEiendeler": 12}},
+            {"id": "unknown-scope", "regnskapstype": "SPECIAL", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 13}},
+            {"id": "malformed", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": "zero-ish"}},
+            {"id": "valid-zero-v2", "versjon": 2, "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2023-01-01", "tilDato": "2023-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 0}},
+        ]
+        class AccountsTransport:
+            async def request(self, url, headers, timeout):
+                if "/regnskap/" in url: body = accounts
+                elif url.endswith("/roller"): body = {"rollegrupper": []}
+                elif "/underenheter?" in url: body = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
+                else: body = {"organisasjonsnummer": target, "navn": "Target AS"}
+                return 200, {"Content-Type": "application/json"}, json.dumps(body).encode(), url
+        gateway = NetworkGateway(AccountsTransport(), retries=0)
+        with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+            result = await fetch_company(target, gateway, datetime.now(timezone.utc) + timedelta(days=1))
+        metrics = [claim for claim in result.claims if claim.field_family == "financial"]
+        self.assertEqual([(item.field, item.value) for item in metrics], [("total_assets", 0)])
+        self.assertTrue(all(item.period_start.date().isoformat() == "2023-01-01" and item.period_end.date().isoformat() == "2023-12-31" and item.currency == "NOK" for item in metrics))
+        self.assertEqual(len([item for item in result.errors if item.code == "BRREG_FINANCIAL_METADATA_INCOMPLETE"]), 3)
 
 
 if __name__ == "__main__":

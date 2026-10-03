@@ -250,6 +250,60 @@ class WebsiteIdentityTests(unittest.TestCase):
         self.assertFalse(result.claims)
         self.assertNotEqual(result.state, PublicState.AVAILABLE)
 
+    def test_split_json_ld_organization_nodes_never_form_exact_site_proof(self):
+        html = f'''<html><head><title>Rival AS</title><script type="application/ld+json">{{"@graph":[
+          {{"@type":"Organization","name":"Rival AS","identifier":"{ORG}"}},
+          {{"@type":"Organization","legalName":"{LEGAL}"}}
+        ]}}</script></head><body><footer>{LEGAL}</footer></body></html>'''
+        gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html.encode())})
+        result = __import__("asyncio").run(research_company(self.profile(website_candidates=["https://example.no"]), gateway, enable_keyless=False))
+        self.assertFalse(result.claims)
+        self.assertNotEqual(result.state, PublicState.AVAILABLE)
+
+    def test_cli_split_json_ld_nodes_cannot_publish_target_domain(self):
+        org = "923609016"
+        name = "Integration Target AS"
+        html = f'''<html><head><title>Rival AS</title><script type="application/ld+json">{{"@graph":[
+          {{"@type":"Organization","name":"Rival AS","identifier":"{org}"}},
+          {{"@type":"Organization","legalName":"{name}"}}
+        ]}}</script></head><body><footer>{name}</footer></body></html>'''
+        gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html.encode())})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_path, snapshot_path = root / "input.jsonl", root / "registry.jsonl"
+            output_path, state_path = root / "output.jsonl", root / "state.sqlite"
+            input_path.write_text(json.dumps({"organisation_number": org}) + "\n", encoding="utf-8")
+            snapshot_path.write_text(json.dumps({"organisation_number": org, "name": name, "website": "https://example.no"}) + "\n", encoding="utf-8")
+            with patch.object(run_module, "NetworkGateway", return_value=gateway):
+                code = run_module.main(["--input", str(input_path), "--registry-snapshot", str(snapshot_path),
+                    "--live-websites", "--output", str(output_path), "--state-output", str(state_path), "--batch-id", "p0-jsonld"])
+            envelope = json.loads(output_path.read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual(code, 0)
+        self.assertEqual(envelope["organisation_number"], org)
+        self.assertNotEqual(envelope["sections"]["website_owned_profiles"]["state"], "available")
+        self.assertFalse(any(claim["field"] in {"verified_website_url", "verified_website_domain"}
+            for claim in envelope["claims"]))
+
+    def test_conflicting_visible_homepage_legal_identity_blocks_structured_target(self):
+        html = f'''<html><head><title>Rival AS</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><h1>Rival AS</h1></body></html>'''
+        gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html.encode())})
+        result = __import__("asyncio").run(research_company(self.profile(website_candidates=["https://example.no"]), gateway, enable_keyless=False))
+        self.assertFalse(result.claims)
+
+    def test_frozen_website_candidate_row_hash_binds_to_whole_snapshot_hash(self):
+        html = f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><footer>{LEGAL}</footer></body></html>'''
+        candidate = {"raw": "https://example.no/", "source": "registry_frozen",
+            "source_url": "https://registry.example/snapshot", "content_sha256": "a" * 64,
+            "source_snapshot_id": "registry_snapshot:" + "b" * 16, "source_snapshot_sha256": "b" * 64,
+            "evidence_id": "frozen-website-candidate", "rights_status": "NLOD-2.0"}
+        gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html.encode())})
+        result = __import__("asyncio").run(research_company(self.profile(website_candidates=[candidate]), gateway, enable_keyless=False))
+        evidence = next(item for item in result.evidence if item.evidence_id == "frozen-website-candidate")
+        snapshot = next(item for item in result.snapshots if item.source_id == candidate["source_snapshot_id"])
+        self.assertEqual(evidence.extraction_method, "frozen_registry_jsonl_v1")
+        self.assertEqual(evidence.content_sha256, "a" * 64)
+        self.assertEqual(snapshot.content_sha256, "b" * 64)
+
     def test_explicit_robots_disallow_blocks_website_candidate(self):
         gateway = FakeGateway({}, robots_state="disallowed")
         result = __import__("asyncio").run(research_company(self.profile(website_candidates=["https://example.no"]), gateway, enable_keyless=False))
