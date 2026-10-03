@@ -1,0 +1,87 @@
+{
+  "code_commit": "b1757d53e27de082237725da24a189c6c695168c",
+  "config_sha256": "61b5c234d2c4c431dc3e8016d349614df028d348fd2f24935b35b20966310d1d",
+  "cost": {
+    "declared_third_party_cost_usd": "0.0000",
+    "usage_cost_estimate_usd": "0.0000"
+  },
+  "errors_by_code": {
+    "BRREG_POST_CUTOFF_EXCLUDED": 100,
+    "BRREG_SUBUNITS_MALFORMED": 25
+  },
+  "exact_identity_rows": 100,
+  "financial_history": {
+    "companies_with_records": 100,
+    "published_metric_claims": 1875,
+    "records_preserved": 283,
+    "unsupported_financial_publications": 0
+  },
+  "hard_gate_failures": [],
+  "input_rows": 100,
+  "input_sha256": "67c3b3903eeecdffcc294a468402351367ca549053410b7f9c1c64ee76b32e2b",
+  "manual_or_adjudicated_audit": {
+    "accepted_external_domains_reviewed": 0,
+    "failures": 0,
+    "high_risk_cases_reviewed": 0,
+    "notes": "M02 official registry/accounts/roles/workplace foundation; no site claims.",
+    "reviewer": "not applicable; no external domains accepted in M02"
+  },
+  "measurement_kind": "live_brreg_source_smoke",
+  "output_sha256": "16219401cc655522af8221f7d3995c97aec463c8950c896ed36b0bfae122b759",
+  "peak_rss_bytes": 173834240,
+  "registry_snapshot_sha256": null,
+  "requests": {
+    "by_class": {
+      "accounts": 100,
+      "entity": 100,
+      "robots": 2,
+      "roles": 100,
+      "subunits": 100
+    },
+    "by_host": {
+      "data.brreg.no": 402
+    },
+    "logical_total": 401,
+    "outcomes": {
+      "accounts:200:received": 100,
+      "entity:200:received": 100,
+      "robots:0:transport_error": 2,
+      "roles:200:received": 100,
+      "subunits:200:received": 100
+    },
+    "strict_physical_total": 402
+  },
+  "roles_workplaces_groups": {
+    "ceo_role_states": {
+      "available": 68,
+      "not_available": 32
+    },
+    "companies_with_role_rows": 100,
+    "complete_workplace_lists": 75,
+    "group_lookups": 0,
+    "incomplete_workplace_lists": 25,
+    "role_family_states": {
+      "available": 100
+    },
+    "role_rows": 420,
+    "workplace_rows": 87
+  },
+  "run_id": "m02-foundation-smoke-2026-10-03",
+  "runtime_ms": 269984,
+  "terminal_envelopes": 100,
+  "terminal_state_distribution": {
+    "available": 100
+  },
+  "validation": {
+    "available_claims_have_required_evidence": true,
+    "cardinality": true,
+    "exact_identity_anchor_coverage": true,
+    "official_requests_made": true,
+    "only_official_brreg_requests": true,
+    "unsupported_financial_publications": 0,
+    "vendor_schema": true,
+    "wrong_company_accepted_domains": 0
+  },
+  "working_tree_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "working_tree_dirty": false
+}
