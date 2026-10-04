@@ -226,6 +226,36 @@ def _attach_frozen_baseline(envelope: Envelope, record: dict[str, Any] | None, s
     return envelope
 
 
+def _merge_website_provenance(envelope: Envelope, result: Any) -> None:
+    """Merge website provenance, reusing identical BRREG candidate records safely."""
+    evidence_fields = ("source_url", "content_sha256", "extraction_method", "json_pointer", "excerpt",
+        "source_class", "subject_organisation_number", "source_snapshot_ids")
+    existing_evidence = {item.evidence_id: item for item in envelope.evidence}
+    for item in result.evidence:
+        existing = existing_evidence.get(item.evidence_id)
+        if existing is not None:
+            if any(getattr(existing, field) != getattr(item, field) for field in evidence_fields):
+                raise ValueError(f"evidence identifier collision with conflicting provenance: {item.evidence_id}")
+            # Keep the source's original retrieval time and record; the website
+            # adapter may have reconstructed the same frozen/live candidate.
+            continue
+        envelope.evidence.append(item)
+        existing_evidence[item.evidence_id] = item
+
+    snapshot_fields = ("source_url", "content_sha256", "cache_mode", "rights_status")
+    existing_snapshots = {item.source_id: item for item in envelope.source_snapshots}
+    for item in result.snapshots:
+        existing = existing_snapshots.get(item.source_id)
+        if existing is not None:
+            if any(getattr(existing, field) != getattr(item, field) for field in snapshot_fields):
+                raise ValueError(f"source snapshot identifier collision with conflicting provenance: {item.source_id}")
+            # An official response's HTTP status is more complete than the
+            # website adapter's candidate-only reconstruction; preserve it.
+            continue
+        envelope.source_snapshots.append(item)
+        existing_snapshots[item.source_id] = item
+
+
 def _cutoff_datetime(value: str) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -565,8 +595,7 @@ def run(args: argparse.Namespace) -> int:
                             "scheduler_execution_state:budget_skipped")
                         continue
                     envelope.claims.extend(result.claims)
-                    envelope.evidence.extend(result.evidence)
-                    envelope.source_snapshots.extend(result.snapshots)
+                    _merge_website_provenance(envelope, result)
                     website_claims = [claim for claim in result.claims if claim.section == "website_owned_profiles"]
                     footprint_claims = [claim for claim in result.claims if claim.section == "hiring_activity"]
                     section = envelope.sections["website_owned_profiles"]

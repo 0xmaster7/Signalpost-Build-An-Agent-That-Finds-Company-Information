@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sys
 import unittest
+from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -11,6 +13,8 @@ sys.path.insert(0, str(ROOT / "signalpost-starter-kit" / "scripts"))
 from run_m06_scale_gate import synthetic_org_number
 from signalpost.inputs import parse_records
 from signalpost.network import _EXTRACT, registered_domain
+from signalpost import run as run_module
+from test_signalpost_m01 import valid_envelope
 
 
 class M09ReleaseInputMatrixTests(unittest.TestCase):
@@ -51,6 +55,30 @@ class M09ReleaseInputMatrixTests(unittest.TestCase):
         self.assertFalse(_EXTRACT._cache.enabled)
         self.assertEqual(_EXTRACT.suffix_list_urls, ())
         self.assertEqual(registered_domain("www.example.co.uk"), "example.co.uk")
+
+    def test_website_merge_reuses_matching_official_candidate_provenance_and_rejects_conflicts(self):
+        envelope = valid_envelope()
+        original_retrieved = envelope.evidence[0].retrieved_at
+        envelope.source_snapshots[0].http_status = 200
+        reused_evidence = envelope.evidence[0].model_copy(deep=True)
+        reused_evidence.retrieved_at = original_retrieved + timedelta(seconds=1)
+        reused_snapshot = envelope.source_snapshots[0].model_copy(deep=True)
+        reused_snapshot.http_status = None  # Candidate reconstruction has less transport detail.
+        run_module._merge_website_provenance(envelope, SimpleNamespace(
+            evidence=[reused_evidence], snapshots=[reused_snapshot]))
+        self.assertEqual(len(envelope.evidence), 1)
+        self.assertEqual(envelope.evidence[0].retrieved_at, original_retrieved)
+        self.assertEqual(len(envelope.source_snapshots), 1)
+        self.assertEqual(envelope.source_snapshots[0].http_status, 200)
+
+        conflicting = envelope.evidence[0].model_copy(deep=True)
+        conflicting.content_sha256 = "f" * 64
+        with self.assertRaisesRegex(ValueError, "evidence identifier collision with conflicting provenance"):
+            run_module._merge_website_provenance(envelope, SimpleNamespace(evidence=[conflicting], snapshots=[]))
+        conflicting_snapshot = envelope.source_snapshots[0].model_copy(deep=True)
+        conflicting_snapshot.content_sha256 = "e" * 64
+        with self.assertRaisesRegex(ValueError, "source snapshot identifier collision with conflicting provenance"):
+            run_module._merge_website_provenance(envelope, SimpleNamespace(evidence=[], snapshots=[conflicting_snapshot]))
 
 
 if __name__ == "__main__":
