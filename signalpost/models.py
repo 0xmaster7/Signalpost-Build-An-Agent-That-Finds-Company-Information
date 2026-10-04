@@ -213,6 +213,9 @@ class Envelope(StrictModel):
             raise ValueError("envelope must contain the seven canonical sections")
         evidence_ids = {item.evidence_id for item in self.evidence}
         snapshot_ids = {item.source_id for item in self.source_snapshots}
+        claim_ids = [item.claim_id for item in self.claims]
+        if len(claim_ids) != len(set(claim_ids)):
+            raise ValueError("claim identifiers must be unique within an envelope")
         if len(evidence_ids) != len(self.evidence):
             raise ValueError("evidence identifiers must be unique within an envelope")
         if len(snapshot_ids) != len(self.source_snapshots):

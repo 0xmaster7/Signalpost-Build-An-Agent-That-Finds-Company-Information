@@ -35,6 +35,9 @@ def validate_vendor_payload(payload: dict[str, Any]) -> None:
 
 def to_evaluator(envelope: Envelope) -> dict[str, Any]:
     """Provisional current-known evaluator shape; all vendor keys live in this module."""
+    # Runtime assembly mutates envelope collections after initial construction;
+    # revalidate at the deterministic publication boundary before serialization.
+    envelope = Envelope.model_validate(envelope.model_dump())
     payload = {
         "input_ref": envelope.input_ref,
         "organisation_number": envelope.organisation_number,

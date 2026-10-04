@@ -608,7 +608,9 @@ def _make_claim(org: str, field: str, value: Any, page: PageRecord, evidence_id:
     if proof_evidence and proof_evidence not in eids:
         eids.append(proof_evidence)
     page_key = _page_key(page)
-    return Claim(claim_id=f"{org}:web:{field}:{page_key[:12]}", organisation_number=org,
+    value_key = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
+        separators=(",", ":"), default=str).encode()).hexdigest()[:12]
+    return Claim(claim_id=f"{org}:web:{field}:{page_key[:12]}:{value_key}", organisation_number=org,
         section="website_owned_profiles", field_family="owned_web", subject_id=org, field=field,
         value=value, state=PublicState.AVAILABLE, scope=scope,
         verification_rule_id="audited_exact_site_identity_v1", verification_score="1.0",

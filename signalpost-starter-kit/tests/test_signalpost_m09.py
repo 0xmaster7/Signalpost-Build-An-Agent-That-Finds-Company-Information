@@ -16,8 +16,9 @@ sys.path.insert(0, str(ROOT / "signalpost-starter-kit" / "scripts"))
 from run_m06_scale_gate import synthetic_org_number
 from signalpost.inputs import parse_records
 from signalpost.network import _EXTRACT, registered_domain
-from signalpost.models import Evidence, SourceSnapshot
+from signalpost.models import Envelope, Evidence, SourceSnapshot
 from signalpost.adapter import to_evaluator
+from signalpost.synthesis import synthesize
 from signalpost import run as run_module
 from test_signalpost_m01 import valid_envelope
 from signalpost.websites import PageRecord, _additional_evidence_snapshot_ids, _make_claim, _page_key
@@ -131,6 +132,35 @@ class M09ReleaseInputMatrixTests(unittest.TestCase):
         self.assertEqual(extra_snapshot_ids, [candidate_snapshot])
         self.assertIn(candidate_snapshot, claim.source_snapshot_ids)
         envelope.__class__.model_validate(envelope.model_dump())
+
+    def test_distinct_website_facts_on_one_page_have_unique_claim_ids_and_synthesize(self):
+        envelope = valid_envelope()
+        org = envelope.organisation_number
+        now = datetime.now(timezone.utc)
+        page = PageRecord(requested_url="https://company.example/products", final_url="https://company.example/products",
+            status=200, content_type="text/html", body=b"products", digest=hashlib.sha256(b"products").hexdigest(),
+            retrieved_at=now)
+        page_key = _page_key(page)
+        snapshot_id, evidence_id = f"website:{page_key}", f"website-page:{page_key}"
+        envelope.source_snapshots.append(SourceSnapshot(source_id=snapshot_id, source_url=page.final_url,
+            retrieved_at=now, content_sha256=page.digest, rights_status="test"))
+        envelope.evidence.append(Evidence(evidence_id=evidence_id, source_url=page.final_url, retrieved_at=now,
+            content_sha256=page.digest, extraction_method="website_html_extract_v1", json_pointer="/html/body//h1",
+            subject_organisation_number=org, source_snapshot_ids=[snapshot_id]))
+        first = _make_claim(org, "product_or_service_heading", "Tjenester", page, evidence_id)
+        second = _make_claim(org, "product_or_service_heading", "BioBank AS", page, evidence_id)
+        self.assertNotEqual(first.claim_id, second.claim_id)
+        envelope.claims.extend([first, second])
+        canonical = Envelope.model_validate(envelope.model_dump())
+        sentences = [item["text"] for item in synthesize(canonical)["sentences"]]
+        self.assertTrue(any("Tjenester" in item for item in sentences))
+        self.assertTrue(any("BioBank AS" in item for item in sentences))
+        duplicate = canonical.model_copy(deep=True)
+        duplicate.claims.append(duplicate.claims[-1].model_copy(update={"claim_id": duplicate.claims[0].claim_id}))
+        with self.assertRaisesRegex(ValueError, "claim identifiers must be unique"):
+            Envelope.model_validate(duplicate.model_dump())
+        with self.assertRaisesRegex(ValueError, "claim identifiers must be unique"):
+            to_evaluator(duplicate)
 
     def test_failed_smoke_preserves_partial_files_ledger_and_original_exception(self):
         with tempfile.TemporaryDirectory(prefix="signalpost-m09-preserve-test-") as temporary:
