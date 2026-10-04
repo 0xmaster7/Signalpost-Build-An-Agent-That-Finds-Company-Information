@@ -25,6 +25,8 @@ from signalpost.models import Envelope
 from signalpost.brreg import SUPPORTED_CURRENCY_CODES
 from signalpost.history import SOURCE_POLICY_VERSION, validate_artifact
 from signalpost.adapter import to_evaluator, validate_vendor_payload
+from signalpost.network import APPROVED_BRREG_REQUEST_PURPOSES
+from signalpost.websites import APPROVED_EXTERNAL_CLAIM_FAMILIES, APPROVED_WEBSITE_REQUEST_PURPOSES
 import signalpost.run as run_module
 from signalpost.run import main
 
@@ -59,11 +61,9 @@ def unsupported_financial_claim(claim: dict) -> bool:
 
 
 def _permitted_request_purposes(live_websites: bool) -> set[str]:
-    purposes = {"entity", "accounts", "roles", "subunits", "subunits_page"}
+    purposes = set(APPROVED_BRREG_REQUEST_PURPOSES)
     if live_websites:
-        # Existing gateway requests company-owned feeds only after website
-        # identity verification; source-rights policy permits this path.
-        purposes.update({"robots", "sitemap", "website_page", "feed"})
+        purposes.update(APPROVED_WEBSITE_REQUEST_PURPOSES)
     return purposes
 
 
@@ -309,7 +309,7 @@ def main_cli() -> int:
     permitted_purposes = _permitted_request_purposes(args.live_websites)
     all_requests_authorized = set(request_purposes) <= permitted_purposes \
         and "data.brreg.no" in set(event.get("physical_requests_by_host", {}))
-    external_families = {"owned_web", "owned_profile", "jobs", "public_activity"}
+    external_families = APPROVED_EXTERNAL_CLAIM_FAMILIES
     website_claims = [claim for env in envelopes for claim in env.get("claims", [])
                       if claim.get("state") == "available" and claim.get("field_family") in external_families]
     wrong_company_website_claims = 0

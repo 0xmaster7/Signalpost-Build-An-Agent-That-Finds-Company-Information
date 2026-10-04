@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 from signalpost import run as run_module
 from signalpost.adapter import validate_vendor_payload
 from signalpost.history import validate_artifact
+from signalpost.identifiers import canonical_product_heading
 from signalpost.models import Envelope, validate_publication_graph
 from signalpost.network import NetworkGateway
 
@@ -85,23 +86,30 @@ def _subunits_body(company: dict, companies: dict[str, dict]) -> dict:
     return {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
 
 
-def _website_html(company: dict, *, products: bool) -> bytes:
+def _website_html(company: dict, *, products: bool, path: str = "/") -> bytes:
     name, org = company["name"], company["organisation_number"]
     if products:
-        body = ("<html><head><title>Products and services</title></head><body>"
-            "<h1>Acme Service Systems</h1><h2>  acme\u00a0Service   Systems </h2>"
-            "<h2>Acme Service Systems</h2><h2>Logistics Service</h2>"
-            "<p>Customer Acme Customer AS, organisation 100000024.</p>"
-            "</body></html>")
+        description = "A fictional public company site used for local Signalpost integration."
+        headings = ("<h1>Acme Service Systems</h1><h2>  acme\u00a0Service   Systems </h2>"
+                    "<h2>Acme Service Systems</h2><h2>Logistics Service</h2>")
+        if path == "/services":
+            headings = "<h1>  acme\u00a0Service   Systems </h1><h2>Logistics Service</h2>"
+        elif path == "/products-two":
+            headings = "<h1>Acme Service Systems</h1><h2>Cloud Platform</h2>"
+        body = ("<html><head><title>Products and services</title><meta name=\"description\" content=\""
+            + description + "\"></head><body>" + headings
+            + "<p>Customer Acme Customer AS, organisation 100000024.</p></body></html>")
     else:
         schema = {"@context": "https://schema.org", "@type": "Organization", "name": "Fixture Brand",
             "legalName": name, "identifier": org}
         body = ("<html><head><title>" + name + "</title>"
             "<meta name=\"description\" content=\"A fictional public company site used for local Signalpost integration.\">"
             "<script type=\"application/ld+json\">" + json.dumps(schema, ensure_ascii=False, sort_keys=True) + "</script>"
-            "</head><body><h1>" + name + "</h1><footer>" + name + "</footer>"
+            "</head><body><h1>" + name + "</h1><h2>Fixture Brand</h2><footer>" + name + "</footer>"
             "<p>Customer Acme Customer AS, organisation 100000024.</p>"
-            "<a href=\"/products\">Products</a><a href=\"/products\">Services</a></body></html>")
+            "<a href=\"/products\">Products</a><a href=\"/products\">Services</a>"
+            + ("<a href=\"/services\">Services</a><a href=\"/products-two\">More products</a>"
+               if company.get("multi_page_products") else "") + "</body></html>")
     return body.encode("utf-8")
 
 
@@ -158,11 +166,15 @@ class LiveShapeTransport:
         if site:
             if path in {"", "/"}:
                 return 200, {"Content-Type": "text/html; charset=utf-8"}, _website_html(site, products=False), url
-            if path == "/products":
-                return 200, {"Content-Type": "text/html; charset=utf-8"}, _website_html(site, products=True), url
+            if path in {"/products", "/services", "/products-two"}:
+                return 200, {"Content-Type": "text/html; charset=utf-8"}, _website_html(site, products=True, path=path), url
             if path == "/sitemap.xml":
+                listed_pages = ["/products"]
+                if site.get("multi_page_products"):
+                    listed_pages.extend(["/services", "/products-two"])
                 body = ("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"
-                    f"<url><loc>https://{host}/products</loc></url></urlset>").encode()
+                    + "".join(f"<url><loc>https://{host}{path}</loc></url>" for path in listed_pages)
+                    + "</urlset>").encode()
                 return 200, {"Content-Type": "application/xml"}, body, url
         return 404, {"Content-Type": "application/json"}, b"{}", url
 
@@ -242,15 +254,59 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
             acme = by_org["100000008"]
             acme_claims = acme["claims"]
             headings = [claim for claim in acme_claims if claim["field"] == "product_or_service_heading"]
-            self.assertEqual(sorted(claim["value"] for claim in headings), ["Acme Service Systems", "Logistics Service"])
-            self.assertEqual(len({claim["claim_id"] for claim in headings}), 2)
+            self.assertEqual({canonical_product_heading(claim["value"]) for claim in headings},
+                {"acme service systems", "logistics service", "cloud platform"})
+            self.assertEqual(len({claim["claim_id"] for claim in headings}), len(headings))
             heading_evidence_ids = {evidence_id for claim in headings for evidence_id in claim["evidence_ids"]}
             heading_evidence = [item for item in acme["evidence"] if item["evidence_id"] in heading_evidence_ids
                 and item["json_pointer"] == "/html/body//h1|h2|h3"]
-            self.assertEqual(len(heading_evidence), 2)
-            self.assertEqual(len({item["evidence_id"] for item in heading_evidence}), 2)
-            self.assertEqual(len({tuple(item["source_snapshot_ids"]) for item in heading_evidence}), 1)
-            self.assertTrue(all("/products" in item["source_url"] for item in heading_evidence))
+            self.assertEqual(len(heading_evidence), 6)
+            self.assertEqual(len({item["evidence_id"] for item in heading_evidence}), 6)
+            page_specific_heading_evidence = [item for item in heading_evidence if "/products" in item["source_url"]
+                or "/services" in item["source_url"]]
+            self.assertEqual(len({item["source_url"] for item in page_specific_heading_evidence}), 3)
+            self.assertEqual(len({tuple(item["source_snapshot_ids"]) for item in page_specific_heading_evidence}), 3)
+            page_urls = {item["source_url"] for item in page_specific_heading_evidence}
+            evidence_by_id = {item["evidence_id"]: item for item in acme["evidence"]}
+            for page_url in page_urls:
+                same_page_equivalent_claims = [claim for claim in headings
+                    if canonical_product_heading(claim["value"]) == "acme service systems"
+                    and any(evidence_by_id[eid]["source_url"] == page_url
+                        and evidence_by_id[eid]["json_pointer"] == "/html/body//h1|h2|h3"
+                        for eid in claim["evidence_ids"])]
+                self.assertEqual(len(same_page_equivalent_claims), 1)
+            summary = acme["synthesis"]["summary"]["sentences"]
+            factual_texts = [item["text"] for item in summary if item.get("fact_ids")]
+            self.assertEqual(len(factual_texts), len(set(factual_texts)))
+            normalized_heading_sentences = [item for item in summary if item.get("fact_ids")
+                and item["text"].startswith("product_or_service_heading: Acme Service Systems")]
+            self.assertEqual(len(normalized_heading_sentences), 1)
+            self.assertGreaterEqual(len(normalized_heading_sentences[0]["fact_ids"]), 3)
+            self.assertGreaterEqual(len(normalized_heading_sentences[0]["evidence_ids"]), 4)
+            self.assertEqual(sum(1 for item in summary if item.get("fact_ids")
+                and item["text"].startswith("product_or_service_heading: Logistics Service")), 1)
+            self.assertEqual(sum(1 for item in summary if item.get("fact_ids")
+                and item["text"].startswith("product_or_service_heading: Cloud Platform")), 1)
+
+            description_claims = [claim for claim in acme_claims if claim["field"] == "website_description"]
+            self.assertGreaterEqual(len(description_claims), 3)
+            description_sentence = next(item for item in summary if item.get("fact_ids")
+                and item["text"].startswith("website_description:"))
+            self.assertEqual(len(description_sentence["fact_ids"]), len(description_claims))
+            self.assertEqual(len({snapshot_id for claim in description_claims for snapshot_id in claim["source_snapshot_ids"]
+                if snapshot_id.startswith("website:")}), len(description_claims))
+            self.assertEqual(len([item for item in summary if item.get("fact_ids")
+                and item["text"].startswith("website_description:")]), 1)
+
+            brand_claim = next(claim for claim in acme_claims if claim["field"] == "public_brand")
+            brand_evidence = [item for item in acme["evidence"] if item["evidence_id"] in brand_claim["evidence_ids"]]
+            self.assertTrue(any(item["json_pointer"] == "/structured_data/Organization/name" for item in brand_evidence))
+            self.assertTrue(any(item["json_pointer"] == "/html/body//h1|h2|h3" for item in brand_evidence))
+            second_company = by_org["100000016"]
+            for row in (acme, second_company):
+                brand_sentences = [item for item in row["synthesis"]["summary"]["sentences"]
+                    if item.get("fact_ids") and item["text"] == "public_brand: Fixture Brand (scope legal_entity)"]
+                self.assertEqual(len(brand_sentences), 1)
             for field in ("verified_website_url", "verified_website_domain"):
                 claim = next(item for item in acme_claims if item["field"] == field)
                 cited = {item["evidence_id"]: item for item in acme["evidence"]}

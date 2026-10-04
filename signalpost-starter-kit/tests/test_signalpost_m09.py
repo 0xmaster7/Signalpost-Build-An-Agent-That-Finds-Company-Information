@@ -26,17 +26,24 @@ from test_signalpost_m01 import valid_envelope
 from signalpost.websites import PageRecord, _additional_evidence_snapshot_ids, _make_claim, _page_key
 from run_m02_foundation_smoke import (_atomic_json, _preserve_run_bundle,
     _permitted_request_purposes, _run_preserving_failure, _validate_evaluator_rows)
+from signalpost.network import APPROVED_BRREG_REQUEST_PURPOSES
+from signalpost.websites import APPROVED_EXTERNAL_CLAIM_FAMILIES, APPROVED_WEBSITE_REQUEST_PURPOSES
 
 
 class M09ReleaseInputMatrixTests(unittest.TestCase):
     def test_smoke_purpose_allowlist_includes_only_approved_website_feed_path(self):
         base = _permitted_request_purposes(False)
         live = _permitted_request_purposes(True)
+        self.assertEqual(base, set(APPROVED_BRREG_REQUEST_PURPOSES))
+        self.assertEqual(live, set(APPROVED_BRREG_REQUEST_PURPOSES | APPROVED_WEBSITE_REQUEST_PURPOSES))
         self.assertNotIn("feed", base)
-        self.assertIn("feed", live)
-        self.assertTrue({"robots", "sitemap", "website_page"} <= live)
         self.assertNotIn("search", live)
         self.assertNotIn("browser", live)
+        self.assertNotIn("arbitrary_http", live)
+
+    def test_smoke_external_family_contract_uses_canonical_producer_names(self):
+        self.assertEqual(APPROVED_EXTERNAL_CLAIM_FAMILIES,
+            frozenset({"owned_web", "owned_profile", "jobs", "public_activity"}))
 
     def test_brreg_snapshot_ids_bind_stably_to_company_endpoint_and_payload(self):
         digest = hashlib.sha256(b"same response body").hexdigest()

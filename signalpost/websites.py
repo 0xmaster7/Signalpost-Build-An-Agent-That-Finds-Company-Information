@@ -38,6 +38,8 @@ MAX_DEPTH = 2
 MAX_SITEMAP_INDEXES = 5
 MAX_SITEMAP_URLS = 100
 MAX_FEEDS = 5
+APPROVED_WEBSITE_REQUEST_PURPOSES = frozenset({"robots", "sitemap", "website_page", "feed"})
+APPROVED_EXTERNAL_CLAIM_FAMILIES = frozenset({"owned_web", "owned_profile", "jobs", "public_activity"})
 
 SOCIAL_HOSTS = {
     "linkedin.com": "linkedin", "facebook.com": "facebook", "instagram.com": "instagram",
@@ -1365,7 +1367,14 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                           and normalize_name(_as_text(node.get("name"))) != normalize_name(profile.get("name"))), None)
             if brand:
                 eid = _public_evidence(proof_page, output.snapshots, output.evidence, org=org, excerpt=brand, locator="/structured_data/Organization/name")
-                output.claims.append(_make_claim(org, "public_brand", brand, proof_page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
+                corroborating_headings = [heading for heading in proof_page.headings
+                    if canonical_product_heading(heading) == canonical_product_heading(brand)]
+                brand_evidence = [eid]
+                if corroborating_headings:
+                    brand_evidence.append(_public_evidence(proof_page, output.snapshots, output.evidence,
+                        org=org, excerpt=brand, locator="/html/body//h1|h2|h3"))
+                output.claims.append(_make_claim(org, "public_brand", brand, proof_page, eid,
+                    evidence_ids=brand_evidence, proof_source=proof_source, proof_evidence=proof_evidence))
                 output.audit["website_claim_families"].append("public_brand")
             claim_pages = pages if not proof.get("shared_domain") else [proof_page]
             description = next((page.description for page in claim_pages if page.description and len(page.description.strip()) >= 30

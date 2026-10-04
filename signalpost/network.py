@@ -28,6 +28,7 @@ class NetworkPolicyError(ValueError):
 
 
 _BRREG_API_PURPOSES = {"entity", "accounts", "roles", "subunits", "subunits_page", "group"}
+APPROVED_BRREG_REQUEST_PURPOSES = frozenset(_BRREG_API_PURPOSES)
 _BRREG_ORG_PATH = re.compile(r"^/enhetsregisteret/api/(?:enheter|konsernstruktur)/\d{9}(?:/roller)?/?$")
 _BRREG_ACCOUNTS_PATH = re.compile(r"^/regnskapsregisteret/regnskap/\d{9}/?$")
 

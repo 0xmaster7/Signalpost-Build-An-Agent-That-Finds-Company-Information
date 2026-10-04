@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .identifiers import canonical_product_heading
 from .models import Envelope, PublicState
 
 
@@ -33,6 +34,20 @@ def _sentence(claim: Any) -> str:
     return text
 
 
+def _fact_key(claim: Any) -> tuple[str, str]:
+    """Key facts using the same canonical equivalence rule as website headings."""
+    value = (_value_text(claim.value))
+    if claim.field == "product_or_service_heading" and isinstance(claim.value, str):
+        value = canonical_product_heading(claim.value)
+    dimensions = json.dumps({"organisation_number": claim.organisation_number,
+        "subject_id": claim.subject_id, "field_family": claim.field_family, "field": claim.field,
+        "value": value, "period_start": claim.period_start.isoformat() if claim.period_start else None,
+        "period_end": claim.period_end.isoformat() if claim.period_end else None,
+        "currency": claim.currency, "unit": claim.unit, "scope": claim.scope},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return claim.section or "", dimensions
+
+
 def _change_sentence(event: Any) -> str:
     before, after = _value_text(event.old_value), _value_text(event.new_value)
     text = f"M07 observed event {event.type.value}"
@@ -57,10 +72,11 @@ def synthesize(envelope: Envelope) -> dict[str, Any]:
     # Distinct canonical observations can express the same exact fact when
     # repeated across pages. Publish one sentence, retaining every claim and
     # citation so the deduplication does not discard provenance.
-    factual_sentences: dict[str, dict[str, Any]] = {}
+    factual_sentences: dict[tuple[str, str], dict[str, Any]] = {}
     for claim in claims:
         text = _sentence(claim)
-        sentence = factual_sentences.setdefault(text, {"text": text, "fact_ids": [], "evidence_ids": []})
+        sentence = factual_sentences.setdefault(_fact_key(claim),
+            {"text": text, "fact_ids": [], "evidence_ids": []})
         sentence["fact_ids"].append(claim.claim_id)
         sentence["evidence_ids"].extend(claim.evidence_ids)
     sentences = []
@@ -87,7 +103,7 @@ def validate_synthesis(envelope: Envelope, synthesis: dict[str, Any]) -> None:
     claims = {claim.claim_id: claim for claim in envelope.claims}
     evidence = {item.evidence_id: item for item in envelope.evidence}
     changes = {item.event_id: item for item in envelope.refresh.changes}
-    seen_factual_texts: set[str] = set()
+    seen_factual_facts: set[tuple[str, str]] = set()
     for sentence in synthesis.get("sentences", []):
         fact_ids = sentence.get("fact_ids") or []
         change_ids = sentence.get("change_ids") or []
@@ -118,9 +134,6 @@ def validate_synthesis(envelope: Envelope, synthesis: dict[str, Any]) -> None:
                 raise ValueError("M07 synthesis wording changed its event or temporal meaning")
             continue
         text = sentence.get("text")
-        if text in seen_factual_texts:
-            raise ValueError("duplicate factual synthesis sentence")
-        seen_factual_texts.add(text)
         if len(fact_ids) != len(set(fact_ids)):
             raise ValueError("synthesis sentence repeats a claim reference")
         sentence_claims = []
@@ -129,14 +142,19 @@ def validate_synthesis(envelope: Envelope, synthesis: dict[str, Any]) -> None:
             if (claim is None or claim.state != PublicState.AVAILABLE
                     or claim.organisation_number != envelope.organisation_number):
                 raise ValueError("synthesis fact is unavailable or belongs to another company")
-            if text != _sentence(claim):
-                raise ValueError("synthesis sentence contains unsupported or altered factual wording")
             sentence_claims.append(claim)
+        fact_keys = {_fact_key(claim) for claim in sentence_claims}
+        if len(fact_keys) != 1:
+            raise ValueError("synthesis sentence combines distinct canonical facts")
+        fact_key = next(iter(fact_keys))
+        if fact_key in seen_factual_facts:
+            raise ValueError("duplicate factual synthesis sentence")
+        seen_factual_facts.add(fact_key)
+        if text not in {_sentence(claim) for claim in sentence_claims}:
+            raise ValueError("synthesis sentence contains unsupported or altered factual wording")
         supported_evidence = set().union(*(set(claim.evidence_ids) for claim in sentence_claims))
-        if not set(evidence_ids) <= supported_evidence:
-            raise ValueError("synthesis citation does not support its referenced claims")
-        if any(not (set(evidence_ids) & set(claim.evidence_ids)) for claim in sentence_claims):
-            raise ValueError("synthesis sentence lacks a citation for one referenced claim")
+        if set(evidence_ids) != supported_evidence:
+            raise ValueError("synthesis citations are incomplete or unsupported for referenced claims")
         for evidence_id in evidence_ids:
             item = evidence.get(evidence_id)
             if item is None or item.subject_organisation_number != envelope.organisation_number:

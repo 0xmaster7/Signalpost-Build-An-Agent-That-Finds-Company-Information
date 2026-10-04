@@ -321,7 +321,7 @@ class SynthesisContractTests(unittest.TestCase):
     def test_equal_facts_from_distinct_pages_publish_once_with_all_provenance(self):
         heading = {"section": "website_owned_profiles", "family": "owned_web",
                    "field": "product_or_service_heading", "value": "Tjenester"}
-        envelope = make_envelope("001234567", "Acme AS", [heading, {**heading, "source_url":
+        envelope = make_envelope("001234567", "Acme AS", [heading, {**heading, "value": "  tjenester ", "source_url":
             "https://acme.example/services"}])
         output = synthesize(envelope)
         matching = [item for item in output["sentences"] if item["text"].startswith("product_or_service_heading:")]
@@ -343,8 +343,26 @@ class SynthesisContractTests(unittest.TestCase):
         output = synthesize(envelope)
         sentence = next(item for item in output["sentences"] if item["text"].startswith("website_description:"))
         sentence["evidence_ids"] = sentence["evidence_ids"][:1]
-        with self.assertRaisesRegex(ValueError, "lacks a citation for one referenced claim"):
+        with self.assertRaisesRegex(ValueError, "citations are incomplete"):
             validate_synthesis(envelope, output)
+
+        forged = synthesize(envelope)
+        target = next(item for item in forged["sentences"] if item["text"].startswith("website_description:"))
+        target["fact_ids"].append("missing-claim")
+        with self.assertRaisesRegex(ValueError, "unavailable or belongs"):
+            validate_synthesis(envelope, forged)
+
+        forged = synthesize(envelope)
+        target = next(item for item in forged["sentences"] if item["text"].startswith("website_description:"))
+        target["evidence_ids"].append("foreign-evidence")
+        for claim in envelope.claims:
+            if claim.field == "website_description":
+                claim.evidence_ids.append("foreign-evidence")
+        envelope.evidence.append(Evidence(evidence_id="foreign-evidence", source_url="https://foreign.example/",
+            retrieved_at=AS_OF, content_sha256=hashlib.sha256(b"foreign").hexdigest(),
+            extraction_method="fixture", subject_organisation_number="123456789", source_snapshot_ids=["foreign-snapshot"]))
+        with self.assertRaises(ValueError):
+            validate_synthesis(envelope, forged)
 
     def test_sparse_blocked_profile_does_not_claim_dormancy_or_current_hiring(self):
         envelope = make_envelope("923609016", "Sparse AS", [])

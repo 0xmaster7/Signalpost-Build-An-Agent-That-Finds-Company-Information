@@ -10,7 +10,8 @@
       "robots_mode": "allow",
       "accounts_mode": "history_with_exact_duplicate",
       "roles_mode": "normal",
-      "subunits_mode": "child"
+      "subunits_mode": "child",
+      "multi_page_products": true
     },
     {
       "organisation_number": "100000016",
@@ -74,10 +75,18 @@
     "parent_company": "100000008",
     "subsidiary_company": "100000016",
     "customer_company": "100000024",
-    "website_heading_values": ["Acme Service Systems", "Logistics Service"],
+    "website_heading_values": [
+      "Acme Service Systems",
+      "Logistics Service"
+    ],
     "equivalent_duplicate_heading": "Acme Service Systems",
     "malformed_optional_company": "100000024",
     "robots_disallowed_company": "100000032",
-    "robots_unreachable_company": "100000059"
+    "robots_unreachable_company": "100000059",
+    "multi_page_company": "100000008",
+    "repeated_product_fact_across_pages": "Acme Service Systems",
+    "equivalent_product_heading": "Acme Service Systems",
+    "distinct_product_heading": "Cloud Platform",
+    "same_company_brand_for_isolation": "Fixture Brand"
   }
 }
