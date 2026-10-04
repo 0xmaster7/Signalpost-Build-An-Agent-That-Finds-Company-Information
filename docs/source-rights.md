@@ -1,6 +1,6 @@
 # Source-rights register
 
-Reviewed 2026-10-03. Machine-readable policy: [`config/source_policy.yaml`](../config/source_policy.yaml).
+Originally reviewed 2026-10-03 and rechecked for M09 RC1 on 2026-10-05; no source classes, credentials, or retention permissions were added. Machine-readable policy: [`config/source_policy.yaml`](../config/source_policy.yaml).
 
 | Source | Acquisition | Rights and attribution | Retention | M02 use |
 |---|---|---|---|---|
