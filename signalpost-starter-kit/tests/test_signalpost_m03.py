@@ -410,6 +410,28 @@ class WebsiteIdentityTests(unittest.TestCase):
             self.assertEqual(len(page_sources), 1)
             self.assertTrue(page_sources[0].endswith(claim.value + "/"))
 
+    def test_duplicate_candidates_redirecting_to_same_proof_emit_unique_evidence(self):
+        html = f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><footer>{LEGAL}</footer></body></html>'''
+        class CanonicalizingGateway(FakeGateway):
+            async def fetch(self, url, *, purpose, user_agent, max_bytes, allowed_hosts):
+                status, headers, body = self.pages.get(url, (200, {"Content-Type": "text/html"}, html.encode()))
+                final = "https://example.no/" if "example.no" in url else url
+                self.ledger.logical_requests += 1
+                self.ledger.physical_requests += 1
+                self.ledger.entries.append(type("Entry", (), {"purpose": purpose, "url": url, "status": status, "outcome": "received"})())
+                return status, headers, body[:max_bytes], final, "received"
+
+        gateway = CanonicalizingGateway({})
+        result = __import__("asyncio").run(research_company(self.profile(website_candidates=[
+            "https://example.no/", "https://www.example.no/"]), gateway, enable_keyless=False))
+        evidence_ids = [item.evidence_id for item in result.evidence]
+        snapshot_ids = [item.source_id for item in result.snapshots]
+        claim_ids = [item.claim_id for item in result.claims]
+        self.assertEqual(len(evidence_ids), len(set(evidence_ids)))
+        self.assertEqual(len(snapshot_ids), len(set(snapshot_ids)))
+        self.assertEqual(len(claim_ids), len(set(claim_ids)))
+        self.assertEqual(result.audit["duplicate_accepted_proofs_deduplicated"], 1)
+
     def test_website_contact_personal_data_is_not_retained_as_claim_excerpt(self):
         html = f'''<html><head><meta name="description" content="Contact Jane Doe at jane@example.no or call 98765432 for details about our business."><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><footer>{LEGAL}</footer></body></html>'''
         gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html.encode())})

@@ -579,6 +579,11 @@ def _page_key(page: PageRecord) -> str:
     return hashlib.sha256((page.final_url + "\0" + page.digest).encode()).hexdigest()[:16]
 
 
+def _proof_key(assessment: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(assessment["proof"], sort_keys=True, ensure_ascii=False,
+        separators=(",", ":")).encode()).hexdigest()
+
+
 def _public_evidence(page: PageRecord, snapshots: list[SourceSnapshot], evidence: list[Evidence], *,
                      org: str, excerpt: str | None = None, locator: str | None = None) -> str:
     page_key = _page_key(page)
@@ -1207,7 +1212,12 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             if assessment["decision"] == "accepted":
                 candidate_row["proof"] = assessment["proof"]
                 candidate_row["target_url"] = assessment["target_page"]
-                accepted_pages.append((candidate, pages, assessment, delay))
+                proof_key = _proof_key(assessment)
+                if any(_proof_key(existing[2]) == proof_key for existing in accepted_pages):
+                    output.audit["duplicate_accepted_proofs_deduplicated"] = (
+                        output.audit.get("duplicate_accepted_proofs_deduplicated", 0) + 1)
+                else:
+                    accepted_pages.append((candidate, pages, assessment, delay))
             elif assessment["decision"] == "ambiguous" and candidate_row["decision"] == "ambiguous":
                 candidate_row["review_reason"] = assessment["reason"]
                 output.audit["high_risk_review"].append({"url": url, "reason": assessment["reason"], "source": candidate["source"]})
