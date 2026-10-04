@@ -6,18 +6,21 @@ import contextlib
 import hashlib
 import io
 import json
+import math
 import os
 import resource
 import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from signalpost.models import PublicState
+from signalpost.brreg import SUPPORTED_CURRENCY_CODES
 from signalpost.run import main
 
 
@@ -27,6 +30,27 @@ def sha(path: Path) -> str:
         while block := stream.read(1024 * 1024):
             digest.update(block)
     return digest.hexdigest()
+
+
+def unsupported_financial_claim(claim: dict) -> bool:
+    """Detect invalid canonical metadata as well as unapproved metric names."""
+    if claim.get("field") not in {"revenue", "operating_result", "profit_before_tax", "annual_result",
+                                  "total_assets", "equity", "total_debt"}:
+        return True
+    currency = claim.get("currency")
+    if not isinstance(currency, str) or currency not in SUPPORTED_CURRENCY_CODES:
+        return True
+    if claim.get("scope") not in {"legal_entity", "group"}:
+        return True
+    value = claim.get("value")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        return True
+    try:
+        start = datetime.fromisoformat(str(claim.get("period_start", "")).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(str(claim.get("period_end", "")).replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    return start > end
 
 
 def source_tree_provenance() -> tuple[str, bool, str]:
@@ -81,8 +105,7 @@ def main_cli() -> int:
         for claim in available_claims
     )
     financial = [claim for claim in available_claims if claim.get("section") == "accounts_history" and claim.get("field_family") == "financial"]
-    allowed_metrics = {"revenue", "operating_result", "profit_before_tax", "annual_result", "total_assets", "equity", "total_debt"}
-    unsupported_financials = sum(claim.get("field") not in allowed_metrics for claim in financial)
+    unsupported_financials = sum(unsupported_financial_claim(claim) for claim in financial)
     role_count = sum(env.get("synthesis", {}).get("brreg_observations", {}).get("roles_count", 0) for env in envelopes)
     workplace_count = sum(env.get("synthesis", {}).get("brreg_observations", {}).get("workplace_count", 0) for env in envelopes)
     workplace_complete = sum(bool(env.get("synthesis", {}).get("brreg_observations", {}).get("workplaces_complete")) for env in envelopes)
@@ -107,12 +130,14 @@ def main_cli() -> int:
         "cardinality": row_count_ok and input_to_output_ok,
         "exact_identity_anchor_coverage": exact_identity_rows == 100,
         "available_claims_have_required_evidence": evidence_complete,
-        "unsupported_financial_publications": unsupported_financials,
+        "unsupported_financial_publications": unsupported_financials == 0,
         "wrong_company_accepted_domains": 0,
         "only_official_brreg_requests": all_requests_official,
         "official_requests_made": event.get("physical_gateway_requests", 0) > 0,
     }
     hard_gates = [name for name, passed in validation.items() if passed is False]
+    if unsupported_financials and "unsupported_financial_publications" not in hard_gates:
+        hard_gates.append("unsupported_financial_publications")
     if len(envelopes) != 100:
         hard_gates.append("100_envelopes")
     if exit_code != 0:

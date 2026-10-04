@@ -7,11 +7,12 @@
       "network": "disabled",
       "scheduler_concurrency": 8
     },
-    "git_sha": "b1757d53e27de082237725da24a189c6c695168c",
-    "working_tree_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "working_tree_dirty": false
+    "git_sha": "3ce1cc81f90398cd71c75a4586029f41b2c8df3f",
+    "working_tree_diff_sha256": "0699594ef8069535c5113ebbbd17b4f44cf301d25f29ad82841db42fd9a8dfd2",
+    "working_tree_dirty": true
   },
   "budget_pressure": {
+    "actual_physical_requests": 0,
     "budget_denied_logical_requests": 3701,
     "budget_skipped_optional_actions": 2480,
     "coalesced_requests": 0,
@@ -21,13 +22,15 @@
       "logical_request_allowance": 2480
     },
     "exact_identity_anchors": 0,
-    "last_company_completion_seconds": 2.8353,
+    "identity_safety_measurement": "not_measured",
+    "last_company_completion_seconds": 1.8094,
     "logical_requests": 7721,
     "logical_requests_denied": 3701,
     "logical_requests_reserved": 4020,
     "max_concurrency": 8,
     "measurement_kind": "scheduler_simulation",
     "modeled_physical_reservations": 4020,
+    "official_scheduler_completions": 1000,
     "optional_pass_completions": {
       "jobs_activity": 0,
       "website_shallow": 0,
@@ -47,7 +50,7 @@
         "expected_seconds": 343.99999999999534,
         "failed": 0,
         "opportunity_score": 151.2,
-        "worker_seconds": 10.384230023657437
+        "worker_seconds": 9.244016533996728
       },
       "official_foundation": {
         "cancelled": 0,
@@ -60,7 +63,7 @@
         "expected_seconds": 2887.9999999999527,
         "failed": 0,
         "opportunity_score": 11402.400000000202,
-        "worker_seconds": 7.007580540172057
+        "worker_seconds": 4.669134978013972
       },
       "website_shallow": {
         "cancelled": 0,
@@ -73,7 +76,7 @@
         "expected_seconds": 343.99999999999534,
         "failed": 0,
         "opportunity_score": 151.2,
-        "worker_seconds": 10.411583903594874
+        "worker_seconds": 9.433216441017066
       },
       "website_verify": {
         "cancelled": 0,
@@ -86,33 +89,33 @@
         "expected_seconds": 343.99999999999534,
         "failed": 0,
         "opportunity_score": 151.2,
-        "worker_seconds": 12.94210417510476
+        "worker_seconds": 8.035705514997062
       }
     },
     "per_host_peak_max": 2,
-    "runtime_seconds": 5.7984,
+    "runtime_seconds": 4.4777,
     "scheduler_actions": 1520,
-    "simulated_identity_attempts": 1000,
+    "simulated_identity_outcomes": [],
     "starved_official": 0,
     "terminal_official_work_items": 1000,
-    "wrong_company_promotions": 0
+    "wrong_company_promotions": null
   },
   "network": "disabled; synthetic scheduler and offline parser/writer only",
   "offline_10000": {
     "available_rows": 10000,
     "batch_event": {
       "available": 10000,
-      "batch_id": "64aeebe0-43b4-44b1-955d-27284e6520e9",
+      "batch_id": "e20e8ef5-e3f1-48a6-90ad-13310601b521",
       "budget_seconds": 1800.0,
       "coalesced_requests": 0,
-      "completion_reserve_remaining_seconds": 1760.754,
+      "completion_reserve_remaining_seconds": 1779.769,
       "completion_reserve_seconds": 300.0,
       "errors_by_code": {},
       "event": "batch_complete",
-      "evidence_cutoff": "2026-10-03T09:59:54.229936+00:00",
+      "evidence_cutoff": "2026-10-04T01:46:06.259163+00:00",
       "evidence_cutoff_source": "run_start",
       "failed": 0,
-      "finalization_seconds": 13.382,
+      "finalization_seconds": 7.096,
       "logical_gateway_requests": 0,
       "logical_request_limit": null,
       "output_cardinality": 10000,
@@ -128,36 +131,36 @@
       "request_limit": 121000,
       "requests_by_purpose": {},
       "rows": 10000,
-      "runtime_seconds": 39.245,
+      "runtime_seconds": 20.231,
       "scheduler_passes": {},
-      "timestamp": "2026-10-03T10:00:33.482824+00:00"
+      "timestamp": "2026-10-04T01:46:26.490361+00:00"
     },
     "input_rows": 10000,
     "input_sha256": "055f880a59b8ed88247ad4efcf7f901f55b70be5aebdb053e2cefb2268e71105",
-    "max_rss_mib": 294.28,
+    "max_rss_mib": 294.78,
     "measurement_kind": "offline_runner_benchmark",
     "ordered": true,
     "output_rows": 10000,
-    "output_sha256": "447ff312c9861ac2fbdfa5a434c056f0a55e30c459ff427a5ed52bac72a8f6f3",
+    "output_sha256": "2c9bf0e2ab72ebae82f20de2524e9c246cd448a4fedfdd22d52529fac8fae2cd",
     "peak_tracemalloc_mib": 112.8,
     "physical_requests": 0,
-    "runtime_seconds": 40.396
+    "runtime_seconds": 20.708
   },
   "operational_write_1000": {
     "available_rows": 1000,
     "batch_event": {
       "available": 1000,
-      "batch_id": "c2a1500e-7398-4a67-8bf8-e53cdbeb153f",
+      "batch_id": "16160511-05ac-421c-aa69-c28fc6497e9e",
       "budget_seconds": 1800.0,
       "coalesced_requests": 0,
-      "completion_reserve_remaining_seconds": 1796.584,
+      "completion_reserve_remaining_seconds": 1797.924,
       "completion_reserve_seconds": 300.0,
       "errors_by_code": {},
       "event": "batch_complete",
-      "evidence_cutoff": "2026-10-03T09:59:45.220771+00:00",
+      "evidence_cutoff": "2026-10-04T01:46:00.741683+00:00",
       "evidence_cutoff_source": "run_start",
       "failed": 0,
-      "finalization_seconds": 1.133,
+      "finalization_seconds": 0.691,
       "logical_gateway_requests": 0,
       "logical_request_limit": null,
       "output_cardinality": 1000,
@@ -173,36 +176,36 @@
       "request_limit": 13000,
       "requests_by_purpose": {},
       "rows": 1000,
-      "runtime_seconds": 3.416,
+      "runtime_seconds": 2.076,
       "scheduler_passes": {},
-      "timestamp": "2026-10-03T09:59:48.639741+00:00"
+      "timestamp": "2026-10-04T01:46:02.817338+00:00"
     },
     "input_rows": 1000,
     "input_sha256": "69cc597de759a9629c70660a3b370a737b0c726289d37513cc8c2e621dbb4cf4",
-    "max_rss_mib": 64.19,
+    "max_rss_mib": 64.83,
     "measurement_kind": "offline_runner_benchmark",
     "ordered": true,
     "output_rows": 1000,
-    "output_sha256": "2cca3814edddb53b17600a00e0acec1897ff2bf97ed134058b2aed622b2cbb29",
+    "output_sha256": "43f5715c3f6d17acfe2f22d122444dcbf24b7fee2b3a4077d287de80abfea91b",
     "peak_tracemalloc_mib": 11.33,
     "physical_requests": 0,
-    "runtime_seconds": 3.535
+    "runtime_seconds": 2.124
   },
   "operational_write_1200": {
     "available_rows": 1200,
     "batch_event": {
       "available": 1200,
-      "batch_id": "0c8ac54d-bdb9-4374-9536-e613c5b25830",
+      "batch_id": "98a3f5a9-c60b-4002-8338-e21a5450f985",
       "budget_seconds": 1800.0,
       "coalesced_requests": 0,
-      "completion_reserve_remaining_seconds": 1795.926,
+      "completion_reserve_remaining_seconds": 1797.486,
       "completion_reserve_seconds": 300.0,
       "errors_by_code": {},
       "event": "batch_complete",
-      "evidence_cutoff": "2026-10-03T09:59:49.234695+00:00",
+      "evidence_cutoff": "2026-10-04T01:46:03.182138+00:00",
       "evidence_cutoff_source": "run_start",
       "failed": 0,
-      "finalization_seconds": 1.516,
+      "finalization_seconds": 1.026,
       "logical_gateway_requests": 0,
       "logical_request_limit": null,
       "output_cardinality": 1200,
@@ -218,22 +221,23 @@
       "request_limit": 15400,
       "requests_by_purpose": {},
       "rows": 1200,
-      "runtime_seconds": 4.073,
+      "runtime_seconds": 2.513,
       "scheduler_passes": {},
-      "timestamp": "2026-10-03T09:59:53.310694+00:00"
+      "timestamp": "2026-10-04T01:46:05.695755+00:00"
     },
     "input_rows": 1200,
     "input_sha256": "4530b8de69557c2a1f29c828fb27dac1e5d6d470a9d5628ceebbe448dafd227f",
-    "max_rss_mib": 76.68,
+    "max_rss_mib": 77.13,
     "measurement_kind": "offline_runner_benchmark",
     "ordered": true,
     "output_rows": 1200,
-    "output_sha256": "14d67ba4bab1f63fa72b7c0e0957456ea568fad06287b24f59cdd0969e89c288",
-    "peak_tracemalloc_mib": 13.41,
+    "output_sha256": "47dd1c1ba57f54f2dcdba5d2a3ca6a6ee4a98b5693996789ecc5fc8c99b34cdf",
+    "peak_tracemalloc_mib": 13.4,
     "physical_requests": 0,
-    "runtime_seconds": 4.191
+    "runtime_seconds": 2.59
   },
   "sim_1000": {
+    "actual_physical_requests": 0,
     "budget_denied_logical_requests": 0,
     "budget_skipped_optional_actions": 0,
     "coalesced_requests": 371,
@@ -241,13 +245,15 @@
     "completion_reserve_active_at_end": false,
     "deferred_optional_by_reason": {},
     "exact_identity_anchors": 0,
-    "last_company_completion_seconds": 6.0131,
+    "identity_safety_measurement": "not_measured",
+    "last_company_completion_seconds": 3.3627,
     "logical_requests": 7721,
     "logical_requests_denied": 0,
     "logical_requests_reserved": 7721,
     "max_concurrency": 8,
     "measurement_kind": "scheduler_simulation",
     "modeled_physical_reservations": 7350,
+    "official_scheduler_completions": 1000,
     "optional_pass_completions": {
       "jobs_activity": 1000,
       "website_shallow": 1000,
@@ -267,7 +273,7 @@
         "expected_seconds": 343.99999999999534,
         "failed": 0,
         "opportunity_score": 151.2,
-        "worker_seconds": 9.683025565056596
+        "worker_seconds": 6.8737910500149155
       },
       "official_foundation": {
         "cancelled": 0,
@@ -280,7 +286,7 @@
         "expected_seconds": 2887.9999999999527,
         "failed": 0,
         "opportunity_score": 11402.400000000202,
-        "worker_seconds": 6.5099227672908455
+        "worker_seconds": 3.6596514470111288
       },
       "website_shallow": {
         "cancelled": 0,
@@ -293,7 +299,7 @@
         "expected_seconds": 343.99999999999534,
         "failed": 0,
         "opportunity_score": 151.2,
-        "worker_seconds": 12.946014047629433
+        "worker_seconds": 6.530307752006593
       },
       "website_verify": {
         "cancelled": 0,
@@ -306,18 +312,19 @@
         "expected_seconds": 343.99999999999534,
         "failed": 0,
         "opportunity_score": 151.2,
-        "worker_seconds": 13.214696777431527
+        "worker_seconds": 6.50637367600757
       }
     },
     "per_host_peak_max": 2,
-    "runtime_seconds": 6.0144,
+    "runtime_seconds": 3.3637,
     "scheduler_actions": 4000,
-    "simulated_identity_attempts": 1000,
+    "simulated_identity_outcomes": [],
     "starved_official": 0,
     "terminal_official_work_items": 1000,
-    "wrong_company_promotions": 0
+    "wrong_company_promotions": null
   },
   "sim_1200": {
+    "actual_physical_requests": 0,
     "budget_denied_logical_requests": 0,
     "budget_skipped_optional_actions": 0,
     "coalesced_requests": 446,
@@ -325,13 +332,15 @@
     "completion_reserve_active_at_end": false,
     "deferred_optional_by_reason": {},
     "exact_identity_anchors": 0,
-    "last_company_completion_seconds": 8.5085,
+    "identity_safety_measurement": "not_measured",
+    "last_company_completion_seconds": 4.9735,
     "logical_requests": 9266,
     "logical_requests_denied": 0,
     "logical_requests_reserved": 9266,
     "max_concurrency": 8,
     "measurement_kind": "scheduler_simulation",
     "modeled_physical_reservations": 8820,
+    "official_scheduler_completions": 1200,
     "optional_pass_completions": {
       "jobs_activity": 1200,
       "website_shallow": 1200,
@@ -351,7 +360,7 @@
         "expected_seconds": 412.79999999999416,
         "failed": 0,
         "opportunity_score": 181.43999999999772,
-        "worker_seconds": 21.679852915374795
+        "worker_seconds": 9.46419898296881
       },
       "official_foundation": {
         "cancelled": 0,
@@ -364,7 +373,7 @@
         "expected_seconds": 3465.5999999999367,
         "failed": 0,
         "opportunity_score": 13682.880000000372,
-        "worker_seconds": 7.898674925672822
+        "worker_seconds": 5.347517804006202
       },
       "website_shallow": {
         "cancelled": 0,
@@ -377,7 +386,7 @@
         "expected_seconds": 412.79999999999416,
         "failed": 0,
         "opportunity_score": 181.43999999999772,
-        "worker_seconds": 16.305253372818697
+        "worker_seconds": 10.459527211992281
       },
       "website_verify": {
         "cancelled": 0,
@@ -390,19 +399,20 @@
         "expected_seconds": 412.79999999999416,
         "failed": 0,
         "opportunity_score": 181.43999999999772,
-        "worker_seconds": 14.03397113311803
+        "worker_seconds": 9.606085543989138
       }
     },
     "per_host_peak_max": 2,
-    "runtime_seconds": 8.511,
+    "runtime_seconds": 4.9742,
     "scheduler_actions": 4800,
-    "simulated_identity_attempts": 1200,
+    "simulated_identity_outcomes": [],
     "starved_official": 0,
     "terminal_official_work_items": 1200,
-    "wrong_company_promotions": 0
+    "wrong_company_promotions": null
   },
   "stress_modes": {
     "A": {
+      "actual_physical_requests": 0,
       "budget_denied_logical_requests": 1421,
       "budget_skipped_optional_actions": 1102,
       "coalesced_requests": 362,
@@ -412,13 +422,15 @@
         "logical_request_allowance": 1102
       },
       "exact_identity_anchors": 0,
-      "last_company_completion_seconds": 5.3588,
+      "identity_safety_measurement": "not_measured",
+      "last_company_completion_seconds": 4.3458,
       "logical_requests": 7721,
       "logical_requests_denied": 1421,
       "logical_requests_reserved": 6300,
       "max_concurrency": 8,
       "measurement_kind": "scheduler_simulation",
       "modeled_physical_reservations": 5938,
+      "official_scheduler_completions": 1000,
       "optional_pass_completions": {
         "jobs_activity": 0,
         "website_shallow": 898,
@@ -438,7 +450,7 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 18.03224902128568
+          "worker_seconds": 11.25492856800065
         },
         "official_foundation": {
           "cancelled": 0,
@@ -451,7 +463,7 @@
           "expected_seconds": 2887.9999999999527,
           "failed": 0,
           "opportunity_score": 11402.400000000202,
-          "worker_seconds": 8.777916770952288
+          "worker_seconds": 6.372211840985983
         },
         "website_shallow": {
           "cancelled": 0,
@@ -464,7 +476,7 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 14.03409666911466
+          "worker_seconds": 11.8119888799838
         },
         "website_verify": {
           "cancelled": 0,
@@ -477,18 +489,19 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 15.19311777301482
+          "worker_seconds": 12.533959402009714
         }
       },
       "per_host_peak_max": 2,
-      "runtime_seconds": 7.9567,
+      "runtime_seconds": 5.9663,
       "scheduler_actions": 2898,
-      "simulated_identity_attempts": 1000,
+      "simulated_identity_outcomes": [],
       "starved_official": 0,
       "terminal_official_work_items": 1000,
-      "wrong_company_promotions": 0
+      "wrong_company_promotions": null
     },
     "B": {
+      "actual_physical_requests": 0,
       "budget_denied_logical_requests": 0,
       "budget_skipped_optional_actions": 0,
       "coalesced_requests": 371,
@@ -496,13 +509,15 @@
       "completion_reserve_active_at_end": false,
       "deferred_optional_by_reason": {},
       "exact_identity_anchors": 0,
-      "last_company_completion_seconds": 8.2042,
+      "identity_safety_measurement": "not_measured",
+      "last_company_completion_seconds": 5.1089,
       "logical_requests": 7721,
       "logical_requests_denied": 0,
       "logical_requests_reserved": 7721,
       "max_concurrency": 8,
       "measurement_kind": "scheduler_simulation",
       "modeled_physical_reservations": 7350,
+      "official_scheduler_completions": 1000,
       "optional_pass_completions": {
         "jobs_activity": 1000,
         "website_shallow": 1000,
@@ -522,7 +537,7 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 14.441116061731009
+          "worker_seconds": 8.64225796599294
         },
         "official_foundation": {
           "cancelled": 0,
@@ -535,7 +550,7 @@
           "expected_seconds": 2887.9999999999527,
           "failed": 0,
           "opportunity_score": 11402.400000000202,
-          "worker_seconds": 14.345187740167603
+          "worker_seconds": 6.5334332039874425
         },
         "website_shallow": {
           "cancelled": 0,
@@ -548,7 +563,7 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 14.15773558881483
+          "worker_seconds": 9.865947064986358
         },
         "website_verify": {
           "cancelled": 0,
@@ -561,18 +576,19 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 14.793921222677454
+          "worker_seconds": 10.786058581988982
         }
       },
       "per_host_peak_max": 2,
-      "runtime_seconds": 8.2078,
+      "runtime_seconds": 5.1095,
       "scheduler_actions": 4000,
-      "simulated_identity_attempts": 1000,
+      "simulated_identity_outcomes": [],
       "starved_official": 0,
       "terminal_official_work_items": 1000,
-      "wrong_company_promotions": 0
+      "wrong_company_promotions": null
     },
     "C": {
+      "actual_physical_requests": 0,
       "budget_denied_logical_requests": 0,
       "budget_skipped_optional_actions": 0,
       "coalesced_requests": 371,
@@ -580,13 +596,15 @@
       "completion_reserve_active_at_end": false,
       "deferred_optional_by_reason": {},
       "exact_identity_anchors": 0,
-      "last_company_completion_seconds": 6.7643,
+      "identity_safety_measurement": "not_measured",
+      "last_company_completion_seconds": 5.0505,
       "logical_requests": 7721,
       "logical_requests_denied": 0,
       "logical_requests_reserved": 7721,
       "max_concurrency": 8,
       "measurement_kind": "scheduler_simulation",
       "modeled_physical_reservations": 7350,
+      "official_scheduler_completions": 1000,
       "optional_pass_completions": {
         "jobs_activity": 1000,
         "website_shallow": 1000,
@@ -606,7 +624,7 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 14.291648488288047
+          "worker_seconds": 8.045984002998921
         },
         "official_foundation": {
           "cancelled": 0,
@@ -619,7 +637,7 @@
           "expected_seconds": 2887.9999999999527,
           "failed": 0,
           "opportunity_score": 11402.400000000202,
-          "worker_seconds": 9.15796572502586
+          "worker_seconds": 7.49002347599162
         },
         "website_shallow": {
           "cancelled": 0,
@@ -632,7 +650,7 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 12.04810723036644
+          "worker_seconds": 9.065622486980828
         },
         "website_verify": {
           "cancelled": 0,
@@ -645,18 +663,19 @@
           "expected_seconds": 343.99999999999534,
           "failed": 0,
           "opportunity_score": 151.2,
-          "worker_seconds": 12.136913852911675
+          "worker_seconds": 10.870903942022778
         }
       },
       "per_host_peak_max": 2,
-      "runtime_seconds": 6.7663,
+      "runtime_seconds": 5.0511,
       "scheduler_actions": 4000,
-      "simulated_identity_attempts": 1000,
+      "simulated_identity_outcomes": [],
       "starved_official": 0,
       "terminal_official_work_items": 1000,
-      "wrong_company_promotions": 0
+      "wrong_company_promotions": null
     },
     "D": {
+      "actual_physical_requests": 0,
       "budget_denied_logical_requests": 0,
       "budget_skipped_optional_actions": 0,
       "coalesced_requests": 38,
@@ -664,13 +683,15 @@
       "completion_reserve_active_at_end": false,
       "deferred_optional_by_reason": {},
       "exact_identity_anchors": 0,
-      "last_company_completion_seconds": 0.0717,
+      "identity_safety_measurement": "not_measured",
+      "last_company_completion_seconds": 0.077,
       "logical_requests": 773,
       "logical_requests_denied": 0,
       "logical_requests_reserved": 773,
       "max_concurrency": 8,
       "measurement_kind": "scheduler_simulation",
       "modeled_physical_reservations": 735,
+      "official_scheduler_completions": 100,
       "optional_pass_completions": {
         "jobs_activity": 100,
         "website_shallow": 100,
@@ -690,7 +711,7 @@
           "expected_seconds": 34.40000000000005,
           "failed": 0,
           "opportunity_score": 15.119999999999978,
-          "worker_seconds": 0.1135462322854437
+          "worker_seconds": 0.12183231999642885
         },
         "official_foundation": {
           "cancelled": 0,
@@ -703,7 +724,7 @@
           "expected_seconds": 288.80000000000007,
           "failed": 0,
           "opportunity_score": 1140.2399999999968,
-          "worker_seconds": 0.11955671806936152
+          "worker_seconds": 0.143596981997689
         },
         "website_shallow": {
           "cancelled": 0,
@@ -716,7 +737,7 @@
           "expected_seconds": 34.40000000000005,
           "failed": 0,
           "opportunity_score": 15.119999999999978,
-          "worker_seconds": 0.11537069411133416
+          "worker_seconds": 0.13855504000821384
         },
         "website_verify": {
           "cancelled": 0,
@@ -729,16 +750,16 @@
           "expected_seconds": 34.40000000000005,
           "failed": 0,
           "opportunity_score": 15.119999999999978,
-          "worker_seconds": 0.13961957400897518
+          "worker_seconds": 0.11988819699490705
         }
       },
       "per_host_peak_max": 2,
-      "runtime_seconds": 0.0719,
+      "runtime_seconds": 0.0773,
       "scheduler_actions": 400,
-      "simulated_identity_attempts": 100,
+      "simulated_identity_outcomes": [],
       "starved_official": 0,
       "terminal_official_work_items": 100,
-      "wrong_company_promotions": 0
+      "wrong_company_promotions": null
     }
   }
 }

@@ -112,7 +112,10 @@ class Operation(StrictModel):
 
 
 class Section(StrictModel):
-    state: PublicState
+    # None means no public availability assertion was made because the
+    # family was not checked; attempt_outcome carries the internal reason.
+    state: PublicState | None = None
+    attempt_outcome: str | None = None
     claims: list[Claim] = Field(default_factory=list)
     diagnostics: list[str] = Field(default_factory=list)
 

@@ -27,7 +27,11 @@ def source_tree_provenance() -> dict[str, object]:
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
         capture_output=True, text=True).stdout.strip()
     status = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, check=True, capture_output=True).stdout
-    diff = subprocess.run(["git", "diff", "--binary", "HEAD"], cwd=ROOT, check=True, capture_output=True).stdout
+    # The report is the output of this measurement, so exclude it from the
+    # source digest to avoid a self-referential hash after the report is saved.
+    diff = subprocess.run(["git", "diff", "--binary", "HEAD", "--",
+        ".", ":(exclude)docs/audit/m06-scale-benchmark.json"], cwd=ROOT,
+        check=True, capture_output=True).stdout
     untracked = subprocess.run(["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=ROOT,
         check=True, capture_output=True).stdout.split(b"\0")
     digest = hashlib.sha256(diff)
@@ -135,8 +139,9 @@ async def simulate(size: int, *, physical_limit: int | None = None, hard: float 
     optional = sum(optional_by_pass.values())
     return {"measurement_kind": "scheduler_simulation", "companies": size, "output_cardinality": official,
         "terminal_official_work_items": official, "exact_identity_anchors": 0,
-        "simulated_identity_attempts": official,
-        "wrong_company_promotions": 0, "optional_website_actions": optional,
+        "actual_physical_requests": 0, "identity_safety_measurement": "not_measured",
+        "simulated_identity_outcomes": [], "official_scheduler_completions": official,
+        "wrong_company_promotions": None, "optional_website_actions": optional,
         "optional_pass_completions": optional_by_pass,
         "scheduler_actions": len(results), "modeled_physical_reservations": budget.physical_requests,
         "logical_requests": logical_requests,

@@ -79,6 +79,8 @@ def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutof
     sections = {name: empty_section() for name in (
         "identity_brand", "accounts_history", "leadership_workplaces", "website_owned_profiles",
         "hiring_activity", "claims_evidence_states", "refresh_changes")}
+    sections["website_owned_profiles"] = Section(state=None, attempt_outcome="not_attempted")
+    sections["hiring_activity"] = Section(state=None, attempt_outcome="not_attempted")
     claims: list[Claim] = []
     evidence: list[Evidence] = []
     snapshots: list[SourceSnapshot] = []
@@ -128,6 +130,8 @@ def _live_envelope(row: Any, result: Any, batch_id: str, cutoff: datetime, previ
     sections = {name: empty_section() for name in (
         "identity_brand", "accounts_history", "leadership_workplaces", "website_owned_profiles",
         "hiring_activity", "claims_evidence_states", "refresh_changes")}
+    sections["website_owned_profiles"] = Section(state=None, attempt_outcome="not_attempted")
+    sections["hiring_activity"] = Section(state=None, attempt_outcome="not_attempted")
     normalized, checksum_ok = normalize_org_number(row.organisation_number)
     claims, evidence, snapshots = list(result.claims), list(result.evidence), list(result.snapshots)
     errors = list(result.errors)
@@ -495,10 +499,13 @@ def run(args: argparse.Namespace) -> int:
                         continue
                     result = by_website_org.get(envelope.organisation_number)
                     if not result:
-                        envelope.synthesis["website_research"] = {"execution_state": "budget_skipped",
-                            "reason": "soft_deadline_or_completion_reserve", "claims": []}
-                        envelope.sections["website_owned_profiles"].state = PublicState.AMBIGUOUS
-                        envelope.sections["hiring_activity"].state = PublicState.AMBIGUOUS
+                        outcome = "deadline_skipped" if (run_budget.soft_expired or run_budget.reserve_active) else "budget_skipped"
+                        envelope.synthesis["website_research"] = {"execution_state": outcome,
+                            "reason": "soft_deadline_or_completion_reserve" if outcome == "deadline_skipped" else "request_budget_exhausted", "claims": []}
+                        envelope.sections["website_owned_profiles"].state = None
+                        envelope.sections["website_owned_profiles"].attempt_outcome = outcome
+                        envelope.sections["hiring_activity"].state = None
+                        envelope.sections["hiring_activity"].attempt_outcome = outcome
                         envelope.sections["website_owned_profiles"].diagnostics.append(
                             "scheduler_execution_state:budget_skipped")
                         envelope.sections["hiring_activity"].diagnostics.append(
@@ -512,9 +519,11 @@ def run(args: argparse.Namespace) -> int:
                     section = envelope.sections["website_owned_profiles"]
                     section.claims.extend(website_claims)
                     section.state = result.state if not website_claims else PublicState.AVAILABLE
+                    section.attempt_outcome = result.attempt_outcome or ("completed" if result.phase_state.get("accepted_pages") else None)
                     hiring = envelope.sections["hiring_activity"]
                     hiring.claims.extend(footprint_claims)
                     hiring.state = result.hiring_activity_state
+                    hiring.attempt_outcome = result.hiring_attempt_outcome or result.attempt_outcome
                     envelope.sections["claims_evidence_states"].claims.extend(result.claims)
                     if result.claims:
                         envelope.sections["claims_evidence_states"].state = PublicState.AVAILABLE

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from signalpost.models import PublicState
 from signalpost.websites import (
     PageRecord, _activity_record, _dedupe_activities, _date_value, _page_footprints,
-    _parse_feed, _parse_page, research_company,
+    _parse_feed, _parse_page, research_company, _employer_matches, _article_subject_matches,
 )
 
 ORG = "123456789"
@@ -105,6 +105,9 @@ class M05HiringActivityTests(unittest.TestCase):
             evidence_cutoff=CUTOFF, phase="verify"))
         verify_claim_count = len(verified.claims)
         verify_state = verified.state
+        verify_attempt_outcome = verified.attempt_outcome
+        verify_hiring_state = verified.hiring_activity_state
+        verify_hiring_attempt_outcome = verified.hiring_attempt_outcome
         shallow = asyncio.run(research_company(profile, staged_gateway, enable_keyless=False,
             evidence_cutoff=CUTOFF, phase="shallow", previous=verified))
         shallow_claim_count = len(shallow.claims)
@@ -116,7 +119,10 @@ class M05HiringActivityTests(unittest.TestCase):
         self.assertEqual(staged.audit["jobs"]["published_subjects"], single.audit["jobs"]["published_subjects"])
         self.assertEqual(verify_claim_count, 0)
         self.assertGreater(shallow_claim_count, 0)
-        self.assertEqual(verify_state, PublicState.AMBIGUOUS)
+        self.assertIsNone(verify_state)
+        self.assertEqual(verify_attempt_outcome, "identity_verified_extraction_pending")
+        self.assertIsNone(verify_hiring_state)
+        self.assertEqual(verify_hiring_attempt_outcome, "not_attempted")
 
     def test_future_posted_job_is_not_published_at_cutoff(self):
         observation = job(deadline="2027-01-01")
@@ -140,6 +146,27 @@ class M05HiringActivityTests(unittest.TestCase):
             verified_names={LEGAL}, cutoff=CUTOFF)
         self.assertEqual(jobs, [])
         self.assertEqual(counts["job_identity_rejected"], 1)
+
+    def test_legal_entity_match_is_exact_after_safe_normalization(self):
+        names = {"Acme AS"}
+        for accepted, employer in (
+            (True, "Acme AS"),
+            (True, "  ACME, A.S. "),
+            (False, "Acme Services AS"),
+            (False, "Acme Holding AS"),
+            (False, "Acme Norge AS"),
+        ):
+            with self.subTest(employer=employer):
+                self.assertEqual(_employer_matches({"name": employer}, "923609016", names), accepted)
+        self.assertTrue(_employer_matches({"name": "Acme ASA"}, "923609016", {"Acme ASA"}))
+        self.assertFalse(_employer_matches({"name": "Acme Subsidiary AS"}, "923609016", names))
+
+    def test_article_subject_and_headline_do_not_match_longer_company_names(self):
+        rival = {"@type": "Organization", "name": "Acme Services AS"}
+        self.assertFalse(_article_subject_matches({"about": rival}, "Acme Services AS opens", "923609016", {"Acme AS"}))
+        self.assertFalse(_article_subject_matches({}, "Acme Holding AS announces results", "923609016", {"Acme AS"}))
+        self.assertTrue(_article_subject_matches({"about": {"@type": "Organization", "name": "ACME, A.S."}},
+            "ACME, A.S. reports", "923609016", {"Acme AS"}))
 
     def test_multiple_hiring_organizations_with_foreign_entity_are_rejected(self):
         observation = job(deadline=None, employer=[
@@ -281,7 +308,8 @@ class M05HiringActivityTests(unittest.TestCase):
             enable_keyless=False, evidence_cutoff=CUTOFF))
         self.assertEqual(result.audit["jobs"]["state"], "ambiguous")
         self.assertFalse(result.audit["jobs"]["explicit_zero"])
-        self.assertEqual(result.hiring_activity_state.value, "ambiguous")
+        self.assertIsNone(result.hiring_activity_state)
+        self.assertEqual(result.hiring_attempt_outcome, "policy_skipped")
         self.assertEqual(gateway.requested, [])
 
     def test_location_and_activity_summary_minimize_personal_contact_data(self):

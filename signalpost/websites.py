@@ -170,7 +170,8 @@ def _walk_schema(value: Any) -> list[dict[str, Any]]:
 
 def _identifier_values(value: Any) -> list[str]:
     if isinstance(value, str):
-        return re.findall(r"(?<!\d)\d{9}(?!\d)", value)
+        return [re.sub(r"\D", "", match.group(0)) for match in
+                re.finditer(r"(?<!\d)\d(?:[\s.\-]*\d){8}(?!\d)", value)]
     if isinstance(value, dict):
         return _identifier_values(value.get("value")) + _identifier_values(value.get("identifier"))
     if isinstance(value, list):
@@ -208,8 +209,10 @@ class WebsiteResearchResult:
     evidence: list[Evidence] = field(default_factory=list)
     snapshots: list[SourceSnapshot] = field(default_factory=list)
     errors: list[RunError] = field(default_factory=list)
-    state: PublicState = PublicState.NOT_AVAILABLE
-    hiring_activity_state: PublicState = PublicState.AMBIGUOUS
+    state: PublicState | None = PublicState.NOT_AVAILABLE
+    hiring_activity_state: PublicState | None = PublicState.AMBIGUOUS
+    attempt_outcome: str | None = None
+    hiring_attempt_outcome: str | None = None
     audit: dict[str, Any] = field(default_factory=dict)
     phase_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -266,11 +269,72 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
 
 def _exact_name(legal_names: list[str], text: str) -> str | None:
     normalized = normalize_name(text)
+    suffix_re = re.compile(r"(?i)\s*(?:a\s*[./-]?\s*s(?:\s*[./-]?\s*a)?|as|asa|enk|nuf|da|ans|ba|ab|oy|ltd|limited|inc|gmbh|plc)\s*[.,]?\s*$")
+    suffix_forms = r"(?:a\s*[./-]?\s*s(?:\s*[./-]?\s*a)?|as|asa|enk|nuf|da|ans|ba|ab|oy|ltd|limited|inc|gmbh|plc)"
     for legal in legal_names:
         name = normalize_name(legal)
-        if name and (name in normalized or set(_distinctive_tokens(legal)) <= set(normalized.split())):
+        if not name:
+            continue
+        if suffix_re.search(str(legal)):
+            base = suffix_re.sub("", str(legal)).strip()
+            base_words = normalize_name(base).split()
+            if not base_words:
+                continue
+            base_pattern = r"[\W_]+".join(re.escape(word) for word in base_words)
+            entity_pattern = r"(?<!\w)" + base_pattern + r"[\W_]+" + suffix_forms + r"(?!\w)"
+            if re.search(entity_pattern, unicodedata.normalize("NFC", str(text)), re.IGNORECASE):
+                return legal
+            continue
+        match = re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", normalized)
+        if match:
+            following = normalized[match.end():].split()
+            sentence_continuations = {"announces", "announced", "opens", "opened", "reports", "reported",
+                "update", "updates", "today", "now", "is", "has", "was", "will", "with", "for", "and",
+                "partners", "launches", "launched", "welcomes", "published", "public", "website", "official"}
+            if not following or following[0] in sentence_continuations:
+                return legal
+        if name == normalized:
             return legal
     return None
+
+
+def _same_legal_name(left: Any, right: Any) -> bool:
+    """Compare two entity names without accepting a longer, distinct legal name."""
+    normalized_left, normalized_right = normalize_name(left), normalize_name(right)
+    return bool(normalized_left and normalized_left == normalized_right)
+
+
+_LEGAL_NAME_MENTION = re.compile(
+    r"\b([A-ZÆØÅ][\wÆØÅæøå .&'’\-]{0,90}?\s+(?:AS|ASA|AB|Oy|Ltd|Limited|Inc|GmbH|PLC))\b",
+    re.IGNORECASE)
+
+
+def _mentions_exact_entity(names: set[str] | list[str], text: str) -> bool:
+    """Find a named entity mention without matching a longer company name."""
+    expected = [name for name in names if normalize_name(name)]
+    mentions = [match.group(1).strip(" ,.;:") for match in _LEGAL_NAME_MENTION.finditer(text)]
+    if mentions:
+        return bool(mentions) and all(any(_same_legal_name(name, mention) for name in expected) for mention in mentions)
+    folded = normalize_name(text)
+    return any(re.search(r"(?<!\w)" + re.escape(normalize_name(name)) + r"(?!\w)", folded)
+               for name in expected)
+
+
+def _walk_schema_subjects(value: Any, path: tuple[str, ...] = ()) -> list[tuple[dict[str, Any], tuple[str, ...]]]:
+    """Keep structured organization nodes with their relationship path."""
+    found: list[tuple[dict[str, Any], tuple[str, ...]]] = []
+    if isinstance(value, dict):
+        kind = value.get("@type")
+        kinds = kind if isinstance(kind, list) else [kind]
+        if any(isinstance(item, str) and any(token in item.casefold() for token in
+                ("organization", "corporation", "localbusiness")) for item in kinds):
+            found.append((value, path))
+        for key, child in value.items():
+            found.extend(_walk_schema_subjects(child, (*path, str(key).casefold())))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_walk_schema_subjects(child, path))
+    return found
 
 
 def _address_match(profile: dict[str, Any], text: str) -> dict[str, Any] | None:
@@ -297,7 +361,13 @@ def _address_match(profile: dict[str, Any], text: str) -> dict[str, Any] | None:
 
 def _negative_subject_context(text: str, org: str) -> bool:
     lowered = unicodedata.normalize("NFC", text).casefold()
-    negative_labels = ("customer", "client", "kunde", "partner", "supplier", "leverandør", "auditor", "revisor", "board member", "styremedlem", "procurement", "anskaffelse")
+    # Interpret the identifier's local clause as a role reference. This is
+    # combined with same-block name/id pairing and structured subject scope.
+    negative_labels = ("customer", "client", "kunde", "partner", "supplier", "leverandør", "designer", "webmaster",
+        "auditor", "revisor", "board member", "styremedlem", "procurement", "anskaffelse",
+        "designed by", "design by", "website by", "site by", "web by", "developed by",
+        "provided by", "powered by", "hosted by", "web developer", "web agency", "webbyrå",
+        "webbureau", "website development", "website design", "leverandør av nettside")
     for match in re.finditer(r"(?<!\d)" + re.escape(org) + r"(?!\d)", text):
         context = lowered[max(0, match.start() - 90):match.end() + 50]
         if any(label in context for label in negative_labels):
@@ -321,16 +391,31 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
         subject_ids: list[str] = []
         target_schema_names: list[str] = []
         conflict_schema: list[dict[str, str]] = []
-        for node in page.schema_organizations:
+        non_owner_relationships = {"customer", "client", "supplier", "partner", "about", "mentions",
+            "author", "employee", "member", "sponsor", "designer", "provider", "founder",
+            "parentorganization", "suborganization", "department", "affiliate", "employer",
+            "hiringorganization"}
+        schema_subjects = _walk_schema_subjects(page.structured.get("json-ld", []))
+        known_nodes = {id(node) for node, _path in schema_subjects}
+        schema_subjects.extend((node, ()) for node in page.schema_organizations if id(node) not in known_nodes)
+        owner_subjects: list[dict[str, Any]] = []
+        for node, path in schema_subjects:
             name = _as_text(node.get("legalName") or node.get("name"))
             ids = _identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID"))
             ids = sorted(set(ids))
+            nested_non_owner = any(key in non_owner_relationships for key in path)
             if name:
                 subject_names.append(name)
             subject_ids.extend(ids)
-            if org in ids and name:
+            if not nested_non_owner:
+                owner_subjects.append(node)
+            if org in ids and name and not nested_non_owner:
+                conflicting_ids = [identifier for identifier in ids if identifier != org]
+                if conflicting_ids or not any(_same_legal_name(expected, name) for expected in legal_names):
+                    conflict_schema.append({"name": name, "organisation_numbers": ids})
+                    continue
                 target_schema_names.append(name)
-            elif ids and any(identifier not in related and identifier != org for identifier in ids) and name:
+            elif ids and any(identifier not in related and identifier != org for identifier in ids) and name and not nested_non_owner:
                 conflict_schema.append({"name": name, "organisation_numbers": ids})
         # A visible organization number and a name are a text proof only when
         # they occur in the same identity block. JSON-LD proof is handled above
@@ -340,7 +425,9 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             and _exact_name(legal_names, block) and not _negative_subject_context(block, org)]
         target_context = bool(paired_identity_blocks)
         exact_name = next((_exact_name(legal_names, block) for block in paired_identity_blocks), None)
-        page_identity_name = _exact_name(legal_names, page.title + " " + page.identity_text)
+        safe_identity_text = " ".join([page.title, *(block for block in page.identity_blocks
+            if not _negative_subject_context(block, org))])
+        page_identity_name = _exact_name(legal_names, safe_identity_text)
         relevant_text = page.title + " " + page.identity_text + " " + page.visible_text[:15_000]
         address = _address_match(profile, relevant_text)
         role_match = next((str(role) for role in profile.get("registered_roles", []) if len(normalize_name(role)) > 5 and normalize_name(role) in normalize_name(relevant_text)), None)
@@ -352,9 +439,9 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             continue
         final_parts = urllib.parse.urlsplit(page.final_url)
         homepage = final_parts.path in {"", "/"} and not final_parts.query
-        incompatible_legal_subjects = [node for node in page.schema_organizations
+        incompatible_legal_subjects = [node for node in owner_subjects
             if _as_text(node.get("legalName") or node.get("name"))
-            and not _exact_name(legal_names, _as_text(node.get("legalName") or node.get("name")))
+            and not any(_same_legal_name(expected, _as_text(node.get("legalName") or node.get("name"))) for expected in legal_names)
             and org not in (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID")))]
         legal_form_marker = re.compile(r"(?i)\b(?:AS|ASA|NUF|ENK|DA|ANS|BA)\b")
         visible_identity_blocks = [page.title, *page.headings]
@@ -366,7 +453,8 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             # A group/brand root with another structured legal subject cannot
             # be adopted from an incidental footer mention of the subsidiary.
             continue
-        compatible_target_subject = next((name for name in target_schema_names if _exact_name(legal_names, name)), None)
+        compatible_target_subject = next((name for name in target_schema_names
+            if any(_same_legal_name(expected, name) for expected in legal_names)), None)
         if compatible_target_subject:
             identity_pages.append({"page": page, "method": "subject_scoped_structured_org_number", "name": compatible_target_subject, "address": address, "subject_ids": sorted(set(subject_ids))})
         elif target_context and exact_name:
@@ -637,7 +725,7 @@ def _employer_matches(value: Any, org: str, verified_names: set[str]) -> bool:
     identifiers = (_identifier_values(value.get("identifier"))
                    + _identifier_values(value.get("taxID")))
     name = _schema_text(value.get("legalName") or value.get("name"))
-    name_matches = bool(name and any(_exact_name([expected], name) for expected in verified_names if expected))
+    name_matches = bool(name and any(_same_legal_name(expected, name) for expected in verified_names if expected))
     if identifiers:
         return org in identifiers and all(item == org for item in identifiers) and (not name or name_matches)
     return name_matches
@@ -663,14 +751,14 @@ def _article_subject_matches(node: dict[str, Any], title: str, org: str,
                     # A second identified organisation makes the article multi-entity.
                     return False
             elif name:
-                if any(_exact_name([expected], name) for expected in verified_names if expected):
+                if any(_same_legal_name(expected, name) for expected in verified_names if expected):
                     target_found = True
                 elif re.search(r"(?i)\b(?:AS|ASA|AB|Oy|Ltd|Limited|Inc|GmbH|PLC)\b", name):
                     return False
         return target_found
     # Older company newsroom markup often omits about/mainEntity. Retain only
     # headlines that explicitly name the exact legal entity or verified brand.
-    if not any(_exact_name([expected], title) for expected in verified_names if expected):
+    if not _mentions_exact_entity(verified_names, title):
         return False
     # Headline-only evidence cannot disambiguate a second legal entity.
     company_mentions = re.findall(r"\b([A-ZÆØÅ][\wÆØÅæøå .&'’-]{1,80}?\s(?:AS|ASA|AB|Oy|Ltd|Limited|Inc|GmbH|PLC))\b", title)
@@ -825,7 +913,7 @@ def _page_footprints(page: PageRecord, *, org: str, legal_name: str, verified_na
             if title:
                 counts["activity_undated"] += 1
             continue
-        if not any(_exact_name([expected], title) for expected in verified_names if expected):
+        if not _mentions_exact_entity(verified_names, title):
             counts["activity_subject_rejected"] = counts.get("activity_subject_rejected", 0) + 1
             continue
         summary = " ".join(article.get_text(" ", strip=True).split())[:1200]
@@ -957,6 +1045,10 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
         saw_blocked = False
         saw_failure = False
         saw_candidate = False
+        saw_robots_disallowed = False
+        saw_robots_unreachable = False
+        saw_policy_skip = False
+        saw_budget_skip = False
         profiles = [item for item in candidates if item["kind"] == "profile"]
         for candidate in profiles:
             # Registry social URLs are candidates only. M03 promotes profiles solely
@@ -966,7 +1058,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             saw_candidate = True
             if page_limit >= MAX_ABSOLUTE_PAGES:
                 output.audit["candidates"].append({"url": candidate["url"], "source": candidate["source"], "decision": "budget_skipped"})
-                unresolved = True
+                saw_budget_skip = True
                 continue
             page_limit += 1
             url = candidate["url"]
@@ -996,11 +1088,11 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             source_id = _source_evidence(source_ref, output.evidence, output.snapshots, org) if source_ref.get("source") else None
             if state == "disallowed":
                 candidate_row["decision"] = "blocked_robots"
-                saw_blocked = True
+                saw_robots_disallowed = True
                 continue
             if state == "budget_skipped":
                 candidate_row["decision"] = "budget_skipped"
-                unresolved = True
+                saw_budget_skip = True
                 continue
             if state != "allowed":
                 candidate_row["decision"] = "robots_unreachable" if state == "unreachable" else "robots_unusable" if state == "unusable" else "candidate_policy_rejected"
@@ -1010,9 +1102,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                            else "Website candidate was rejected by gateway host policy.")
                 output.errors.append(RunError(code=error_code, message=message))
                 if state == "unreachable":
-                    saw_failure = True
+                    saw_robots_unreachable = True
                 else:
-                    saw_blocked = True
+                    saw_policy_skip = True
                 continue
             pages: list[PageRecord] = []
             page_queue = [(url, 0, "homepage")]
@@ -1034,12 +1126,12 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     continue
                 if page_total_bytes >= MAX_SITE_BYTES:
                     candidate_row["decision"] = "budget_skipped_bytes"
-                    unresolved = True
+                    saw_budget_skip = True
                     break
                 seen_urls.add(normalized)
                 if page_limit >= MAX_ABSOLUTE_PAGES or website_page_requests >= MAX_DEFAULT_PAGES:
                     candidate_row["decision"] = "budget_skipped_pages"
-                    unresolved = True
+                    saw_budget_skip = True
                     break
                 page_limit += 1
                 output.audit["page_requests"] += 1
@@ -1135,28 +1227,48 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
         saw_blocked = saved["saw_blocked"]
         saw_failure = saved["saw_failure"]
         saw_candidate = saved["saw_candidate"]
+        saw_robots_disallowed = saved.get("saw_robots_disallowed", False)
+        saw_robots_unreachable = saved.get("saw_robots_unreachable", False)
+        saw_policy_skip = saved.get("saw_policy_skip", False)
+        saw_budget_skip = saved.get("saw_budget_skip", False)
 
     def save_phase_state() -> None:
         output.phase_state = {"candidates": candidates, "accepted_pages": accepted_pages,
             "feed_observations": feed_observations, "page_total_bytes": page_total_bytes,
             "page_limit": page_limit, "website_page_requests": website_page_requests,
             "started": started, "unresolved": unresolved, "saw_blocked": saw_blocked,
-            "saw_failure": saw_failure, "saw_candidate": saw_candidate}
+            "saw_failure": saw_failure, "saw_candidate": saw_candidate,
+            "saw_robots_disallowed": saw_robots_disallowed,
+            "saw_robots_unreachable": saw_robots_unreachable,
+            "saw_policy_skip": saw_policy_skip, "saw_budget_skip": saw_budget_skip}
 
     if phase == "verify":
         save_phase_state()
         # Verification has established a candidate, but extraction/publication
         # still belongs to later global passes. Do not expose the untouched
         # default NOT_AVAILABLE state as if those passes had completed.
-        if accepted_pages or unresolved or not saw_candidate:
+        if unresolved:
             output.state = PublicState.AMBIGUOUS
         elif saw_blocked:
             output.state = PublicState.BLOCKED
         elif saw_failure:
             output.state = PublicState.FAILED
+        elif accepted_pages:
+            output.state = None
+            output.attempt_outcome = "identity_verified_extraction_pending"
+        elif saw_robots_disallowed or saw_robots_unreachable or saw_policy_skip or saw_budget_skip or not saw_candidate:
+            output.state = None
+            output.attempt_outcome = ("robots_disallowed" if saw_robots_disallowed else
+                "robots_unreachable" if saw_robots_unreachable else "policy_skipped" if saw_policy_skip else
+                "budget_skipped" if saw_budget_skip else "not_attempted")
         else:
             output.state = PublicState.NOT_AVAILABLE
-        output.audit["crawl_state"] = output.state.value
+        output.audit["crawl_state"] = output.state.value if output.state else output.attempt_outcome
+        # This scheduler phase establishes site identity only. The later jobs
+        # phase owns hiring/activity availability, so do not expose its default.
+        output.hiring_activity_state = None
+        output.hiring_attempt_outcome = "not_attempted"
+        output.audit["hiring_activity_state"] = output.hiring_attempt_outcome
         return output
     if phase not in {"all", "shallow", "jobs"}:
         raise ValueError(f"unsupported website research phase: {phase}")
@@ -1196,7 +1308,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             # Brand is derived only after exact-site acceptance; the site cannot verify itself with this value.
             brand = next((_as_text(node.get("name")) for node in proof_page.schema_organizations
                           if org in (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID")))
-                          and _exact_name([str(profile.get("name") or "")], _as_text(node.get("legalName")))
+                          and _same_legal_name(str(profile.get("name") or ""), _as_text(node.get("legalName")))
                           and _as_text(node.get("name"))
                           and normalize_name(_as_text(node.get("name"))) != normalize_name(profile.get("name"))), None)
             if brand:
@@ -1426,7 +1538,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             for node in page.schema_organizations:
                 if org in (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID"))):
                     name = _as_text(node.get("name"))
-                    if name and _exact_name([str(profile.get("name") or "")], _as_text(node.get("legalName"))):
+                    if name and _same_legal_name(str(profile.get("name") or ""), _as_text(node.get("legalName"))):
                         verified_names.add(name)
             if page_kind == "careers" and re.search(
                     r"(?i)\b(no (?:current )?(?:open )?(?:positions|roles|vacancies|openings)|no vacancies|ingen ledige stillinger|ingen åpne stillinger)\b",
@@ -1537,14 +1649,25 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
     output.audit["activity"]["max_from_already_fetched_feed_responses"] = 100
     output.audit["source_policy"] = {"source_class": "verified_company_owned_website", "external_sources_enabled": False,
         "terms_policy": "skip_if_prohibitive; transient factual extraction; source URL, date and hash retained"}
+    skipped_outcome = ("robots_disallowed" if saw_robots_disallowed else
+        "robots_unreachable" if saw_robots_unreachable else "policy_skipped" if saw_policy_skip else
+        "budget_skipped" if saw_budget_skip else "not_attempted" if not saw_candidate else None)
+    if output.claims:
+        output.attempt_outcome = "completed"
+    elif skipped_outcome:
+        output.attempt_outcome = skipped_outcome
     hiring_claims = [claim for claim in output.claims if claim.section == "hiring_activity"]
     if hiring_claims:
         output.hiring_activity_state = PublicState.AVAILABLE
     elif output.audit["jobs"]["explicit_zero"] and checked_activity_surface:
         output.hiring_activity_state = PublicState.NOT_AVAILABLE
+    elif output.attempt_outcome and output.attempt_outcome != "completed":
+        output.hiring_activity_state = None
+        output.hiring_attempt_outcome = output.attempt_outcome
     else:
         output.hiring_activity_state = PublicState.AMBIGUOUS
-    output.audit["hiring_activity_state"] = output.hiring_activity_state.value
+    output.audit["hiring_activity_state"] = (output.hiring_activity_state.value
+        if output.hiring_activity_state else output.hiring_attempt_outcome or output.attempt_outcome)
     output.audit["elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
     output.audit["bytes_received"] = page_total_bytes
     output.audit["max_default_pages"] = MAX_DEFAULT_PAGES
@@ -1560,10 +1683,14 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
         output.state = PublicState.BLOCKED
     elif saw_failure:
         output.state = PublicState.FAILED
+    elif skipped_outcome:
+        output.state = None
+        output.attempt_outcome = skipped_outcome
     elif saw_candidate:
         output.state = PublicState.NOT_AVAILABLE
     else:
-        output.state = PublicState.NOT_AVAILABLE
-    output.audit["crawl_state"] = output.state.value
+        output.state = None
+        output.attempt_outcome = "not_attempted"
+    output.audit["crawl_state"] = output.state.value if output.state else output.attempt_outcome
     output.audit["website_claim_families"] = sorted(set(output.audit["website_claim_families"]))
     return output

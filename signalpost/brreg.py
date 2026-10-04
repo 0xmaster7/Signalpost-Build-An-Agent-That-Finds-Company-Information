@@ -87,6 +87,22 @@ METRICS = {
     "total_debt": "egenkapitalGjeld/gjeldOversikt/sumGjeld",
 }
 
+# Active ISO 4217 alpha codes accepted from BRREG account records. A
+# three-letter shape alone does not establish a supported currency.
+SUPPORTED_CURRENCY_CODES = frozenset("""
+AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN BZD
+CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP
+GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW
+KWD KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN
+NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK
+SGD SHP SLE SOS SRD SSP STN SYP SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD UYU UZS
+VES VND VUV WST XAF XCD XCG XOF XPF YER ZAR ZMW ZWG
+""".split())
+
+
+def supported_currency(value: Any) -> bool:
+    return isinstance(value, str) and value in SUPPORTED_CURRENCY_CODES
+
 
 def financial_records(body: Any) -> list[dict[str, Any]]:
     """Normalize every returned record; preserve raw source fields and periods."""
@@ -421,8 +437,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             record_path = record["_source_prefix"]
             period_start = _date(record.get("period_start"))
             period_end = _date(record.get("period_end"))
-            currency_valid = (isinstance(record.get("currency"), str)
-                              and re.fullmatch(r"[A-Z]{3}", record["currency"]) is not None)
+            currency_valid = supported_currency(record.get("currency"))
             metadata_valid = (period_start is not None and period_end is not None and period_start <= period_end
                               and currency_valid and record.get("scope") in {"legal_entity", "group"})
             if any(value is not None for key, value in record["metrics"].items() if not key.endswith("_unit")) and not metadata_valid:
@@ -561,16 +576,50 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             complete = False
             errors.append(RunError(code="BRREG_SUBUNITS_PAGE_LIMIT", message="Subunit pagination exceeded 100 pages."))
             break
-    observations["workplace_count"] = len(locations)
+    observations["workplace_rows_returned"] = len(locations)
     observations["workplaces_complete"] = complete
+    candidates_by_child: dict[str, list[tuple[dict[str, Any], Any, str, str | None, datetime, int, str | None]]] = {}
     for item, page_body, page_url, page_hash, page_time, page_row_index in locations:
         child_org, child_valid = normalize_org_number(item.get("organisasjonsnummer"))
         parent_org, parent_valid = normalize_org_number(item.get("overordnetEnhet"))
-        if not child_valid or not parent_valid or parent_org != org:
+        if not child_valid:
             observations["workplaces_complete"] = False
             errors.append(RunError(code="BRREG_SUBUNIT_RELATION_INVALID",
-                message="A returned workplace had an invalid organisation number or did not name the requested parent."))
+                message="A returned workplace had an invalid child organisation number."))
             continue
+        canonical_row = dict(item)
+        canonical_row["organisasjonsnummer"] = child_org
+        if parent_valid:
+            canonical_row["overordnetEnhet"] = parent_org
+        fingerprint = hashlib.sha256(json.dumps(canonical_row, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":")).encode()).hexdigest()
+        candidates_by_child.setdefault(child_org, []).append(
+            (item, page_body, page_url, page_hash, page_time, page_row_index,
+             fingerprint if parent_valid else None))
+
+    publishable: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
+    for child_org, rows in sorted(candidates_by_child.items()):
+        relation_valid = all(normalize_org_number(row[0].get("overordnetEnhet"))[1]
+            and normalize_org_number(row[0].get("overordnetEnhet"))[0] == org
+            and child_org != org for row in rows)
+        fingerprints = {row[6] for row in rows}
+        if not relation_valid:
+            observations["workplaces_complete"] = False
+            errors.append(RunError(code="BRREG_SUBUNIT_RELATION_INVALID",
+                message="A returned workplace had an invalid parent or represented the target as its own child."))
+            continue
+        if len(fingerprints) != 1:
+            observations["workplaces_complete"] = False
+            errors.append(RunError(code="BRREG_SUBUNIT_DUPLICATE_CONFLICT",
+                message="Conflicting duplicate records were returned for one workplace; its facts were withheld."))
+            continue
+        # Identical duplicate rows are one deterministic source-backed workplace.
+        publishable.append(min(rows, key=lambda row: row[5])[:6])
+
+    observations["workplace_count"] = len(publishable)
+    for item, page_body, page_url, page_hash, page_time, page_row_index in publishable:
+        child_org = normalize_org_number(item.get("organisasjonsnummer"))[0]
+        parent_org = normalize_org_number(item.get("overordnetEnhet"))[0]
         item["organisasjonsnummer"] = child_org
         for key in ("organisasjonsnummer", "navn", "beliggenhetsadresse", "postadresse", "naeringskode1", "antallAnsatte", "overordnetEnhet"):
             if target_legal_form == "ENK" and key in {"beliggenhetsadresse", "postadresse"}:
@@ -584,7 +633,8 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     workplace_claims = any(c.field_family == "workplace" for c in claims)
     states["leadership_workplaces"] = PublicState.AVAILABLE if role_claims or workplace_claims else (
         PublicState.FAILED if roles_malformed or subunits_malformed or roles_status >= 500 or subunit_status >= 500 or roles_status == 0 or subunit_status == 0 else
-        PublicState.BLOCKED if roles_status in {401, 403, 429, 451} or subunit_status in {401, 403, 429, 451} else PublicState.NOT_AVAILABLE)
+        PublicState.BLOCKED if roles_status in {401, 403, 429, 451} or subunit_status in {401, 403, 429, 451} else
+        PublicState.AMBIGUOUS if not observations["workplaces_complete"] else PublicState.NOT_AVAILABLE)
 
     for section in states:
         if states[section] == PublicState.NOT_AVAILABLE:

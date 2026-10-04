@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import sys
 import os
@@ -21,6 +22,7 @@ from signalpost import run as run_module
 from signalpost.run import main
 from test_signalpost_m01 import FakeTransport, valid_envelope
 from run_m06_scale_gate import simulate
+from verify_m06_scale_gate import validate_report
 
 
 class SchedulerTests(unittest.IsolatedAsyncioTestCase):
@@ -28,12 +30,38 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         result = await simulate(4)
         self.assertEqual(result["measurement_kind"], "scheduler_simulation")
         self.assertEqual(result["exact_identity_anchors"], 0)
-        self.assertEqual(result["simulated_identity_attempts"], result["terminal_official_work_items"])
+        self.assertNotIn("simulated_identity_attempts", result)
+        self.assertEqual(result["official_scheduler_completions"], result["terminal_official_work_items"])
         self.assertEqual(set(result["optional_pass_completions"]), {"website_verify", "website_shallow", "jobs_activity"})
         self.assertGreaterEqual(result["logical_requests_denied"], 0)
         self.assertLessEqual(result["logical_requests_reserved"], result["logical_requests"])
         self.assertGreater(result["modeled_physical_reservations"], 0)
         self.assertNotIn("physical_requests", result)
+        self.assertEqual(result["actual_physical_requests"], 0)
+        self.assertEqual(result["identity_safety_measurement"], "not_measured")
+        self.assertIsNone(result["wrong_company_promotions"])
+        self.assertEqual(result["simulated_identity_outcomes"], [])
+
+    async def test_scale_verifier_rejects_injected_wrong_company_outcome(self):
+        simulation = await simulate(3, physical_limit=0, logical_limit=0)
+        self.assertEqual(simulation["exact_identity_anchors"], 0)
+        self.assertEqual(simulation["actual_physical_requests"], 0)
+        self.assertEqual(simulation["modeled_physical_reservations"], 0)
+        report = {"benchmark_metadata": {"git_sha": "a" * 40, "working_tree_dirty": False,
+            "working_tree_diff_sha256": "b" * 64, "cohort_id": "fixture", "cohort_sha256": "c" * 64},
+            "zero_request_case": simulation}
+        validate_report(report)
+        mutations = []
+        mutated = copy.deepcopy(report)
+        mutated["zero_request_case"]["wrong_company_promotions"] = 1
+        mutations.append(mutated)
+        mutated = copy.deepcopy(report)
+        mutated["zero_request_case"]["simulated_identity_outcomes"] = [{"wrong_company": True}]
+        mutations.append(mutated)
+        for corrupted in mutations:
+            with self.subTest(corrupted=corrupted["zero_request_case"]):
+                with self.assertRaises(ValueError):
+                    validate_report(corrupted)
 
     async def test_thousand_companies_fast_slow_hosts_no_starvation(self):
         scheduler = OpportunityScheduler(concurrency=8)
@@ -153,8 +181,10 @@ class DeadlineAndBudgetTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(code, 0)
             self.assertEqual([row["input_ref"] for row in rows], ["row:1", "row:2"])
             self.assertTrue(all(row["terminal_state"] == "failed" for row in rows))
-            self.assertTrue(all(row["sections"]["website_owned_profiles"]["state"] == "ambiguous" for row in rows))
-            self.assertTrue(all(row["sections"]["hiring_activity"]["state"] == "ambiguous" for row in rows))
+            self.assertTrue(all(row["sections"]["website_owned_profiles"]["state"] is None for row in rows))
+            self.assertTrue(all(row["sections"]["hiring_activity"]["state"] is None for row in rows))
+            self.assertTrue(all(row["sections"]["website_owned_profiles"]["attempt_outcome"] == "deadline_skipped" for row in rows))
+            self.assertTrue(all(row["sections"]["hiring_activity"]["attempt_outcome"] == "deadline_skipped" for row in rows))
 
     async def test_monotonic_rollback_does_not_extend_budget(self):
         now = [100.0]

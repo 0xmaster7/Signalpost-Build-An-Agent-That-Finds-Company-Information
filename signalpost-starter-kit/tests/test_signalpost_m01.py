@@ -24,7 +24,8 @@ from signalpost.models import Claim, Envelope, Evidence, PublicState, RefreshSta
 from signalpost.network import NetworkGateway, NetworkPolicyError, StructuredLogger, UrlLibTransport, canonical_url, classify_response, registered_domain, robots_directives, validate_public_host
 from signalpost.operations import Budget, OrderedAtomicWriter, RunBudget
 from signalpost.run import main
-from signalpost.brreg import cutoff_identity, financial_records, group_relationships, normalize_entity, role_records, subunit_page, fetch_company
+from signalpost.brreg import (SUPPORTED_CURRENCY_CODES, cutoff_identity, financial_records, group_relationships,
+    normalize_entity, role_records, subunit_page, fetch_company, supported_currency)
 from signalpost.inputs import stream_registry_matches
 import signalpost.run as run_module
 
@@ -483,6 +484,50 @@ class GatewayArchitectureTests(unittest.TestCase):
 
 
 class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
+    def test_runner_distinguishes_malformed_empty_failed_and_available_accounts(self):
+        target = "923609016"
+        period = {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}
+        valid_record = {"id": "valid", "regnskapstype": "SELSKAP", "regnskapsperiode": period,
+            "valuta": "NOK", "resultatregnskapResultat": {"driftsresultat": {
+                "driftsinntekter": {"sumDriftsinntekter": 10}}}}
+        cases = (
+            ("malformed", {"unexpected": "shape"}, 200, "failed", "BRREG_ACCOUNTS_MALFORMED"),
+            ("empty", [], 200, "not_available", None),
+            ("transport_failure", [], 503, "failed", "BRREG_ACCOUNTS_503"),
+            ("available", [valid_record], 200, "available", None),
+        )
+        for label, accounts_body, accounts_status, expected_state, expected_error in cases:
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source, output, state = root / "input.jsonl", root / "output.jsonl", root / "state.sqlite"
+                source.write_text(json.dumps({"organisation_number": target}) + "\n", encoding="utf-8")
+
+                class RoutingTransport:
+                    async def request(self, url, headers, timeout):
+                        if "/regnskap/" in url:
+                            body, status = accounts_body, accounts_status
+                        elif url.endswith("/roller"):
+                            body, status = {"rollegrupper": []}, 200
+                        elif "/underenheter?" in url:
+                            body, status = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}, 200
+                        else:
+                            body, status = {"organisasjonsnummer": target, "navn": "Target AS", "organisasjonsform": {"kode": "AS"}}, 200
+                        return status, {"Content-Type": "application/json"}, json.dumps(body).encode(), url
+
+                gateway = NetworkGateway(RoutingTransport(), retries=0)
+                with patch("signalpost.run.NetworkGateway", return_value=gateway), \
+                     patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), \
+                     patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+                    self.assertEqual(main(["--input", str(source), "--output", str(output),
+                        "--state-output", str(state), "--batch-id", label, "--live-brreg"]), 0)
+                envelope = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+                self.assertEqual(envelope["sections"]["accounts_history"]["state"], expected_state)
+                self.assertEqual(any(error["code"] == expected_error for error in envelope["errors"])
+                    if expected_error else False, bool(expected_error))
+                financial = [claim for claim in envelope["claims"] if claim["field_family"] == "financial"]
+                self.assertEqual(bool(financial), label == "available")
+                self.assertEqual(envelope["terminal_state"], "available")
+
     async def test_run_start_fallback_allows_current_live_identity_but_not_without_explicit_policy(self):
         entity = {"organisasjonsnummer": "923609003", "navn": "Target AS", "organisasjonsform": {"kode": "AS"}}
         accounts = [{"id": "x", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"},
@@ -733,6 +778,45 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workplace_orgs, {"923609024"})
         self.assertFalse(mixed.observations["workplaces_complete"])
 
+    async def test_subunits_reject_self_child_dedupe_identical_and_abstain_conflicting_duplicates(self):
+        target = "923609016"
+        valid_child = {"organisasjonsnummer": "923609024", "overordnetEnhet": target, "navn": "Valid subunit"}
+        self_child = {"organisasjonsnummer": target, "overordnetEnhet": target, "navn": "Target AS"}
+        wrong_parent = {"organisasjonsnummer": "923609008", "overordnetEnhet": "923609024", "navn": "Wrong parent"}
+        malformed = {"organisasjonsnummer": "12", "overordnetEnhet": target, "navn": "Malformed"}
+
+        async def fetch_with(rows):
+            class RoutingTransport:
+                async def request(self, url, headers, timeout):
+                    if "/regnskap/" in url: body = []
+                    elif url.endswith("/roller"): body = {"rollegrupper": []}
+                    elif "/underenheter?" in url:
+                        body = {"_embedded": {"underenheter": rows}, "page": {"number": 0, "totalPages": 1}}
+                    else: body = {"organisasjonsnummer": target, "navn": "Target AS", "organisasjonsform": {"kode": "AS"}}
+                    return 200, {"Content-Type": "application/json"}, json.dumps(body).encode(), url
+            gateway = NetworkGateway(RoutingTransport(), retries=0)
+            with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+                return await fetch_company(target, gateway, datetime.now(timezone.utc) + timedelta(days=1))
+
+        self_result = await fetch_with([self_child])
+        self.assertFalse(any(claim.field_family == "workplace" for claim in self_result.claims))
+        self.assertFalse(self_result.observations["workplaces_complete"])
+
+        duplicate = await fetch_with([valid_child, dict(valid_child)])
+        duplicate_claims = [claim for claim in duplicate.claims if claim.field_family == "workplace"]
+        self.assertEqual(len([claim for claim in duplicate_claims if claim.field == "workplace.organisasjonsnummer"]), 1)
+        self.assertEqual(duplicate.observations["workplace_count"], 1)
+        self.assertTrue(duplicate.observations["workplaces_complete"])
+
+        conflicting = await fetch_with([valid_child, {**valid_child, "navn": "Conflicting name AS"}])
+        self.assertFalse(any(claim.field_family == "workplace" for claim in conflicting.claims))
+        self.assertFalse(conflicting.observations["workplaces_complete"])
+        self.assertIn("BRREG_SUBUNIT_DUPLICATE_CONFLICT", {error.code for error in conflicting.errors})
+
+        mixed = await fetch_with([valid_child, wrong_parent, malformed])
+        self.assertEqual({claim.value for claim in mixed.claims if claim.field == "workplace.organisasjonsnummer"}, {"923609024"})
+        self.assertFalse(mixed.observations["workplaces_complete"])
+
     async def test_http_200_malformed_collection_is_failure_not_absence(self):
         class MalformedTransport:
             async def request(self, url, headers, timeout):
@@ -759,6 +843,10 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
             {"id": "unknown-scope", "regnskapstype": "SPECIAL", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 13}},
             {"id": "malformed", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": "zero-ish"}},
             {"id": "valid-zero-v2", "versjon": 2, "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2023-01-01", "tilDato": "2023-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 0}},
+            {"id": "valid-eur", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2022-01-01", "tilDato": "2022-12-31"}, "valuta": "EUR", "eiendeler": {"sumEiendeler": 42}},
+            {"id": "unknown-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "QQQ", "eiendeler": {"sumEiendeler": 14}},
+            {"id": "lowercase-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "nok", "eiendeler": {"sumEiendeler": 15}},
+            {"id": "malformed-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NO-K", "eiendeler": {"sumEiendeler": 16}},
         ]
         class AccountsTransport:
             async def request(self, url, headers, timeout):
@@ -771,9 +859,18 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
         with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
             result = await fetch_company(target, gateway, datetime.now(timezone.utc) + timedelta(days=1))
         metrics = [claim for claim in result.claims if claim.field_family == "financial"]
-        self.assertEqual([(item.field, item.value) for item in metrics], [("total_assets", 0)])
-        self.assertTrue(all(item.period_start.date().isoformat() == "2023-01-01" and item.period_end.date().isoformat() == "2023-12-31" and item.currency == "NOK" for item in metrics))
-        self.assertEqual(len([item for item in result.errors if item.code == "BRREG_FINANCIAL_METADATA_INCOMPLETE"]), 3)
+        self.assertEqual([(item.field, item.value, item.currency) for item in metrics],
+            [("total_assets", 0, "NOK"), ("total_assets", 42, "EUR")])
+        self.assertTrue(all(item.period_start is not None and item.period_end is not None for item in metrics))
+        self.assertEqual(len([item for item in result.errors if item.code == "BRREG_FINANCIAL_METADATA_INCOMPLETE"]), 6)
+
+    def test_currency_allowlist_accepts_active_codes_not_unknown_triplets(self):
+        self.assertTrue(supported_currency("NOK"))
+        self.assertTrue(supported_currency("EUR"))
+        self.assertFalse(supported_currency("QQQ"))
+        self.assertFalse(supported_currency("nok"))
+        self.assertFalse(supported_currency("NO-K"))
+        self.assertIn("NOK", SUPPORTED_CURRENCY_CODES)
 
 
 if __name__ == "__main__":

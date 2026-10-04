@@ -93,6 +93,41 @@ class WebsiteIdentityTests(unittest.TestCase):
         self.assertEqual(result["decision"], "accepted")
         self.assertEqual(result["proof"]["method"], "subject_scoped_structured_org_number")
 
+    def test_structured_identity_rejects_multiple_distinct_ids_but_normalizes_duplicates(self):
+        cases = [
+            ('target only', [ORG], "accepted"),
+            ('rival only', ["987654321"], "rejected"),
+            ('target and rival', [ORG, "987654321"], "ambiguous"),
+            ('duplicate target', [ORG, ORG], "accepted"),
+            ('formatted target duplicate', [ORG, "123 456 789"], "accepted"),
+            ('multiple rival ids', [ORG, "987654321", "923609016"], "ambiguous"),
+        ]
+        for label, identifiers, expected in cases:
+            with self.subTest(label=label):
+                node = {"@type": "Organization", "legalName": LEGAL, "identifier": identifiers}
+                doc = page(f'<title>Welcome</title><script type="application/ld+json">{json.dumps(node)}</script>')
+                self.assertEqual(verify_site_pages(self.profile(), [doc])["decision"], expected)
+
+    def test_nested_customer_does_not_conflict_with_exact_page_owner(self):
+        node = {"@type": "Organization", "legalName": LEGAL, "identifier": ORG,
+                "customer": {"@type": "Organization", "legalName": "Customer Rival AS", "identifier": "987654321"}}
+        doc = page(f'<title>Welcome</title><script type="application/ld+json">{json.dumps(node)}</script>')
+        self.assertEqual(verify_site_pages(self.profile(), [doc])["decision"], "accepted")
+
+    def test_incidental_service_provider_footer_is_not_target_site_proof(self):
+        doc = page('<title>Welcome</title><h1>Welcome</h1><footer>Rival AS org.nr. 987654321. '
+                   'Website designed by ÆØÅ Industri AS org.nr. 123456789.</footer>',
+                   "https://rival.example.no/")
+        result = verify_site_pages(self.profile(), [doc])
+        self.assertNotEqual(result["decision"], "accepted")
+
+    def test_longer_company_name_cannot_borrow_target_registered_address(self):
+        profile = {"organisation_number": "923609016", "name": "Acme AS", "registered_address": {
+            "adresse": ["Main Street 1"], "postnummer": "0123", "kommune": "Oslo"}}
+        doc = page("<title>Acme Services AS</title><h1>Acme Services AS</h1>"
+            "<address>Main Street 1, 0123 Oslo</address>", "https://acme-services.example.no/")
+        self.assertNotEqual(verify_site_pages(profile, [doc])["decision"], "accepted")
+
     def test_org_number_in_customer_context_is_not_identity(self):
         doc = page(f"<html><head><title>{LEGAL}</title></head><body><footer>Our customer {LEGAL}, organisation number {ORG}</footer></body></html>")
         result = verify_site_pages(self.profile(), [doc])
@@ -284,6 +319,33 @@ class WebsiteIdentityTests(unittest.TestCase):
         self.assertFalse(any(claim["field"] in {"verified_website_url", "verified_website_domain"}
             for claim in envelope["claims"]))
 
+    def test_multi_id_and_incidental_footer_cannot_publish_downstream_or_cli_claims(self):
+        org = "923609016"
+        name = "Integration Target AS"
+        for label, html in (
+            ("multi_id", f'''<html><head><title>Welcome</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{name}","identifier":["{org}","987654321"]}}</script></head><body><a href="/careers">Careers</a><a href="/news">News</a><script type="application/ld+json">{{"@type":"JobPosting","title":"Engineer","datePosted":"2026-09-20","validThrough":"2026-12-01","url":"/careers/engineer","hiringOrganization":{{"@type":"Organization","name":"{name}","identifier":"{org}"}}}}</script><script type="application/ld+json">{{"@type":"NewsArticle","headline":"{name} opens a new office","datePublished":"2026-09-20","url":"/news/office","about":{{"@type":"Organization","name":"{name}","identifier":"{org}"}}}}</script></body></html>'''),
+            ("service_footer", f'''<html><head><title>Welcome</title></head><body><h1>Welcome</h1><footer>Rival AS org.nr. 987654321. Website designed by {name} org.nr. {org}.</footer><a href="/careers">Careers</a><script type="application/ld+json">{{"@type":"JobPosting","title":"Engineer","datePosted":"2026-09-20","url":"/careers/engineer","hiringOrganization":{{"@type":"Organization","name":"{name}","identifier":"{org}"}}}}</script></body></html>'''),
+        ):
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html.encode())})
+                profile = self.profile(organisation_number=org, name=name,
+                    website_candidates=["https://example.no/"])
+                research = __import__("asyncio").run(research_company(profile, gateway, enable_keyless=False))
+                self.assertFalse(research.claims)
+                root = Path(directory)
+                input_path, snapshot_path = root / "input.jsonl", root / "registry.jsonl"
+                output_path, state_path = root / "output.jsonl", root / "state.sqlite"
+                input_path.write_text(json.dumps({"organisation_number": org}) + "\n", encoding="utf-8")
+                snapshot_path.write_text(json.dumps({"organisation_number": org, "name": name,
+                    "website": "https://example.no/"}) + "\n", encoding="utf-8")
+                with patch.object(run_module, "NetworkGateway", return_value=gateway):
+                    code = run_module.main(["--input", str(input_path), "--registry-snapshot", str(snapshot_path),
+                        "--live-websites", "--output", str(output_path), "--state-output", str(state_path), "--batch-id", label])
+                envelope = json.loads(output_path.read_text(encoding="utf-8").splitlines()[0])
+                self.assertEqual(code, 0)
+                self.assertFalse(any(claim["section"] in {"website_owned_profiles", "hiring_activity"}
+                    for claim in envelope["claims"]))
+
     def test_conflicting_visible_homepage_legal_identity_blocks_structured_target(self):
         html = f'''<html><head><title>Rival AS</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><h1>Rival AS</h1></body></html>'''
         gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html.encode())})
@@ -307,7 +369,10 @@ class WebsiteIdentityTests(unittest.TestCase):
     def test_explicit_robots_disallow_blocks_website_candidate(self):
         gateway = FakeGateway({}, robots_state="disallowed")
         result = __import__("asyncio").run(research_company(self.profile(website_candidates=["https://example.no"]), gateway, enable_keyless=False))
-        self.assertEqual(result.state, PublicState.BLOCKED)
+        self.assertIsNone(result.state)
+        self.assertEqual(result.attempt_outcome, "robots_disallowed")
+        self.assertIsNone(result.hiring_activity_state)
+        self.assertEqual(result.hiring_attempt_outcome, "robots_disallowed")
         self.assertEqual(result.audit["candidates"][0]["decision"], "blocked_robots")
         self.assertFalse(result.claims)
 
@@ -358,10 +423,41 @@ class WebsiteIdentityTests(unittest.TestCase):
     def test_robots_transport_failure_is_a_distinct_fail_closed_outcome(self):
         gateway = FakeGateway({}, robots_state="unreachable")
         result = __import__("asyncio").run(research_company(self.profile(website_candidates=["https://example.no"]), gateway, enable_keyless=False))
-        self.assertEqual(result.state, PublicState.FAILED)
+        self.assertIsNone(result.state)
+        self.assertEqual(result.attempt_outcome, "robots_unreachable")
+        self.assertIsNone(result.hiring_activity_state)
         self.assertEqual(result.audit["candidates"][0]["decision"], "robots_unreachable")
         self.assertEqual([error.code for error in result.errors], ["ROBOTS_UNREACHABLE"])
         self.assertFalse(result.claims)
+
+    def test_runner_keeps_unattempted_budget_deadline_and_robots_outcomes_out_of_public_state(self):
+        org, name = "923609016", "Runner Target AS"
+        for outcome, expected_attempt, expected_hiring_attempt, live in (("not_attempted", "not_attempted", "not_attempted", False),
+                ("budget_skipped", "budget_skipped", "not_attempted", True),
+                ("disallowed", "robots_disallowed", "not_attempted", True),
+                ("unreachable", "robots_unreachable", "not_attempted", True)):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source, snapshot = root / "input.jsonl", root / "registry.jsonl"
+                output, state = root / "output.jsonl", root / "state.sqlite"
+                source.write_text(json.dumps({"organisation_number": org}) + "\n", encoding="utf-8")
+                snapshot.write_text(json.dumps({"organisation_number": org, "name": name,
+                    "source_url": "https://registry.example/snapshot",
+                    "website": "https://example.no/"}) + "\n", encoding="utf-8")
+                argv = ["--input", str(source), "--registry-snapshot", str(snapshot), "--output", str(output),
+                    "--state-output", str(state), "--batch-id", outcome]
+                gateway = FakeGateway({}, robots_state=outcome if live else "allowed")
+                if live:
+                    argv.append("--live-websites")
+                with patch.object(run_module, "NetworkGateway", return_value=gateway):
+                    self.assertEqual(run_module.main(argv), 0)
+                envelope = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+                self.assertIsNone(envelope["sections"]["website_owned_profiles"]["state"])
+                self.assertIsNone(envelope["sections"]["hiring_activity"]["state"])
+                self.assertEqual(envelope["sections"]["website_owned_profiles"]["attempt_outcome"], expected_attempt)
+                self.assertEqual(envelope["sections"]["hiring_activity"]["attempt_outcome"], expected_hiring_attempt)
+                self.assertFalse(any(claim["section"] in {"website_owned_profiles", "hiring_activity"}
+                    for claim in envelope["claims"]))
 
     def test_preflight_dns_failure_is_unreachable_not_explicit_robots_disallow(self):
         gateway = FakeGateway({}, robots_error=NetworkPolicyError("hostname did not resolve"))
