@@ -16,7 +16,7 @@ jobs:
         run: python -m pip install uv==0.8.0
       - name: Install locked starter dependencies
         working-directory: signalpost-starter-kit
-        run: uv sync --frozen
+        run: uv sync --frozen --extra m08-test
       - name: Install pinned test runner
         working-directory: signalpost-starter-kit
         run: uv pip install --python .venv/bin/python pytest==9.1.1
@@ -30,6 +30,16 @@ jobs:
         env:
           PYTHONPATH: ..
         run: .venv/bin/python -m pytest -q tests/test_signalpost_m07.py
+      - name: Run M08 synthesis and query contract tests
+        working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
+        run: .venv/bin/python -m pytest -q tests/test_signalpost_m08.py
+      - name: Evaluate M08 research gold corpus and provenance
+        working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
+        run: .venv/bin/python scripts/evaluate_signalpost_m08.py --output /tmp/signalpost-m08-evaluation.json
       - name: Compile and import production package
         working-directory: signalpost-starter-kit
         env:
@@ -87,3 +97,9 @@ jobs:
           --checkpoint /tmp/signalpost-clean-cwd-checkpoint.sqlite
       - name: Verify clean CWD evaluator cardinality
         run: test "$(wc -l < /tmp/signalpost-clean-cwd.jsonl | tr -d ' ')" = "4"
+      - name: Smoke test server-rendered UX from clean working directory
+        working-directory: /tmp
+        run: >-
+          $GITHUB_WORKSPACE/signalpost-starter-kit/.venv/bin/python
+          $GITHUB_WORKSPACE/signalpost-starter-kit/scripts/smoke_m08_web.py
+          --data /tmp/signalpost-clean-cwd.jsonl

@@ -1,0 +1,20 @@
+{
+  "corpus": "M08 canonical research gold v1",
+  "find": [
+    {"id": "exact_leading_zero_org", "text": "", "field": "organisation_number", "operator": "eq", "value": "001234567", "matches": ["001234567"], "unknown": []},
+    {"id": "legal_name_isolation", "text": "Acme AS", "matches": ["001234567"], "unknown": []},
+    {"id": "and_structured_filter", "text": "", "filters": [{"field": "legal_form", "operator": "eq", "value": "AS"}, {"field": "municipality", "operator": "eq", "value": "Oslo"}], "matches": ["001234567"], "unknown": ["923609016", "923609025"]},
+    {"id": "zero_revenue_exact_dimensions", "text": "", "field": "revenue", "operator": "eq", "value": "0", "currency": "NOK", "period_end": "2024-12-31", "scope": "legal_entity", "matches": ["001234567"], "unknown": ["923609016", "923609025"]}
+  ],
+  "compare": [
+    {"id": "like_for_like_zero_and_positive", "organisations": ["001234567", "123456789"], "fields": ["revenue"], "expected": ["comparable"]},
+    {"id": "currency_mismatch", "organisations": ["001234567", "923609025"], "fields": ["revenue"], "expected": ["not_comparable"]}
+  ],
+  "verify": [
+    {"id": "supported_zero", "organisation_number": "001234567", "field": "revenue", "value": "0", "currency": "NOK", "period_end": "2024-12-31", "scope": "legal_entity", "expected": "supported"},
+    {"id": "contradicted_legal_form", "organisation_number": "001234567", "field": "legal_form", "value": "ENK", "expected": "contradicted"},
+    {"id": "blocked_financial_unknown", "organisation_number": "923609016", "field": "revenue", "value": "4", "currency": "NOK", "period_end": "2024-12-31", "scope": "legal_entity", "expected": "unavailable"},
+    {"id": "wrong_period_insufficient", "organisation_number": "001234567", "field": "revenue", "value": "4", "currency": "NOK", "period_end": "2023-12-31", "scope": "legal_entity", "expected": "insufficient_evidence"}
+  ],
+  "abstention": {"id": "unsupported_expansion_inference", "organisation_number": "001234567", "field": "rapid_expansion", "value": "true", "expected": "abstain"}
+}

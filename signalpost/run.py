@@ -23,6 +23,7 @@ from .network import NetworkGateway, StructuredLogger, registered_domain
 from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company
 from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, artifact_ref, canonical_json,
                       compare_states, company_state, merge_prior_facts, validate_artifact, sha256_json)
+from .synthesis import synthesize
 
 
 def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[str, Any] | None = None,
@@ -630,6 +631,7 @@ def run(args: argparse.Namespace) -> int:
         change_section.state = PublicState.AVAILABLE if envelope.refresh.changes else PublicState.NOT_AVAILABLE
         change_section.attempt_outcome = envelope.refresh.mode
         change_section.diagnostics = [f"material_changes:{len(envelope.refresh.changes)}"]
+        envelope.synthesis["summary"] = synthesize(envelope)
         checkpoint.put(envelope)
         checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
     checkpoint.connection.commit()
