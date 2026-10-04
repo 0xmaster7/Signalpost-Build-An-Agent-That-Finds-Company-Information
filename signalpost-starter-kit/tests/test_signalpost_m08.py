@@ -91,6 +91,18 @@ class FindContractTests(unittest.TestCase):
         name = find_companies(self.profiles.values(), text="Acme AS")
         self.assertEqual([row["organisation_number"] for row in name["matches"]], ["001234567"])
 
+    def test_frozen_registry_legal_name_spelling_is_searchable_and_verifiable(self):
+        envelope = make_envelope("001234567", "Acme AS", [])
+        envelope.claims[0].field = "legal_name"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "legal-name.jsonl"
+            path.write_text(json.dumps(to_evaluator(envelope)) + "\n", encoding="utf-8")
+            profiles = load_profiles(path)
+        found = find_companies(profiles, filters=[FindFilter("legal_name", "eq", "Acme AS")])
+        self.assertEqual([item["organisation_number"] for item in found["matches"]], ["001234567"])
+        verified = verify_proposition(profiles, organisation_number="001234567", field="legal_name", value="Acme AS")
+        self.assertEqual(verified["status"], "supported")
+
     def test_multiple_filters_are_and_and_unknown_does_not_match(self):
         result = find_companies(self.profiles.values(), filters=[FindFilter("municipality", "eq", "Oslo"), FindFilter("legal_form", "eq", "AS")])
         self.assertEqual([row["organisation_number"] for row in result["matches"]], ["001234567"])

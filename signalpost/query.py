@@ -67,7 +67,8 @@ def build_index(profiles: dict[str, CompanyProfile] | Iterable[CompanyProfile]) 
         for claim in profile.claims:
             if claim.state != PublicState.AVAILABLE or claim.organisation_number != org:
                 continue
-            by_field.setdefault(claim.field, []).append((org, claim))
+            index_field = "name" if claim.field == "legal_name" else claim.field
+            by_field.setdefault(index_field, []).append((org, claim))
             if claim.field in {"name", "legal_name", "public_brand"} and isinstance(claim.value, str):
                 names.setdefault(org, []).append(claim.value)
     for entries in by_field.values():
@@ -236,8 +237,12 @@ def _field_claims(profile: CompanyProfile, field: str) -> list[Claim]:
     if field == "organisation_number":
         return []
     canonical = FIELD_ALIASES[field]
-    return [claim for claim in profile.claims if claim.state == PublicState.AVAILABLE and claim.field == canonical
+    return [claim for claim in profile.claims if claim.state == PublicState.AVAILABLE and _claim_matches_field(claim, canonical)
             and claim.organisation_number == profile.organisation_number]
+
+
+def _claim_matches_field(claim: Claim, canonical_field: str) -> bool:
+    return claim.field == canonical_field or (canonical_field == "name" and claim.field == "legal_name")
 
 
 def _truth(profile: CompanyProfile, item: FindFilter) -> tuple[bool | None, list[Claim], str | None]:
@@ -404,7 +409,7 @@ def compare_companies(profiles: dict[str, CompanyProfile], organisation_numbers:
         single_fact_per_company = True
         financial_field = canonical_field in {FIELD_ALIASES[name] for name in FINANCIAL_FIELDS}
         for profile in selected_profiles:
-            claims = [claim for claim in profile.claims if claim.field == canonical_field and claim.state == PublicState.AVAILABLE
+            claims = [claim for claim in profile.claims if _claim_matches_field(claim, canonical_field) and claim.state == PublicState.AVAILABLE
                       and claim.organisation_number == profile.organisation_number]
             if not claims:
                 values.append({"organisation_number": profile.organisation_number, "status": _missing_status(profile, canonical_field),
@@ -455,7 +460,7 @@ def verify_proposition(profiles: dict[str, CompanyProfile], *, organisation_numb
     if field not in set(FIELD_ALIASES.values()):
         raise QueryError("field is not represented by a canonical claim in the dataset")
     candidates = [claim for claim in profile.claims if claim.organisation_number == organisation_number
-                  and claim.field == field and claim.state == PublicState.AVAILABLE]
+                  and _claim_matches_field(claim, field) and claim.state == PublicState.AVAILABLE]
     if field in {FIELD_ALIASES[item] for item in FINANCIAL_FIELDS} and not (currency and period_end and scope):
         return {"status": "insufficient_evidence", "organisation_number": organisation_number,
                 "field": field, "reason": "financial verification requires exact currency, period_end and scope dimensions",
