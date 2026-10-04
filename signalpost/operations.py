@@ -405,6 +405,24 @@ class OrderedAtomicWriter:
             if os.path.exists(temporary):
                 os.unlink(temporary)
 
+    def write_bytes(self, payload: bytes) -> None:
+        """Atomically replace a related canonical artifact after path preflight."""
+        fd, temporary = tempfile.mkstemp(prefix=f".{self.output_path.name}.", suffix=".tmp", dir=self.output_path.parent)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.output_path)
+            directory_fd = os.open(self.output_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
     def write_shells(self, rows: Iterable[object], states: dict[int, str] | None = None) -> Path:
         """Persist restartable pending shells beside output without inventing public states."""
         pending = self.output_path.with_name(self.output_path.name + ".pending.jsonl")

@@ -832,6 +832,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue({"BRREG_ACCOUNTS_MALFORMED", "BRREG_ROLES_MALFORMED", "BRREG_SUBUNITS_MALFORMED"} <= codes)
         self.assertEqual(result.section_states["accounts_history"], PublicState.FAILED)
         self.assertEqual(result.observations["role_family_state"], PublicState.FAILED.value)
+        self.assertIsNone(result.observations.get("roles_completeness_evidence_id"))
         self.assertFalse(result.observations["workplaces_complete"])
         self.assertFalse(any(claim.state == PublicState.AVAILABLE and claim.field_family == "financial" for claim in result.claims))
 

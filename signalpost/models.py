@@ -86,12 +86,76 @@ class SourceSnapshot(StrictModel):
     rights_status: str = "unknown"
 
 
-class RefreshState(StrictModel):
+class ChangeType(StrEnum):
+    NEW_ROLE = "new_role"
+    ENDED_ROLE = "ended_role"
+    NEW_WORKPLACE = "new_workplace"
+    CLOSED_WORKPLACE = "closed_workplace"
+    NEW_JOB = "new_job"
+    CLOSED_JOB = "closed_job"
+    NEW_FILING = "new_filing"
+    CORRECTED_FILING = "corrected_filing"
+    NEW_ACTIVITY = "new_activity"
+    BRAND_CHANGED = "brand_changed"
+    WEBSITE_CHANGED = "website_changed"
+    CLAIM_CHANGED = "claim_changed"
+    SOURCE_BECAME_UNAVAILABLE = "source_became_unavailable"
+
+
+class ChangeEvidenceRef(StrictModel):
+    evidence_id: str
+    source_url: str
+    retrieved_at: datetime
+    content_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    extraction_method: str
+    json_pointer: str | None = None
+    excerpt: str | None = None
+    source_class: str = "official"
+    subject_organisation_number: str | None = None
+    source_snapshot_ids: list[str] = Field(default_factory=list)
+
+
+class ChangeSnapshotRef(StrictModel):
+    source_id: str
+    source_url: str
+    retrieved_at: datetime
+    content_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    http_status: int | None = Field(default=None, ge=100, le=599)
+    cache_mode: str = "transient"
+    rights_status: str = "unknown"
+
+
+class ChangeEvent(StrictModel):
+    event_id: str
+    type: ChangeType
+    organisation_number: str
+    section: str | None = None
+    field: str | None = None
+    old_value: Any = None
+    new_value: Any = None
+    effective_at: str | None = None
+    observed_at: datetime
     previous_state_ref: str | None = None
+    current_state_ref: str | None = None
+    previous_claim_fingerprint: str | None = None
+    current_claim_fingerprint: str | None = None
+    previous_evidence: list[ChangeEvidenceRef] = Field(default_factory=list)
+    current_evidence: list[ChangeEvidenceRef] = Field(default_factory=list)
+    previous_source_snapshots: list[ChangeSnapshotRef] = Field(default_factory=list)
+    current_source_snapshots: list[ChangeSnapshotRef] = Field(default_factory=list)
+    removal_confirmation_evidence_ids: list[str] = Field(default_factory=list)
+    provenance_complete: bool
+
+
+class RefreshState(StrictModel):
+    mode: str = "baseline_no_prior_state"
+    previous_state_ref: str | None = None
+    current_state_ref: str | None = None
     last_success_at: datetime | None = None
     last_attempt_at: datetime | None = None
     next_refresh_at: datetime | None = None
     retained_claim_ids: list[str] = Field(default_factory=list)
+    changes: list[ChangeEvent] = Field(default_factory=list)
 
 
 class RunError(StrictModel):

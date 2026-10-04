@@ -515,7 +515,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     observations["ceo_state"] = (PublicState.AVAILABLE.value if ceo_rows else
                                  PublicState.FAILED.value if roles_malformed else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
                                  PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
-    if roles_status == 200:
+    if roles_status == 200 and not roles_malformed:
         roles_digest = roles_hash or hashlib.sha256(json.dumps(roles_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         completion_snapshot_id = _source_id("roles", roles_digest)
         observations["roles_completeness_evidence_id"] = f"{org}:roles-complete:{roles_digest[:12]}"
@@ -553,12 +553,16 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     if subunits_malformed:
         errors.append(RunError(code="BRREG_SUBUNITS_MALFORMED", message="Official subunit endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
     complete = subunit_status == 200 and not subunits_malformed
+    subunit_pages: list[dict[str, Any]] = []
     current = subunit_body
     current_url = subunit_final or subunits_url
     current_hash = subunit_hash
     current_time = subunit_time
     page_index = 0
     while subunit_status == 200 and isinstance(current, dict) and _subunit_collection_shape(current):
+        if current_hash:
+            subunit_pages.append({"url": current_url, "content_sha256": current_hash,
+                                  "retrieved_at": current_time.isoformat(), "page_index": page_index})
         rows, next_path, page_complete = subunit_page(current)
         locations.extend((item, current, current_url, current_hash, current_time, i) for i, item in enumerate(rows))
         if not rows:
@@ -617,6 +621,23 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         publishable.append(min(rows, key=lambda row: row[5])[:6])
 
     observations["workplace_count"] = len(publishable)
+    if observations["workplaces_complete"]:
+        completeness_ids = []
+        for page in subunit_pages:
+            digest = page["content_sha256"]
+            source_id = _source_id("subunits", digest)
+            evidence_id = f"{org}:workplaces-page-complete:{page['page_index']}:{digest[:12]}"
+            completeness_ids.append(evidence_id)
+            if not any(item.source_id == source_id for item in snapshots):
+                snapshots.append(SourceSnapshot(source_id=source_id, source_url=page["url"],
+                    retrieved_at=datetime.fromisoformat(page["retrieved_at"]), content_sha256=digest,
+                    http_status=200, rights_status=RIGHTS))
+            evidence.append(Evidence(evidence_id=evidence_id, source_url=page["url"],
+                retrieved_at=datetime.fromisoformat(page["retrieved_at"]), content_sha256=digest,
+                extraction_method="brreg_complete_workplace_page_v1", json_pointer="/_embedded/underenheter",
+                subject_organisation_number=org, source_snapshot_ids=[source_id]))
+        observations["workplaces_completeness_evidence_ids"] = completeness_ids
+        observations["workplaces_completeness_evidence_id"] = completeness_ids[0] if completeness_ids else None
     for item, page_body, page_url, page_hash, page_time, page_row_index in publishable:
         child_org = normalize_org_number(item.get("organisasjonsnummer"))[0]
         parent_org = normalize_org_number(item.get("overordnetEnhet"))[0]
@@ -631,6 +652,10 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                           source_hash=page_hash)
     role_claims = any(c.field_family == "role" for c in claims)
     workplace_claims = any(c.field_family == "workplace" for c in claims)
+    observations["workplaces_state"] = (PublicState.AVAILABLE.value if observations["workplaces_complete"] else
+        PublicState.FAILED.value if subunits_malformed or subunit_status >= 500 or subunit_status == 0 else
+        PublicState.BLOCKED.value if subunit_status in {401, 403, 429, 451} else
+        PublicState.AMBIGUOUS.value)
     states["leadership_workplaces"] = PublicState.AVAILABLE if role_claims or workplace_claims else (
         PublicState.FAILED if roles_malformed or subunits_malformed or roles_status >= 500 or subunit_status >= 500 or roles_status == 0 or subunit_status == 0 else
         PublicState.BLOCKED if roles_status in {401, 403, 429, 451} or subunit_status in {401, 403, 429, 451} else

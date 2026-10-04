@@ -21,6 +21,8 @@ from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed
                          OrderedAtomicWriter, RunBudget)
 from .network import NetworkGateway, StructuredLogger, registered_domain
 from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company
+from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, artifact_ref, canonical_json,
+                      compare_states, company_state, merge_prior_facts, validate_artifact, sha256_json)
 
 
 def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[str, Any] | None = None,
@@ -260,10 +262,13 @@ def run(args: argparse.Namespace) -> int:
     for row in rows:
         rows_by_org.setdefault(row.organisation_number, []).append(row)
     output_path = Path(args.output or os.environ.get("SIGNALPOST_OUTPUT", "signalpost_output.jsonl"))
-    checkpoint_path = Path(args.state_output or os.environ.get("SIGNALPOST_STATE_OUTPUT", "signalpost_state.sqlite"))
-    previous: dict[str, dict[str, Any]] = {}
-    if args.previous_state:
-        previous = json.loads(Path(args.previous_state).read_text(encoding="utf-8"))
+    state_output_path = Path(args.state_output or os.environ.get("SIGNALPOST_STATE_OUTPUT") or
+                             os.environ.get("SIGNALPOST_CANONICAL_STATE_OUTPUT", "signalpost_state.json"))
+    checkpoint_default = str(state_output_path) + ".checkpoint.sqlite"
+    checkpoint_path = Path(args.checkpoint or os.environ.get("SIGNALPOST_CHECKPOINT", checkpoint_default))
+    resolved_paths = {path.resolve() for path in (output_path, state_output_path, checkpoint_path)}
+    if len(resolved_paths) != 3:
+        raise ValueError("evaluator output, canonical state, and SQLite checkpoint must use separate paths")
     config_values: dict[str, Any] = {}
     config_bytes = b""
     if args.config:
@@ -271,6 +276,22 @@ def run(args: argparse.Namespace) -> int:
         config_values = json.loads(config_bytes.decode("utf-8"))
         if not isinstance(config_values, dict):
             raise ValueError("runtime config must be a JSON object")
+    previous: dict[str, dict[str, Any]] = {}
+    previous_artifact = None
+    previous_state_bytes = b""
+    previous_state_error: str | None = None
+    if args.previous_state:
+        try:
+            previous_state_bytes = Path(args.previous_state).read_bytes()
+            previous_artifact = validate_artifact(json.loads(previous_state_bytes.decode("utf-8")))
+        except OSError:
+            previous_state_error = "prior state could not be read"
+        except UnicodeDecodeError:
+            previous_state_error = "prior state is not valid UTF-8 JSON"
+        except json.JSONDecodeError:
+            previous_state_error = "prior state is not valid JSON"
+        except PriorStateError as exc:
+            previous_state_error = str(exc)
     live_brreg = bool(args.live_brreg or not args.registry_snapshot)
     live_websites = bool(args.live_websites)
     fixture = registry_fixture(args.registry_snapshot) if not (live_brreg or live_websites) else {}
@@ -293,6 +314,33 @@ def run(args: argparse.Namespace) -> int:
     if cutoff.tzinfo is None:
         cutoff = cutoff.replace(tzinfo=timezone.utc)
     cutoff = cutoff.astimezone(timezone.utc)
+    effective_config_identity = {
+        "source_policy_version": SOURCE_POLICY_VERSION,
+        "runtime_config": config_values,
+        "registry_source_url": args.registry_source_url,
+        "registry_snapshot_as_of": args.registry_snapshot_as_of,
+        "network_policy": args.network_policy,
+        "live_brreg": live_brreg,
+        "live_websites": live_websites,
+        "no_keyless_websites": args.no_keyless_websites,
+        "budget": {"hard_seconds": budget.hard_seconds, "soft_seconds": budget.soft_seconds,
+            "completion_reserve_seconds": budget.completion_reserve_seconds,
+            "physical_request_limit": budget.physical_request_limit,
+            "logical_request_limit": budget.logical_request_limit,
+            "paid_cost_limit": str(budget.paid_cost_limit),
+            "global_http_concurrency": budget.global_http_concurrency,
+            "per_host_concurrency": budget.per_host_concurrency,
+            "per_company_physical_limit": budget.per_company_physical_limit,
+            "per_host_physical_limit": budget.per_host_physical_limit},
+    }
+    config_fingerprint = sha256_json(effective_config_identity)
+    if previous_artifact and previous_artifact.configuration_fingerprint != config_fingerprint:
+        previous_artifact = None
+        previous_state_error = "prior state source/config identity is incompatible with this run"
+    previous_ref = ("sha256:" + hashlib.sha256(canonical_json(previous_artifact.model_dump(mode="json"))).hexdigest()
+                    if previous_artifact else None)
+    if previous_artifact:
+        previous = {org: {"state_ref": previous_ref} for org in previous_artifact.companies}
     run_fingerprint = hashlib.sha256(input_path.read_bytes() + config_bytes + json.dumps({
         "format": args.format, "live_brreg": live_brreg, "live_websites": live_websites,
         "registry_snapshot_sha256": registry_hash, "config": config_values,
@@ -307,7 +355,9 @@ def run(args: argparse.Namespace) -> int:
                    "per_host_concurrency": budget.per_host_concurrency},
         "per_company_physical_limit": budget.per_company_physical_limit,
         "per_host_physical_limit": budget.per_host_physical_limit,
-        "previous": previous, "evidence_cutoff": cutoff.isoformat(), "evidence_cutoff_source": cutoff_source,
+        "previous_state_sha256": hashlib.sha256(previous_state_bytes).hexdigest() if previous_state_bytes else None,
+        "previous_state_error": previous_state_error,
+        "evidence_cutoff": cutoff.isoformat(), "evidence_cutoff_source": cutoff_source,
         "network_policy": args.network_policy,
         "no_keyless": args.no_keyless_websites,
     }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -315,6 +365,8 @@ def run(args: argparse.Namespace) -> int:
     # Persist one internal shell per row before running any enrichment. Shells are not
     # evaluator envelopes and therefore do not invent a public terminal result.
     writer = OrderedAtomicWriter(output_path, estimated_bytes=len(rows) * 64 * 1024)  # preflight before enrichment
+    state_writer = OrderedAtomicWriter(state_output_path,
+        estimated_bytes=len(previous_state_bytes) + len(rows) * 64 * 1024)
     if args.resume and not checkpoint_path.exists():
         raise ValueError("--resume requested but the checkpoint does not exist")
     checkpoint = CheckpointStore(checkpoint_path)
@@ -542,6 +594,42 @@ def run(args: argparse.Namespace) -> int:
     for envelope in envelopes:
         envelope.synthesis["evidence_cutoff"] = cutoff.isoformat()
         envelope.synthesis["evidence_cutoff_source"] = cutoff_source
+    # Construct one canonical company state per organisation, independent of
+    # duplicate input rows, then compare it against the explicitly supplied state.
+    # Keep untouched companies when a refresh batch is only a subset; a handoff
+    # artifact must not silently forget state outside today's input rows.
+    current_states: dict[str, CompanyState] = (dict(previous_artifact.companies) if previous_artifact else {})
+    representative: dict[str, Envelope] = {}
+    for envelope in sorted(envelopes, key=lambda item: item.row_number):
+        representative.setdefault(envelope.organisation_number, envelope)
+    for org, envelope in sorted(representative.items()):
+        old_state = previous_artifact.companies.get(org) if previous_artifact else None
+        new_state = company_state(envelope, config_fingerprint, old_state)
+        new_state = merge_prior_facts(new_state, old_state)
+        current_states[org] = new_state
+    state_payload = artifact_payload(current_states, config_fingerprint)
+    current_ref = artifact_ref(state_payload)
+    for envelope in envelopes:
+        old_state = previous_artifact.companies.get(envelope.organisation_number) if previous_artifact else None
+        if previous_state_error:
+            envelope.refresh.mode = "incompatible_prior_state"
+            envelope.errors.append(RunError(code="REFRESH_PRIOR_STATE_INCOMPATIBLE",
+                message="Prior state was not used: " + previous_state_error[:400]))
+        elif not old_state:
+            envelope.refresh.mode = "baseline_no_prior_state"
+        else:
+            envelope.refresh.mode = "compared"
+            envelope.refresh.previous_state_ref = previous_ref
+            envelope.refresh.changes = compare_states(old_state, current_states[envelope.organisation_number],
+                cutoff=cutoff, previous_ref=previous_ref, current_ref=current_ref)
+        envelope.refresh.current_state_ref = current_ref
+        envelope.refresh.last_attempt_at = envelope.created_at
+        envelope.refresh.retained_claim_ids = sorted(claim.get("claim_id", "")
+            for claim in current_states[envelope.organisation_number].claims)
+        change_section = envelope.sections["refresh_changes"]
+        change_section.state = PublicState.AVAILABLE if envelope.refresh.changes else PublicState.NOT_AVAILABLE
+        change_section.attempt_outcome = envelope.refresh.mode
+        change_section.diagnostics = [f"material_changes:{len(envelope.refresh.changes)}"]
         checkpoint.put(envelope)
         checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
     checkpoint.connection.commit()
@@ -551,6 +639,7 @@ def run(args: argparse.Namespace) -> int:
         raise RuntimeError("terminal output does not exactly match input row cardinality/order")
     finalization_started = time.monotonic()
     writer.write(envelopes, serializer=to_evaluator)
+    state_writer.write_bytes(canonical_json(state_payload) + b"\n")
     finalization_seconds = time.monotonic() - finalization_started
     pending_path.unlink(missing_ok=True)
     ledger_purposes = {}
@@ -607,6 +696,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--registry-source-url", default=os.environ.get("SIGNALPOST_REGISTRY_SOURCE_URL"))
     parser.add_argument("--previous-state", default=os.environ.get("SIGNALPOST_PREVIOUS_STATE"))
     parser.add_argument("--state-output")
+    parser.add_argument("--checkpoint", help="Internal SQLite checkpoint/resume file (separate from canonical state output)")
     parser.add_argument("--resume", action="store_true", help="Resume matching rows from the SQLite state checkpoint")
     parser.add_argument("--config", help="Reserved for the versioned runtime configuration")
     parser.add_argument("--evidence-cutoff", default=os.environ.get("SIGNALPOST_EVIDENCE_CUTOFF"))

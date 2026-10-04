@@ -1,46 +1,354 @@
 {
-  "corpus": "evaluator-owned deterministic old/new source snapshot fixture",
-  "modules": ["registry_live", "financials"],
+  "corpus": "12 deterministic two-snapshot canonical CLI scenarios (six brand changes, six nonchanges)",
+  "modules": [
+    "registry_live",
+    "financials"
+  ],
   "profiles": [
     {
+      "organisation_number": "923609008",
+      "scenario": "scenario_01",
+      "expected_change": true
+    },
+    {
       "organisation_number": "923609016",
-      "name": "Example AS",
-      "legal_form": "AS",
-      "employees": 2,
-      "website": "example.no",
-      "evidence": {}
+      "scenario": "scenario_02",
+      "expected_change": true
+    },
+    {
+      "organisation_number": "923609024",
+      "scenario": "scenario_03",
+      "expected_change": true
+    },
+    {
+      "organisation_number": "923609032",
+      "scenario": "scenario_04",
+      "expected_change": true
+    },
+    {
+      "organisation_number": "923609040",
+      "scenario": "scenario_05",
+      "expected_change": true
+    },
+    {
+      "organisation_number": "923609059",
+      "scenario": "scenario_06",
+      "expected_change": true
+    },
+    {
+      "organisation_number": "923609067",
+      "scenario": "scenario_07",
+      "expected_change": false
+    },
+    {
+      "organisation_number": "923609075",
+      "scenario": "scenario_08",
+      "expected_change": false
+    },
+    {
+      "organisation_number": "923609083",
+      "scenario": "scenario_09",
+      "expected_change": false
+    },
+    {
+      "organisation_number": "923609091",
+      "scenario": "scenario_10",
+      "expected_change": false
+    },
+    {
+      "organisation_number": "923609105",
+      "scenario": "scenario_11",
+      "expected_change": false
+    },
+    {
+      "organisation_number": "923609113",
+      "scenario": "scenario_12",
+      "expected_change": false
     }
   ],
-  "expected_changes": [
-    {"organisation_number": "923609016", "field": "registry.employees"},
-    {"organisation_number": "923609016", "field": "financials.records"}
+  "expected_changes": [],
+  "expected_m07_changes": [
+    {
+      "organisation_number": "923609008",
+      "type": "brand_changed",
+      "field": "legal_name"
+    },
+    {
+      "organisation_number": "923609016",
+      "type": "brand_changed",
+      "field": "legal_name"
+    },
+    {
+      "organisation_number": "923609024",
+      "type": "brand_changed",
+      "field": "legal_name"
+    },
+    {
+      "organisation_number": "923609032",
+      "type": "brand_changed",
+      "field": "legal_name"
+    },
+    {
+      "organisation_number": "923609040",
+      "type": "brand_changed",
+      "field": "legal_name"
+    },
+    {
+      "organisation_number": "923609059",
+      "type": "brand_changed",
+      "field": "legal_name"
+    }
   ],
   "snapshots": {
     "old": {
       "retrieved_at": "2026-08-01T00:00:00Z",
-      "effective_at": "2026-07-31T23:59:59Z",
+      "effective_at": "2026-08-01T00:00:00Z",
       "responses": {
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609008": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609008",
+            "navn": "Replay Scenario 01 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
         "https://data.brreg.no/enhetsregisteret/api/enheter/923609016": {
           "status": 200,
-          "body": {"organisasjonsnummer": "923609016", "navn": "Example AS", "organisasjonsform": {"kode": "AS"}, "antallAnsatte": 2, "hjemmeside": "example.no", "sisteInnsendteAarsregnskap": "2024"}
+          "body": {
+            "organisasjonsnummer": "923609016",
+            "navn": "Replay Scenario 02 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
         },
-        "https://data.brreg.no/regnskapsregisteret/regnskap/923609016": {
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609024": {
           "status": 200,
-          "body": [{"id": 1, "regnskapstype": "SELSKAP", "valuta": "NOK", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "resultatregnskapResultat": {"driftsresultat": {"driftsinntekter": {"sumDriftsinntekter": 100}, "driftsresultat": 10}, "aarsresultat": 8}, "eiendeler": {"sumEiendeler": 80}, "egenkapitalGjeld": {"egenkapital": {"sumEgenkapital": 30}, "gjeldOversikt": {"sumGjeld": 50}}}]
+          "body": {
+            "organisasjonsnummer": "923609024",
+            "navn": "Replay Scenario 03 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609032": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609032",
+            "navn": "Replay Scenario 04 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609040": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609040",
+            "navn": "Replay Scenario 05 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609059": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609059",
+            "navn": "Replay Scenario 06 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609067": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609067",
+            "navn": "Replay Scenario 07 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609075": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609075",
+            "navn": "Replay Scenario 08 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609083": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609083",
+            "navn": "Replay Scenario 09 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609091": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609091",
+            "navn": "Replay Scenario 10 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609105": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609105",
+            "navn": "Replay Scenario 11 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609113": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609113",
+            "navn": "Replay Scenario 12 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
         }
       }
     },
     "new": {
       "retrieved_at": "2026-08-02T00:00:00Z",
-      "effective_at": "2026-08-01T23:59:59Z",
+      "effective_at": "2026-08-02T00:00:00Z",
       "responses": {
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609008": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609008",
+            "navn": "Replay Scenario 01 Updated AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
         "https://data.brreg.no/enhetsregisteret/api/enheter/923609016": {
           "status": 200,
-          "body": {"organisasjonsnummer": "923609016", "navn": "Example AS", "organisasjonsform": {"kode": "AS"}, "antallAnsatte": 3, "hjemmeside": "example.no", "sisteInnsendteAarsregnskap": "2024"}
+          "body": {
+            "organisasjonsnummer": "923609016",
+            "navn": "Replay Scenario 02 Updated AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
         },
-        "https://data.brreg.no/regnskapsregisteret/regnskap/923609016": {
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609024": {
           "status": 200,
-          "body": [{"id": 1, "regnskapstype": "SELSKAP", "valuta": "NOK", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "resultatregnskapResultat": {"driftsresultat": {"driftsinntekter": {"sumDriftsinntekter": 120}, "driftsresultat": 12}, "aarsresultat": 9}, "eiendeler": {"sumEiendeler": 90}, "egenkapitalGjeld": {"egenkapital": {"sumEgenkapital": 35}, "gjeldOversikt": {"sumGjeld": 55}}}]
+          "body": {
+            "organisasjonsnummer": "923609024",
+            "navn": "Replay Scenario 03 Updated AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609032": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609032",
+            "navn": "Replay Scenario 04 Updated AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609040": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609040",
+            "navn": "Replay Scenario 05 Updated AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609059": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609059",
+            "navn": "Replay Scenario 06 Updated AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609067": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609067",
+            "navn": "Replay Scenario 07 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609075": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609075",
+            "navn": "Replay Scenario 08 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609083": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609083",
+            "navn": "Replay Scenario 09 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609091": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609091",
+            "navn": "Replay Scenario 10 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609105": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609105",
+            "navn": "Replay Scenario 11 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
+        },
+        "https://data.brreg.no/enhetsregisteret/api/enheter/923609113": {
+          "status": 200,
+          "body": {
+            "organisasjonsnummer": "923609113",
+            "navn": "Replay Scenario 12 AS",
+            "organisasjonsform": {
+              "kode": "AS"
+            }
+          }
         }
       }
     }

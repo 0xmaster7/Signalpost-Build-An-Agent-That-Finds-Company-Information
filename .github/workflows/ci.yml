@@ -25,6 +25,11 @@ jobs:
         env:
           PYTHONPATH: ..
         run: .venv/bin/python -m pytest -q
+      - name: Run M07 refresh/history contract tests
+        working-directory: signalpost-starter-kit
+        env:
+          PYTHONPATH: ..
+        run: .venv/bin/python -m pytest -q tests/test_signalpost_m07.py
       - name: Compile and import production package
         working-directory: signalpost-starter-kit
         env:
@@ -54,7 +59,8 @@ jobs:
           --input tests/fixtures/m01/offline-batch.jsonl
           --registry-snapshot tests/fixtures/m01/registry.jsonl
           --output /tmp/signalpost-m01-output.jsonl
-          --state-output /tmp/signalpost-m01-state.sqlite
+          --state-output /tmp/signalpost-m01-state.json
+          --checkpoint /tmp/signalpost-m01-checkpoint.sqlite
           --batch-id ci-m01
       - name: Verify offline batch cardinality
         run: test "$(wc -l < /tmp/signalpost-m01-output.jsonl | tr -d ' ')" = "4"
@@ -77,6 +83,7 @@ jobs:
           --input $GITHUB_WORKSPACE/signalpost-starter-kit/tests/fixtures/m01/offline-batch.jsonl
           --registry-snapshot $GITHUB_WORKSPACE/signalpost-starter-kit/tests/fixtures/m01/registry.jsonl
           --output /tmp/signalpost-clean-cwd.jsonl
-          --state-output /tmp/signalpost-clean-cwd.sqlite
+          --state-output /tmp/signalpost-clean-cwd-state.json
+          --checkpoint /tmp/signalpost-clean-cwd-checkpoint.sqlite
       - name: Verify clean CWD evaluator cardinality
         run: test "$(wc -l < /tmp/signalpost-clean-cwd.jsonl | tr -d ' ')" = "4"
