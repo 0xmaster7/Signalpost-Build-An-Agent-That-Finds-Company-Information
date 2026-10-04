@@ -58,6 +58,15 @@ def unsupported_financial_claim(claim: dict) -> bool:
     return start > end
 
 
+def _permitted_request_purposes(live_websites: bool) -> set[str]:
+    purposes = {"entity", "accounts", "roles", "subunits", "subunits_page"}
+    if live_websites:
+        # Existing gateway requests company-owned feeds only after website
+        # identity verification; source-rights policy permits this path.
+        purposes.update({"robots", "sitemap", "website_page", "feed"})
+    return purposes
+
+
 def source_tree_provenance() -> tuple[str, bool, str]:
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     status = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT)
@@ -297,19 +306,18 @@ def main_cli() -> int:
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     peak_rss_bytes = int(peak if sys.platform == "darwin" else peak * 1024)
     request_purposes = event.get("requests_by_purpose", {})
-    permitted_purposes = {"entity", "accounts", "roles", "subunits", "subunits_page"}
-    if args.live_websites:
-        permitted_purposes.update({"robots", "sitemap", "website_page"})
+    permitted_purposes = _permitted_request_purposes(args.live_websites)
     all_requests_authorized = set(request_purposes) <= permitted_purposes \
         and "data.brreg.no" in set(event.get("physical_requests_by_host", {}))
+    external_families = {"owned_web", "owned_profile", "jobs", "public_activity"}
     website_claims = [claim for env in envelopes for claim in env.get("claims", [])
-                      if claim.get("state") == "available" and claim.get("field_family") in {"website", "jobs", "public_activity"}]
+                      if claim.get("state") == "available" and claim.get("field_family") in external_families]
     wrong_company_website_claims = 0
     invalid_workplace_relations = 0
     for env in envelopes:
         evidence_by_id_for_env = {item["evidence_id"]: item for item in env.get("evidence", [])}
         for claim in env.get("claims", []):
-            if claim.get("state") != "available" or claim.get("field_family") not in {"website", "jobs", "public_activity"}:
+            if claim.get("state") != "available" or claim.get("field_family") not in external_families:
                 continue
             if claim.get("organisation_number") != env.get("organisation_number"):
                 wrong_company_website_claims += 1

@@ -18,6 +18,7 @@ from signalpost.query import (CompanyProfile, FindFilter, QueryError, compare_co
                               load_profiles, verify_proposition)
 from signalpost.synthesis import synthesize, validate_synthesis
 from signalpost.web import _link, create_app
+from signalpost.identifiers import website_claim_value_digest
 
 
 AS_OF = datetime(2024, 12, 31, tzinfo=timezone.utc)
@@ -38,7 +39,9 @@ def make_envelope(org: str, name: str, facts: list[dict], *, states: dict | None
             source_class="official", subject_organisation_number=org, source_snapshot_ids=[snap]))
         snapshots.append(SourceSnapshot(source_id=snap, source_url=url, retrieved_at=AS_OF,
             content_sha256=digest, http_status=200, rights_status="fixture"))
-        claim = Claim(claim_id=f"{org}:c{index}", organisation_number=org,
+        claim_id = (f"{org}:web:{fact['field']}:page-{index}:{website_claim_value_digest(fact['field'], fact['value'])}"
+                    if fact.get("family") == "owned_web" else f"{org}:c{index}")
+        claim = Claim(claim_id=claim_id, organisation_number=org,
             section=fact.get("section", "identity_brand"), field_family=fact.get("family", "identity"),
             subject_id=org, field=fact["field"], value=fact["value"], state=PublicState.AVAILABLE,
             unit=fact.get("unit"), currency=fact.get("currency"), period_start=fact.get("period_start"),
@@ -314,6 +317,34 @@ class SynthesisContractTests(unittest.TestCase):
         self.assertTrue(output["sentences"])
         self.assertTrue(all(sentence["fact_ids"] and sentence["evidence_ids"] for sentence in output["sentences"]))
         self.assertTrue(any("0" in sentence["text"] for sentence in output["sentences"]))
+
+    def test_equal_facts_from_distinct_pages_publish_once_with_all_provenance(self):
+        heading = {"section": "website_owned_profiles", "family": "owned_web",
+                   "field": "product_or_service_heading", "value": "Tjenester"}
+        envelope = make_envelope("001234567", "Acme AS", [heading, {**heading, "source_url":
+            "https://acme.example/services"}])
+        output = synthesize(envelope)
+        matching = [item for item in output["sentences"] if item["text"].startswith("product_or_service_heading:")]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(len(matching[0]["fact_ids"]), 2)
+        self.assertEqual(len(matching[0]["evidence_ids"]), 2)
+        validate_synthesis(envelope, output)
+
+        duplicate = copy.deepcopy(output)
+        duplicate["sentences"].append(copy.deepcopy(matching[0]))
+        with self.assertRaisesRegex(ValueError, "duplicate factual synthesis sentence"):
+            validate_synthesis(envelope, duplicate)
+
+    def test_deduplicated_fact_sentence_requires_a_citation_for_each_claim(self):
+        fact = {"section": "website_owned_profiles", "family": "owned_web",
+                "field": "website_description", "value": "The same verified description."}
+        envelope = make_envelope("001234567", "Acme AS", [fact, {**fact, "source_url":
+            "https://acme.example/about"}])
+        output = synthesize(envelope)
+        sentence = next(item for item in output["sentences"] if item["text"].startswith("website_description:"))
+        sentence["evidence_ids"] = sentence["evidence_ids"][:1]
+        with self.assertRaisesRegex(ValueError, "lacks a citation for one referenced claim"):
+            validate_synthesis(envelope, output)
 
     def test_sparse_blocked_profile_does_not_claim_dormancy_or_current_hiring(self):
         envelope = make_envelope("923609016", "Sparse AS", [])
