@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import sys
 import unittest
-from datetime import timedelta
+import hashlib
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,8 +14,10 @@ sys.path.insert(0, str(ROOT / "signalpost-starter-kit" / "scripts"))
 from run_m06_scale_gate import synthetic_org_number
 from signalpost.inputs import parse_records
 from signalpost.network import _EXTRACT, registered_domain
+from signalpost.models import Evidence, SourceSnapshot
 from signalpost import run as run_module
 from test_signalpost_m01 import valid_envelope
+from signalpost.websites import PageRecord, _additional_evidence_snapshot_ids, _make_claim, _page_key
 
 
 class M09ReleaseInputMatrixTests(unittest.TestCase):
@@ -79,6 +82,50 @@ class M09ReleaseInputMatrixTests(unittest.TestCase):
         conflicting_snapshot.content_sha256 = "e" * 64
         with self.assertRaisesRegex(ValueError, "source snapshot identifier collision with conflicting provenance"):
             run_module._merge_website_provenance(envelope, SimpleNamespace(evidence=[], snapshots=[conflicting_snapshot]))
+
+    def test_verified_site_candidate_claim_includes_snapshot_for_every_evidence_source(self):
+        envelope = valid_envelope()
+        org = envelope.organisation_number
+        now = datetime.now(timezone.utc)
+        page = PageRecord(requested_url="https://company.example/", final_url="https://company.example/",
+            status=200, content_type="text/html", body=b"page", digest=hashlib.sha256(b"page").hexdigest(),
+            retrieved_at=now)
+        page_key = _page_key(page)
+        page_snapshot = f"website:{page_key}"
+        page_evidence = f"website-page:{page_key}"
+        proof_snapshot, proof_evidence = "website-proof:test", "website-proof-evidence:test"
+        candidate_snapshot, candidate_evidence = "brreg:entity:test", "registry-site-candidate:test"
+        records = [
+            (page_snapshot, page_evidence, page.final_url, page.digest, "website_html_extract_v1", "/identity"),
+            (proof_snapshot, proof_evidence, page.final_url, hashlib.sha256(b"proof").hexdigest(),
+                "audited_exact_site_identity_proof_v1", "/identity_proof"),
+            (candidate_snapshot, candidate_evidence, f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}",
+                hashlib.sha256(b"candidate").hexdigest(), "brreg_website_candidate_v1", "/hjemmeside"),
+        ]
+        for snapshot_id, evidence_id, url, digest, method, pointer in records:
+            envelope.source_snapshots.append(SourceSnapshot(source_id=snapshot_id, source_url=url,
+                retrieved_at=now, content_sha256=digest, rights_status="test"))
+            envelope.evidence.append(Evidence(evidence_id=evidence_id, source_url=url, retrieved_at=now,
+                content_sha256=digest, extraction_method=method, json_pointer=pointer,
+                subject_organisation_number=org, source_snapshot_ids=[snapshot_id]))
+
+        extra_snapshot_ids = _additional_evidence_snapshot_ids(envelope.evidence, [candidate_evidence])
+        evidence_ids = [page_evidence, proof_evidence, candidate_evidence]
+        stale_claim = _make_claim(org, "verified_website_url", page.final_url, page, page_evidence,
+            evidence_ids=evidence_ids, proof_source=proof_snapshot, proof_evidence=proof_evidence)
+        envelope.claims.append(stale_claim)
+        with self.assertRaisesRegex(ValueError, "claim source snapshots must include every evidence snapshot"):
+            envelope.__class__.model_validate(envelope.model_dump())
+        envelope.claims.pop()
+
+        claim = _make_claim(org, "verified_website_url", page.final_url, page, page_evidence,
+            evidence_ids=evidence_ids, proof_source=proof_snapshot,
+            proof_evidence=proof_evidence, evidence_source_snapshot_ids=extra_snapshot_ids)
+        envelope.claims.append(claim)
+
+        self.assertEqual(extra_snapshot_ids, [candidate_snapshot])
+        self.assertIn(candidate_snapshot, claim.source_snapshot_ids)
+        envelope.__class__.model_validate(envelope.model_dump())
 
 
 if __name__ == "__main__":

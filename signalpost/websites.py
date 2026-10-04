@@ -602,7 +602,8 @@ def _public_evidence(page: PageRecord, snapshots: list[SourceSnapshot], evidence
 
 def _make_claim(org: str, field: str, value: Any, page: PageRecord, evidence_id: str, scope: str = "legal_entity", *,
                 evidence_ids: list[str] | None = None, proof_source: str | None = None,
-                proof_evidence: str | None = None) -> Claim:
+                proof_evidence: str | None = None,
+                evidence_source_snapshot_ids: list[str] | None = None) -> Claim:
     eids = list(evidence_ids or [evidence_id])
     if proof_evidence and proof_evidence not in eids:
         eids.append(proof_evidence)
@@ -611,7 +612,9 @@ def _make_claim(org: str, field: str, value: Any, page: PageRecord, evidence_id:
         section="website_owned_profiles", field_family="owned_web", subject_id=org, field=field,
         value=value, state=PublicState.AVAILABLE, scope=scope,
         verification_rule_id="audited_exact_site_identity_v1", verification_score="1.0",
-        evidence_ids=eids, source_snapshot_ids=[f"website:{page_key}"] + ([proof_source] if proof_source else []))
+        evidence_ids=eids, source_snapshot_ids=list(dict.fromkeys(
+            [f"website:{page_key}"] + ([proof_source] if proof_source else [])
+            + list(evidence_source_snapshot_ids or []))))
 
 
 async def _fetch(gateway: NetworkGateway, url: str, *, purpose: str, allowed_hosts: set[str], cap: int) -> tuple[int, dict[str, str], bytes, str, str]:
@@ -986,6 +989,13 @@ def _source_evidence(candidate: dict[str, Any], evidence: list[Evidence], snapsh
     return evidence_id
 
 
+def _additional_evidence_snapshot_ids(evidence: list[Evidence], evidence_ids: list[str]) -> list[str]:
+    """Return ordered, unique snapshot IDs required by extra claim evidence."""
+    wanted = set(evidence_ids)
+    return list(dict.fromkeys(snapshot_id for item in evidence if item.evidence_id in wanted
+                              for snapshot_id in item.source_snapshot_ids))
+
+
 def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidate: dict[str, Any],
                       *, shared_domain: bool) -> dict[str, Any]:
     assessment = verify_site_pages(profile, pages, shared_domain=shared_domain,
@@ -1307,8 +1317,13 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             all_eids = [_public_evidence(proof_page, output.snapshots, output.evidence, org=org), proof_evidence]
             if source_candidate_id:
                 all_eids.append(source_candidate_id)
-            output.claims.append(_make_claim(org, "verified_website_url", proof_page.final_url, proof_page, all_eids[0], evidence_ids=all_eids, proof_source=proof_source))
-            output.claims.append(_make_claim(org, "verified_website_domain", domain, proof_page, all_eids[0], evidence_ids=all_eids, proof_source=proof_source))
+            candidate_snapshot_ids = _additional_evidence_snapshot_ids(output.evidence, [source_candidate_id] if source_candidate_id else [])
+            claim_provenance = {"evidence_ids": all_eids, "proof_source": proof_source,
+                "evidence_source_snapshot_ids": candidate_snapshot_ids}
+            output.claims.append(_make_claim(org, "verified_website_url", proof_page.final_url, proof_page,
+                all_eids[0], **claim_provenance))
+            output.claims.append(_make_claim(org, "verified_website_domain", domain, proof_page,
+                all_eids[0], **claim_provenance))
             candidate_row["proof_record_id"] = proof_digest
             candidate_row["proof_evidence_id"] = proof_evidence
             candidate_row["source_candidate_evidence_id"] = source_candidate_id
