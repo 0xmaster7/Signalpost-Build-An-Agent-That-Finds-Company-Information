@@ -262,10 +262,18 @@ def main_cli() -> int:
         for index, e in enumerate(envelopes))
     canonical_rows, adapter_roundtrips, canonical_validation_failures = _validate_evaluator_rows(envelopes, source_rows)
     available_claims = [claim for env in envelopes for claim in env.get("claims", []) if claim.get("state") == "available"]
-    evidence_ids = [item["evidence_id"] for env in envelopes for item in env.get("evidence", [])]
-    snapshot_ids = [item["source_id"] for env in envelopes for item in env.get("source_snapshots", [])]
-    duplicate_evidence_ids = sorted(key for key, count in Counter(evidence_ids).items() if count > 1)
-    duplicate_snapshot_ids = sorted(key for key, count in Counter(snapshot_ids).items() if count > 1)
+    duplicate_evidence_ids = sorted(
+        f"row:{index}:{key}" for index, env in enumerate(envelopes, start=1)
+        for key, count in Counter(item["evidence_id"] for item in env.get("evidence", [])).items() if count > 1)
+    duplicate_snapshot_ids = sorted(
+        f"row:{index}:{key}" for index, env in enumerate(envelopes, start=1)
+        for key, count in Counter(item["source_id"] for item in env.get("source_snapshots", [])).items() if count > 1)
+    evidence_ids_by_row = [set(item["evidence_id"] for item in env.get("evidence", [])) for env in envelopes]
+    snapshot_ids_by_row = [set(item["source_id"] for item in env.get("source_snapshots", [])) for env in envelopes]
+    cross_envelope_evidence_reuse = sum(count - 1 for count in Counter(
+        item for row_ids in evidence_ids_by_row for item in row_ids).values() if count > 1)
+    cross_envelope_snapshot_reuse = sum(count - 1 for count in Counter(
+        item for row_ids in snapshot_ids_by_row for item in row_ids).values() if count > 1)
     evidence_complete = all(
         all(claim.state.value != "available" or claim.evidence_ids for claim in env.claims)
         for env in canonical_rows
@@ -396,7 +404,10 @@ def main_cli() -> int:
             "canonical_envelope_failures": canonical_validation_failures,
             "available_claims": len(available_claims), "available_claims_with_required_evidence": evidence_complete,
             "claim_to_evidence_to_snapshot_checked_by_canonical_contract": True,
-            "duplicate_evidence_ids": duplicate_evidence_ids, "duplicate_snapshot_ids": duplicate_snapshot_ids},
+            "duplicate_evidence_ids_within_envelopes": duplicate_evidence_ids,
+            "duplicate_snapshot_ids_within_envelopes": duplicate_snapshot_ids,
+            "cross_envelope_evidence_id_reuse_count": cross_envelope_evidence_reuse,
+            "cross_envelope_snapshot_id_reuse_count": cross_envelope_snapshot_reuse},
         "workplace_validation": {"invalid_workplace_attributions": invalid_workplace_relations},
         "resource_safety": {"physical_requests": physical_requests, "logical_requests": logical_requests,
             "runtime_seconds": elapsed_seconds, "hard_runtime_limit_seconds": 1800,
