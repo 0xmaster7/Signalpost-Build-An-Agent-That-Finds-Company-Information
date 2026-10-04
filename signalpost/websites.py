@@ -26,6 +26,7 @@ import trafilatura
 
 from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot
 from .network import NetworkGateway, NetworkPolicyError, registered_domain, robots_directives
+from .identifiers import canonical_product_heading, website_claim_value_digest
 
 UA = "SignalpostResearchBot/1.0 (contact pending)"
 MAX_PAGE_BYTES = 2 * 1024 * 1024
@@ -75,6 +76,26 @@ def normalize_name(value: Any) -> str:
     text = "".join(char if char.isalnum() else " " for char in text)
     words = [word for word in text.split() if word not in LEGAL_SUFFIXES]
     return " ".join(words)
+
+
+def _canonical_heading_key(value: str) -> str:
+    """Canonicalize presentation-only whitespace/Unicode/case for heading identity."""
+    return canonical_product_heading(value)
+
+
+def _dedupe_product_headings(rows: list[tuple[str, "PageRecord"]]) -> list[tuple[str, "PageRecord"]]:
+    """Keep one deterministic representative for equivalent headings on a page."""
+    selected: dict[tuple[str, str], tuple[str, PageRecord]] = {}
+    for raw_heading, page in rows:
+        heading = " ".join(unicodedata.normalize("NFKC", raw_heading).split())
+        semantic_key = _canonical_heading_key(heading)
+        if not semantic_key:
+            continue
+        key = (_page_key(page), semantic_key)
+        previous = selected.get(key)
+        if previous is None or (heading.casefold(), heading) < (previous[0].casefold(), previous[0]):
+            selected[key] = (heading, page)
+    return [selected[key] for key in sorted(selected)]
 
 
 def _distinctive_tokens(value: Any) -> list[str]:
@@ -588,7 +609,12 @@ def _public_evidence(page: PageRecord, snapshots: list[SourceSnapshot], evidence
                      org: str, excerpt: str | None = None, locator: str | None = None) -> str:
     page_key = _page_key(page)
     source_id = f"website:{page_key}"
-    evidence_id = f"website-page:{page_key}"
+    observation_excerpt = (_canonical_heading_key(excerpt) if excerpt is not None
+        and locator == "/html/body//h1|h2|h3" else excerpt)
+    observation_identity = json.dumps({"locator": locator or page.locator, "excerpt": observation_excerpt},
+        sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    observation_key = hashlib.sha256(observation_identity.encode()).hexdigest()[:24]
+    evidence_id = f"website-page:{page_key}:{observation_key}"
     if not any(item.source_id == source_id for item in snapshots):
         snapshots.append(SourceSnapshot(source_id=source_id, source_url=page.final_url, retrieved_at=page.retrieved_at,
             content_sha256=page.digest, http_status=page.status, cache_mode="transient", rights_status="public_web_factual_extract_transient"))
@@ -608,8 +634,7 @@ def _make_claim(org: str, field: str, value: Any, page: PageRecord, evidence_id:
     if proof_evidence and proof_evidence not in eids:
         eids.append(proof_evidence)
     page_key = _page_key(page)
-    value_key = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
-        separators=(",", ":"), default=str).encode()).hexdigest()[:12]
+    value_key = website_claim_value_digest(field, value)
     return Claim(claim_id=f"{org}:web:{field}:{page_key[:12]}:{value_key}", organisation_number=org,
         section="website_owned_profiles", field_family="owned_web", subject_id=org, field=field,
         value=value, state=PublicState.AVAILABLE, scope=scope,
@@ -1357,6 +1382,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 for heading in page.headings:
                     if len(heading) >= 4 and normalize_name(heading) not in {normalize_name(str(profile.get("name") or "")), "home", "homepage"}:
                         product_headings.append((heading, page))
+            product_headings = _dedupe_product_headings(product_headings)
             for heading, page in product_headings[:20]:
                 eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=heading, locator="/html/body//h1|h2|h3")
                 output.claims.append(_make_claim(org, "product_or_service_heading", heading[:180], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
@@ -1487,7 +1513,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                         output.claims.append(_make_claim(org, "website_description", page.description[:500], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
                         output.audit["website_claim_families"].append("website_description")
                     if deep_page_verified and kind == "products":
-                        for heading in page.headings:
+                        for heading, _page in _dedupe_product_headings([(heading, page) for heading in page.headings]):
                             if len(heading) < 4:
                                 continue
                             eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=heading, locator="/html/body//h1|h2|h3")

@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .identifiers import legacy_website_claim_value_digest, website_claim_value_digest
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -216,6 +218,13 @@ class Envelope(StrictModel):
         claim_ids = [item.claim_id for item in self.claims]
         if len(claim_ids) != len(set(claim_ids)):
             raise ValueError("claim identifiers must be unique within an envelope")
+        for claim in self.claims:
+            if claim.field_family == "owned_web":
+                expected_digest = website_claim_value_digest(claim.field, claim.value)
+                legacy_digest = legacy_website_claim_value_digest(claim.value)
+                if not (claim.claim_id.endswith(":" + expected_digest)
+                        or claim.claim_id.endswith(":" + legacy_digest)):
+                    raise ValueError("website claim identifier does not bind to its value")
         if len(evidence_ids) != len(self.evidence):
             raise ValueError("evidence identifiers must be unique within an envelope")
         if len(snapshot_ids) != len(self.source_snapshots):
@@ -274,6 +283,11 @@ class CacheManifestEntry(StrictModel):
     expires_at: datetime | None = None
     rights_status: str
     storage_path: str | None = None
+
+
+def validate_publication_graph(envelope: Envelope) -> Envelope:
+    """Revalidate a possibly mutated envelope and its complete claim provenance graph."""
+    return Envelope.model_validate(envelope.model_dump())
 
 
 def empty_section(state: PublicState = PublicState.NOT_AVAILABLE) -> Section:

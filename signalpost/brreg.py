@@ -264,8 +264,10 @@ def cutoff_identity(frozen: dict[str, Any] | None, live: dict[str, Any] | None, 
     return max(choices, key=lambda row: (row[0], row[1]))[2] if choices else None
 
 
-def _source_id(section: str, digest: str) -> str:
-    return f"brreg:{section}:{digest[:16]}"
+def _source_id(org: str, section: str, digest: str, url: str) -> str:
+    """Bind a BRREG snapshot identity to its target and exact endpoint context."""
+    url_key = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
+    return f"brreg:{org}:{section}:{url_key}:{digest[:16]}"
 
 
 def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnapshot], *, org: str, name: str,
@@ -273,7 +275,7 @@ def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnaps
                            pointer: str, method: str, rights: str = RIGHTS) -> str | None:
     if not digest:
         return None
-    source_id = _source_id(name, digest)
+    source_id = _source_id(org, name, digest, url)
     evidence_id = f"{org}:{name}:state:{digest[:12]}"
     evidence.append(Evidence(evidence_id=evidence_id, source_url=url, retrieved_at=retrieved_at,
                              content_sha256=digest, extraction_method=method, json_pointer=pointer,
@@ -331,7 +333,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             return
         raw_bytes = json.dumps(raw_document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         digest = source_hash or hashlib.sha256(raw_bytes).hexdigest()
-        sid = _source_id(source_name, digest)
+        sid = _source_id(org, source_name, digest, url)
         eid = f"{org}:{section}:{len(evidence)}:{digest[:12]}"
         evidence.append(Evidence(evidence_id=eid, source_url=url, retrieved_at=retrieved,
                                  content_sha256=digest, extraction_method=extraction_method, json_pointer=pointer,
@@ -359,7 +361,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         observations["identity_profile"] = identity
         target_legal_form = identity.get("legal_form")
         if identity.get("website"):
-            candidate_source_id = _source_id("entity", entity_hash or hashlib.sha256(b"").hexdigest())
+            candidate_source_id = _source_id(org, "entity", entity_hash or hashlib.sha256(b"").hexdigest(), entity_final)
             candidate_evidence_id = f"{org}:website-candidate:{(entity_hash or '')[:12]}"
             if entity_hash:
                 evidence.append(Evidence(evidence_id=candidate_evidence_id, source_url=entity_final,
@@ -517,7 +519,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                                  PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
     if roles_status == 200 and not roles_malformed:
         roles_digest = roles_hash or hashlib.sha256(json.dumps(roles_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        completion_snapshot_id = _source_id("roles", roles_digest)
+        completion_snapshot_id = _source_id(org, "roles", roles_digest, roles_final or roles_url)
         observations["roles_completeness_evidence_id"] = f"{org}:roles-complete:{roles_digest[:12]}"
         if not roles:
             observations["roles_state_evidence_id"] = observations["roles_completeness_evidence_id"]
@@ -625,7 +627,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         completeness_ids = []
         for page in subunit_pages:
             digest = page["content_sha256"]
-            source_id = _source_id("subunits", digest)
+            source_id = _source_id(org, "subunits", digest, page["url"])
             evidence_id = f"{org}:workplaces-page-complete:{page['page_index']}:{digest[:12]}"
             completeness_ids.append(evidence_id)
             if not any(item.source_id == source_id for item in snapshots):

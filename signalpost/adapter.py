@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import Envelope
+from .models import Envelope, validate_publication_graph
 
 
 VENDOR_REQUIRED_FIELDS = ("input_ref", "organisation_number", "terminal_state", "sections", "claims", "evidence",
@@ -37,7 +37,7 @@ def to_evaluator(envelope: Envelope) -> dict[str, Any]:
     """Provisional current-known evaluator shape; all vendor keys live in this module."""
     # Runtime assembly mutates envelope collections after initial construction;
     # revalidate at the deterministic publication boundary before serialization.
-    envelope = Envelope.model_validate(envelope.model_dump())
+    envelope = validate_publication_graph(envelope)
     payload = {
         "input_ref": envelope.input_ref,
         "organisation_number": envelope.organisation_number,

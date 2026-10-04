@@ -1,0 +1,83 @@
+{
+  "fixture_version": "m09-live-shape-v1",
+  "companies": [
+    {
+      "organisation_number": "100000008",
+      "name": "Acme AS",
+      "legal_form": "AS",
+      "website": "https://acme-fixture.no/",
+      "site_mode": "multiple_headings",
+      "robots_mode": "allow",
+      "accounts_mode": "history_with_exact_duplicate",
+      "roles_mode": "normal",
+      "subunits_mode": "child"
+    },
+    {
+      "organisation_number": "100000016",
+      "name": "Acme Services AS",
+      "legal_form": "AS",
+      "parent": "100000008",
+      "website": "https://acme-services-fixture.no/",
+      "site_mode": "verified_homepage",
+      "robots_mode": "allow",
+      "accounts_mode": "not_found",
+      "roles_mode": "parent_organisation_holder",
+      "subunits_mode": "empty"
+    },
+    {
+      "organisation_number": "100000024",
+      "name": "Acme Customer AS",
+      "legal_form": "AS",
+      "website": null,
+      "site_mode": "none",
+      "robots_mode": "not_applicable",
+      "accounts_mode": "server_error",
+      "roles_mode": "malformed_collection",
+      "subunits_mode": "malformed_collection"
+    },
+    {
+      "organisation_number": "100000032",
+      "name": "Harbor Fixture AS",
+      "legal_form": "AS",
+      "website": "https://harbor-fixture.no/",
+      "site_mode": "robots_blocked",
+      "robots_mode": "disallow_all",
+      "accounts_mode": "empty",
+      "roles_mode": "empty",
+      "subunits_mode": "empty"
+    },
+    {
+      "organisation_number": "100000040",
+      "name": "Private Example ENK",
+      "legal_form": "ENK",
+      "website": null,
+      "site_mode": "none",
+      "robots_mode": "not_applicable",
+      "accounts_mode": "empty",
+      "roles_mode": "empty",
+      "subunits_mode": "empty",
+      "private_address_sentinel": "PRIVATE_FIXTURE_HOME_ADDRESS"
+    },
+    {
+      "organisation_number": "100000059",
+      "name": "Outage Fixture AS",
+      "legal_form": "AS",
+      "website": "https://outage-fixture.no/",
+      "site_mode": "robots_unreachable",
+      "robots_mode": "transport_error",
+      "accounts_mode": "empty",
+      "roles_mode": "empty",
+      "subunits_mode": "empty"
+    }
+  ],
+  "expected_observations": {
+    "parent_company": "100000008",
+    "subsidiary_company": "100000016",
+    "customer_company": "100000024",
+    "website_heading_values": ["Acme Service Systems", "Logistics Service"],
+    "equivalent_duplicate_heading": "Acme Service Systems",
+    "malformed_optional_company": "100000024",
+    "robots_disallowed_company": "100000032",
+    "robots_unreachable_company": "100000059"
+  }
+}

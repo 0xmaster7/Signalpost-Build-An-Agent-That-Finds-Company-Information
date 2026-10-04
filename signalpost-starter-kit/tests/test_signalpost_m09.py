@@ -19,7 +19,9 @@ from signalpost.network import _EXTRACT, registered_domain
 from signalpost.models import Envelope, Evidence, SourceSnapshot
 from signalpost.adapter import to_evaluator
 from signalpost.synthesis import synthesize
+from signalpost.identifiers import legacy_website_claim_value_digest
 from signalpost import run as run_module
+from signalpost.brreg import _source_id
 from test_signalpost_m01 import valid_envelope
 from signalpost.websites import PageRecord, _additional_evidence_snapshot_ids, _make_claim, _page_key
 from run_m02_foundation_smoke import (_atomic_json, _preserve_run_bundle,
@@ -27,6 +29,18 @@ from run_m02_foundation_smoke import (_atomic_json, _preserve_run_bundle,
 
 
 class M09ReleaseInputMatrixTests(unittest.TestCase):
+    def test_brreg_snapshot_ids_bind_stably_to_company_endpoint_and_payload(self):
+        digest = hashlib.sha256(b"same response body").hexdigest()
+        first = _source_id("923609016", "accounts_state", digest, "https://data.brreg.no/accounts/923609016")
+        self.assertEqual(first, _source_id("923609016", "accounts_state", digest,
+            "https://data.brreg.no/accounts/923609016"))
+        self.assertNotEqual(first, _source_id("923609025", "accounts_state", digest,
+            "https://data.brreg.no/accounts/923609025"))
+        self.assertNotEqual(first, _source_id("923609016", "accounts_state", digest,
+            "https://data.brreg.no/accounts/923609016?page=2"))
+        self.assertNotEqual(first, _source_id("923609016", "accounts_state",
+            hashlib.sha256(b"different response body").hexdigest(), "https://data.brreg.no/accounts/923609016"))
+
     def test_allowed_formats_preserve_order_duplicates_strings_and_unicode(self):
         cases = {
             "jsonl": ('\ufeff{"organisation_number":"001234567","name":"Ålesund AS"}\r\n'
@@ -150,6 +164,8 @@ class M09ReleaseInputMatrixTests(unittest.TestCase):
         first = _make_claim(org, "product_or_service_heading", "Tjenester", page, evidence_id)
         second = _make_claim(org, "product_or_service_heading", "BioBank AS", page, evidence_id)
         self.assertNotEqual(first.claim_id, second.claim_id)
+        equivalent = _make_claim(org, "product_or_service_heading", "  TJENESTER\u00a0", page, evidence_id)
+        self.assertEqual(first.claim_id, equivalent.claim_id)
         envelope.claims.extend([first, second])
         canonical = Envelope.model_validate(envelope.model_dump())
         sentences = [item["text"] for item in synthesize(canonical)["sentences"]]
@@ -161,6 +177,20 @@ class M09ReleaseInputMatrixTests(unittest.TestCase):
             Envelope.model_validate(duplicate.model_dump())
         with self.assertRaisesRegex(ValueError, "claim identifiers must be unique"):
             to_evaluator(duplicate)
+
+        mutated_value = canonical.model_copy(deep=True)
+        heading = next(claim for claim in mutated_value.claims if claim.field == "product_or_service_heading")
+        heading.value = "Different factual value"
+        with self.assertRaisesRegex(ValueError, "website claim identifier does not bind to its value"):
+            Envelope.model_validate(mutated_value.model_dump())
+
+        legacy = canonical.model_copy(deep=True)
+        legacy_heading = next(claim for claim in legacy.claims if claim.field == "product_or_service_heading")
+        legacy_heading.claim_id = f"{org}:web:product_or_service_heading:{page_key[:12]}:{legacy_website_claim_value_digest(legacy_heading.value)}"
+        Envelope.model_validate(legacy.model_dump())
+        legacy_heading.value = "Different legacy factual value"
+        with self.assertRaisesRegex(ValueError, "website claim identifier does not bind to its value"):
+            Envelope.model_validate(legacy.model_dump())
 
     def test_failed_smoke_preserves_partial_files_ledger_and_original_exception(self):
         with tempfile.TemporaryDirectory(prefix="signalpost-m09-preserve-test-") as temporary:
