@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 import unittest
 import hashlib
+import json
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,9 +17,12 @@ from run_m06_scale_gate import synthetic_org_number
 from signalpost.inputs import parse_records
 from signalpost.network import _EXTRACT, registered_domain
 from signalpost.models import Evidence, SourceSnapshot
+from signalpost.adapter import to_evaluator
 from signalpost import run as run_module
 from test_signalpost_m01 import valid_envelope
 from signalpost.websites import PageRecord, _additional_evidence_snapshot_ids, _make_claim, _page_key
+from run_m02_foundation_smoke import (_atomic_json, _preserve_run_bundle,
+    _run_preserving_failure, _validate_evaluator_rows)
 
 
 class M09ReleaseInputMatrixTests(unittest.TestCase):
@@ -126,6 +131,68 @@ class M09ReleaseInputMatrixTests(unittest.TestCase):
         self.assertEqual(extra_snapshot_ids, [candidate_snapshot])
         self.assertIn(candidate_snapshot, claim.source_snapshot_ids)
         envelope.__class__.model_validate(envelope.model_dump())
+
+    def test_failed_smoke_preserves_partial_files_ledger_and_original_exception(self):
+        with tempfile.TemporaryDirectory(prefix="signalpost-m09-preserve-test-") as temporary:
+            root = Path(temporary)
+            working = root / "working"
+            working.mkdir()
+            report_path = root / "failure.json"
+            gateway = SimpleNamespace(
+                ledger=SimpleNamespace(physical_requests=1, logical_requests=2, entries=[SimpleNamespace(
+                    request_id="request-1", url="https://data.brreg.no/enhetsregisteret/api/enheter/923609016",
+                    purpose="entity", status=200, bytes_received=42, elapsed_ms=18.5,
+                    outcome="received", redirect_location=None)]),
+                coalesced_requests=0,
+                budget=SimpleNamespace(config=SimpleNamespace(hard_seconds=1800, soft_seconds=1350,
+                    completion_reserve_seconds=300, physical_request_limit=2200, logical_request_limit=None,
+                    paid_cost_limit="0", global_http_concurrency=8, per_host_concurrency=2,
+                    per_company_physical_limit=None, per_host_physical_limit=None),
+                    physical_requests=1, logical_requests=2, physical_requests_remaining=2199,
+                    logical_requests_remaining=None, requests_by_company={"923609016": 1},
+                    elapsed=2.0, soft_expired=False, hard_expired=False, reserve_active=False))
+
+            def persist(failure, trace):
+                _artifact_dir, bundle = _preserve_run_bundle(report_path, working, label="failure",
+                    captured_stdout='{"event":"partial"}\n', gateway=gateway, traceback_text=trace)
+                _atomic_json(report_path, {"failure_type": type(failure).__name__, "failure_message": str(failure),
+                    "traceback": "traceback.txt", "preserved_artifacts": bundle})
+
+            def fail_after_partial_writes():
+                (working / "output.partial.jsonl").write_text('{"input_ref":"row:1"}\n', encoding="utf-8")
+                (working / "state.partial.json").write_text('{"companies":{}}\n', encoding="utf-8")
+                raise ValueError("claim source snapshots must include every evidence snapshot")
+
+            with self.assertRaisesRegex(ValueError, "claim source snapshots must include every evidence snapshot"):
+                _run_preserving_failure(fail_after_partial_writes, persist)
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            artifact_dir = root / report["preserved_artifacts"]["artifact_directory"]
+            self.assertEqual(report["failure_type"], "ValueError")
+            self.assertEqual(report["preserved_artifacts"]["request_ledger"]["physical_requests"], 1)
+            self.assertEqual(report["preserved_artifacts"]["request_ledger"]["logical_requests"], 2)
+            self.assertTrue((artifact_dir / "run/output.partial.jsonl").exists())
+            self.assertTrue((artifact_dir / "run/state.partial.json").exists())
+            self.assertTrue((artifact_dir / "request-ledger.json").exists())
+            self.assertIn("claim source snapshots", (artifact_dir / "traceback.txt").read_text(encoding="utf-8"))
+
+    def test_smoke_gate_revalidates_evaluator_rows_as_canonical_envelopes(self):
+        envelope = valid_envelope()
+        payload = to_evaluator(envelope)
+        rows, adapter_roundtrips, failures = _validate_evaluator_rows(
+            [payload], [{"organisation_number": envelope.organisation_number}])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(adapter_roundtrips, 1)
+        self.assertEqual(failures, [])
+
+        broken = to_evaluator(envelope)
+        broken["claims"][0]["source_snapshot_ids"] = []
+        rows, adapter_roundtrips, failures = _validate_evaluator_rows(
+            [broken], [{"organisation_number": envelope.organisation_number}])
+        self.assertEqual(rows, [])
+        self.assertEqual(adapter_roundtrips, 0)
+        self.assertEqual(failures[0]["row"], "1")
+        self.assertIn("snapshot provenance", failures[0]["reason"])
 
 
 if __name__ == "__main__":
