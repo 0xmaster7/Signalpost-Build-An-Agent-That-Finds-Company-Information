@@ -14,12 +14,13 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 import extruct
-import tldextract
+from tldextract import TLDExtract
 import trafilatura
 
 from .evidence import evidence
 
 USER_AGENT = "builderr-signalpost-poc/0.1 (+https://builderr.ai)"
+_TLD_EXTRACT = TLDExtract(cache_dir=None, suffix_list_urls=())
 SOCIAL_HOSTS = {
     "linkedin.com": "linkedin",
     "facebook.com": "facebook",
@@ -77,7 +78,7 @@ def normalize_homepage(value: str | None) -> str | None:
 
 def _registered_domain(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
-    ext = tldextract.extract(parsed.hostname or "")
+    ext = _TLD_EXTRACT(parsed.hostname or "")
     return ext.top_domain_under_public_suffix
 
 

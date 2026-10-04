@@ -654,7 +654,9 @@ def robots_directives(headers: dict[str, str], html: bytes | str = b"", user_age
     return result & {"noindex", "nofollow", "noarchive", "none", "all"}
 
 
-_EXTRACT = TLDExtract(suffix_list_urls=())
+# Use the Public Suffix List bundled with the pinned tldextract distribution.
+# No user cache, network fetch, or developer-specific state is part of identity.
+_EXTRACT = TLDExtract(cache_dir=None, suffix_list_urls=())
 
 
 def registered_domain(host: str) -> str | None:

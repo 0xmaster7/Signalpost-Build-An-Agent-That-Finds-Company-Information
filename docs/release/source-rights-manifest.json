@@ -1,0 +1,50 @@
+{
+  "candidate_policy": "signalpost-source-policy-v1",
+  "enabled_sources": [
+    {
+      "source_class": "brreg_structured_api",
+      "host": "data.brreg.no",
+      "methods": ["GET"],
+      "scope": "Exact-organisation entity, accounts, roles, group and subunit endpoints through NetworkGateway",
+      "rights_basis": "Documented public BRREG API; NLOD 2.0 attribution for applicable register data",
+      "retention": "Run-scoped source bytes; hashes, URLs, JSON pointers and retrieval times are retained as provenance",
+      "robots": "Explicit disallow is enforced. A transport/server failure is distinct; the narrow audited exception applies only to exact documented structured API paths.",
+      "credentials": "None",
+      "cost": "No paid API cost"
+    },
+    {
+      "source_class": "exact_company_owned_website",
+      "host": "Per-company verified public host",
+      "methods": ["Bounded GET"],
+      "scope": "Registry-linked or policy-bounded .no candidate; same-origin pages only after exact-company verification",
+      "rights_basis": "Public factual extraction subject to source-specific terms; skip prohibited sources; do not retain unnecessary personal data",
+      "retention": "Run-scoped bodies; hashes, short permitted extracts, locators and identity proof",
+      "robots": "Fail closed on explicit disallow, unusable response or transport/server failure; crawl delays and request caps apply",
+      "credentials": "None",
+      "cost": "No paid API cost"
+    }
+  ],
+  "disabled_sources": [
+    {"source_class": "search_provider", "reason": "No reproducible rights-approved provider or credential; search remains disabled and unpromoted."},
+    {"source_class": "LLM_or_model", "reason": "No model is required or enabled; no model key or paid inference."},
+    {"source_class": "ATS_or_external_jobs", "reason": "No approved provider or source-rights basis."},
+    {"source_class": "social_or_restricted_platforms", "reason": "No authorized connector; no scraping."},
+    {"source_class": "broad_crawl_or_browser_automation", "reason": "Outside the approved bounded source surface."}
+  ],
+  "unknowns": [
+    "Builderr frozen snapshot licence, URL, as-of date and retention terms until supplied.",
+    "Site-specific terms for any particular accepted company domain are not globally adjudicated.",
+    "The repository does not declare its own code licence."
+  ],
+  "network_controls": [
+    "Centralized NetworkGateway",
+    "DNS/IP SSRF checks and redirect revalidation",
+    "Exact source host/path policy",
+    "Physical and logical request accounting",
+    "Per-host concurrency/rate controls",
+    "Ordinary website robots fail-closed behavior"
+  ],
+  "model_usage": "none",
+  "paid_api_usage": "none",
+  "external_credentials_required": "none"
+}

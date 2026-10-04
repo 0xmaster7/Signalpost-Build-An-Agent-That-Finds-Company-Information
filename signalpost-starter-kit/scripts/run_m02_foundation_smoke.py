@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import Counter
 from pathlib import Path
 
@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from signalpost.models import PublicState
 from signalpost.brreg import SUPPORTED_CURRENCY_CODES
+from signalpost.history import SOURCE_POLICY_VERSION
 from signalpost.run import main
 
 
@@ -68,6 +69,10 @@ def source_tree_provenance() -> tuple[str, bool, str]:
 def main_cli() -> int:
     parser = __import__("argparse").ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--live-websites", action="store_true",
+                        help="Include the bounded exact-company website phase for RC1 release smoke.")
+    parser.add_argument("--no-keyless-websites", action="store_true",
+                        help="Disable the policy-bounded keyless .no candidate fallback.")
     args = parser.parse_args()
     fixture = Path(__file__).resolve().parents[1] / "tests/fixtures/m02/foundation-input.jsonl"
     source_rows = [json.loads(line) for line in fixture.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -76,18 +81,25 @@ def main_cli() -> int:
     config = json.dumps({"budget": {"hard_seconds": 1800, "soft_seconds": 1350,
                                      "completion_reserve_seconds": 300, "paid_cost_limit": "0"}}, sort_keys=True).encode()
     captured = io.StringIO()
+    run_started_utc = datetime.now(timezone.utc).isoformat()
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="signalpost-m02-smoke-") as temporary:
         output = Path(temporary) / "output.jsonl"
         state = Path(temporary) / "state.sqlite"
         config_path = Path(temporary) / "config.json"
         config_path.write_bytes(config)
+        command = ["--input", str(fixture), "--format", "jsonl", "--live-brreg", "--config", str(config_path),
+                   "--output", str(output), "--state-output", str(state), "--batch-id", "m09-rc1-cold-100"]
+        if args.live_websites:
+            command.append("--live-websites")
+        if args.no_keyless_websites:
+            command.append("--no-keyless-websites")
         with contextlib.redirect_stdout(captured):
-            exit_code = main(["--input", str(fixture), "--format", "jsonl", "--live-brreg", "--config", str(config_path),
-                              "--output", str(output), "--state-output", str(state), "--batch-id", "m02-foundation-smoke"])
+            exit_code = main(command)
         runtime_ms = int((time.monotonic() - started) * 1000)
         envelopes = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
         output_sha256 = sha(output)
+        state_sha256 = sha(state)
         events = [json.loads(line) for line in captured.getvalue().splitlines() if line.startswith("{")]
         event = next((item for item in reversed(events) if item.get("event") == "batch_complete"), {})
 
@@ -123,16 +135,33 @@ def main_cli() -> int:
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     peak_rss_bytes = int(peak if sys.platform == "darwin" else peak * 1024)
     request_purposes = event.get("requests_by_purpose", {})
-    all_requests_official = set(request_purposes) <= {"entity", "accounts", "roles", "subunits", "subunits_page", "robots"} \
-        and set(event.get("physical_requests_by_host", {})) <= {"data.brreg.no"}
+    permitted_purposes = {"entity", "accounts", "roles", "subunits", "subunits_page"}
+    if args.live_websites:
+        permitted_purposes.update({"robots", "sitemap", "website_page"})
+    all_requests_authorized = set(request_purposes) <= permitted_purposes \
+        and "data.brreg.no" in set(event.get("physical_requests_by_host", {}))
+    website_claims = [claim for env in envelopes for claim in env.get("claims", [])
+                      if claim.get("state") == "available" and claim.get("field_family") in {"website", "jobs", "public_activity"}]
+    wrong_company_website_claims = 0
+    for env in envelopes:
+        evidence_by_id_for_env = {item["evidence_id"]: item for item in env.get("evidence", [])}
+        for claim in env.get("claims", []):
+            if claim.get("state") != "available" or claim.get("field_family") not in {"website", "jobs", "public_activity"}:
+                continue
+            if claim.get("organisation_number") != env.get("organisation_number"):
+                wrong_company_website_claims += 1
+                continue
+            if any(evidence_by_id_for_env.get(eid, {}).get("subject_organisation_number") != env.get("organisation_number")
+                   for eid in claim.get("evidence_ids", [])):
+                wrong_company_website_claims += 1
     validation = {
         "vendor_schema": all(len(e.get("sections", {})) == 7 for e in envelopes),
         "cardinality": row_count_ok and input_to_output_ok,
         "exact_identity_anchor_coverage": exact_identity_rows == 100,
         "available_claims_have_required_evidence": evidence_complete,
         "unsupported_financial_publications": unsupported_financials == 0,
-        "wrong_company_accepted_domains": 0,
-        "only_official_brreg_requests": all_requests_official,
+        "wrong_company_accepted_domains": wrong_company_website_claims == 0,
+        "only_authorized_source_classes": all_requests_authorized,
         "official_requests_made": event.get("physical_gateway_requests", 0) > 0,
     }
     hard_gates = [name for name, passed in validation.items() if passed is False]
@@ -144,18 +173,28 @@ def main_cli() -> int:
         hard_gates.append("runner_exit_code")
     code_commit, working_tree_dirty, working_tree_diff_sha256 = source_tree_provenance()
     report = {
-        "run_id": "m02-foundation-smoke-2026-10-03",
+        "run_id": "m09-rc1-cold-100",
         "code_commit": code_commit, "working_tree_dirty": working_tree_dirty,
         "working_tree_diff_sha256": working_tree_diff_sha256,
-        "measurement_kind": "live_brreg_source_smoke",
+        "measurement_kind": "live_brreg_and_bounded_website_smoke" if args.live_websites else "live_brreg_source_smoke",
+        "enabled_source_classes": ["brreg_structured_api"] + (["exact_company_owned_website"] if args.live_websites else []),
         "config_sha256": hashlib.sha256(config).hexdigest(), "input_sha256": sha(fixture),
-        "output_sha256": output_sha256,
+        "output_sha256": output_sha256, "state_output_sha256": state_sha256,
+        "previous_state_sha256": None, "source_policy_version": SOURCE_POLICY_VERSION,
+        "network_policy_version": "NetworkGateway policy as committed at code_commit",
+        "network_policy": "direct", "external_cache_mode": "none; bundled Public Suffix List snapshot only",
+        "model_provider": None, "model_usage": "none", "paid_api_usage": "none",
+        "started_at_utc": run_started_utc, "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+        "evidence_cutoff": event.get("evidence_cutoff"),
+        "evidence_cutoff_source": event.get("evidence_cutoff_source"),
         "registry_snapshot_sha256": None, "input_rows": 100, "terminal_envelopes": len(envelopes),
         "runtime_ms": runtime_ms,
         "requests": {"strict_physical_total": event.get("physical_gateway_requests", 0),
                      "logical_total": event.get("logical_gateway_requests", 0), "by_class": request_purposes,
                      "by_host": event.get("physical_requests_by_host", {}),
-                     "outcomes": event.get("physical_request_outcomes", {})},
+                     "outcomes": event.get("physical_request_outcomes", {}),
+                     "physical_limit": event.get("request_limit"),
+                     "logical_limit": event.get("logical_request_limit")},
         "cost": {"usage_cost_estimate_usd": "0.0000", "declared_third_party_cost_usd": "0.0000"},
         "peak_rss_bytes": peak_rss_bytes, "errors_by_code": dict(sorted(errors.items())),
         "terminal_state_distribution": dict(sorted(terminal.items())),
@@ -169,9 +208,13 @@ def main_cli() -> int:
                                     "incomplete_workplace_lists": 100 - workplace_complete, "group_lookups": 0},
         "exact_identity_rows": exact_identity_rows,
         "validation": validation, "hard_gate_failures": hard_gates,
+        "website_publication_observations": {"available_external_claims": len(website_claims),
+            "wrong_company_publications_by_subject_and_evidence_binding": wrong_company_website_claims,
+            "adjudication": "structural_provenance check; independent human precision estimate unavailable"},
         "manual_or_adjudicated_audit": {"accepted_external_domains_reviewed": 0, "high_risk_cases_reviewed": 0,
-                                         "reviewer": "not applicable; no external domains accepted in M02",
-                                         "failures": 0, "notes": "M02 official registry/accounts/roles/workplace foundation; no site claims."},
+            "reviewer": "automated claim/evidence subject binding; no human adjudication",
+            "failures": wrong_company_website_claims,
+            "notes": "Release smoke checks subject and evidence organisation binding; prior M03 accepted-domain proof audit is separate."},
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")

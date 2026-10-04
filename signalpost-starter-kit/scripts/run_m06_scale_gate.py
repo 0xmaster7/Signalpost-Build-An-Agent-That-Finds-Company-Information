@@ -23,6 +23,16 @@ from signalpost.operations import Budget, Opportunity, OpportunityDeferred, Oppo
 from signalpost.run import main
 
 
+def synthetic_org_number(index: int) -> str:
+    """Return a distinct, checksum-valid nine-digit offline test identifier."""
+    stem = f"{index + 10_000_000:08d}"
+    total = sum(int(digit) * weight for digit, weight in zip(stem, (3, 2, 7, 6, 5, 4, 3, 2)))
+    check = 0 if total % 11 == 0 else 11 - total % 11
+    if check == 10:
+        return synthetic_org_number(index + 1_000_000)
+    return stem + str(check)
+
+
 def source_tree_provenance() -> dict[str, object]:
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
         capture_output=True, text=True).stdout.strip()
@@ -165,8 +175,12 @@ def offline_batch(row_count: int) -> dict[str, object]:
         output = root / "output.jsonl"
         state = root / "state.sqlite"
         registry = root / "registry.jsonl"
-        source.write_text("923609016\n" * row_count, encoding="utf-8")
-        registry.write_text('{"orgnr":"923609016","name":"Synthetic Example AS"}\n', encoding="utf-8")
+        organisations = [synthetic_org_number(index) for index in range(row_count)]
+        if len(set(organisations)) != row_count:
+            raise AssertionError("offline scale cohort must contain distinct organisation numbers")
+        source.write_text("".join(org + "\n" for org in organisations), encoding="utf-8")
+        registry.write_text("".join(json.dumps({"orgnr": org, "name": f"Synthetic Example {index:05d} AS"},
+            sort_keys=True) + "\n" for index, org in enumerate(organisations)), encoding="utf-8")
         started = time.monotonic()
         captured = io.StringIO()
         with contextlib.redirect_stdout(captured):
@@ -179,11 +193,14 @@ def offline_batch(row_count: int) -> dict[str, object]:
         tracemalloc.stop()
         assert code == 0 and len(lines) == row_count and input_refs == [f"row:{i}" for i in range(1, row_count + 1)]
         available = sum(json.loads(line)["terminal_state"] == "available" for line in lines)
-        assert available == row_count
+        output_orgs = [json.loads(line)["organisation_number"] for line in lines]
+        assert available == row_count and output_orgs == organisations
         rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         rss_mib = rss / 1024 / 1024 if sys.platform == "darwin" else rss / 1024
         output_bytes = output.read_bytes()
-        return {"measurement_kind": "offline_runner_benchmark", "input_rows": row_count, "output_rows": len(lines), "available_rows": available, "ordered": True,
+        return {"measurement_kind": "offline_runner_benchmark", "input_rows": row_count,
+                "distinct_company_count": len(set(organisations)), "input_rows_distinct": len(set(organisations)) == row_count,
+                "output_rows": len(lines), "available_rows": available, "ordered": True,
                 "physical_requests": 0, "runtime_seconds": round(elapsed, 3),
                 "input_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                 "output_sha256": hashlib.sha256(output_bytes).hexdigest(),

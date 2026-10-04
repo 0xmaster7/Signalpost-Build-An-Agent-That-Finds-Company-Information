@@ -63,6 +63,19 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ValueError):
                     validate_report(corrupted)
 
+    def test_scale_verifier_rejects_repeated_or_missing_offline_companies(self):
+        report = {"benchmark_metadata": {"git_sha": "a" * 40, "working_tree_dirty": False,
+            "working_tree_diff_sha256": "b" * 64, "cohort_id": "fixture", "cohort_sha256": "c" * 64},
+            "offline": {"measurement_kind": "offline_runner_benchmark", "input_rows": 10,
+                "distinct_company_count": 10, "input_rows_distinct": True, "output_rows": 10,
+                "ordered": True, "input_sha256": "d" * 64, "output_sha256": "e" * 64}}
+        validate_report(report)
+        for key, value in (("distinct_company_count", 1), ("output_rows", 9), ("output_sha256", "missing")):
+            corrupted = copy.deepcopy(report)
+            corrupted["offline"][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                validate_report(corrupted)
+
     async def test_thousand_companies_fast_slow_hosts_no_starvation(self):
         scheduler = OpportunityScheduler(concurrency=8)
         work = [Opportunity(str(i), "official_foundation", f"company-{i}",

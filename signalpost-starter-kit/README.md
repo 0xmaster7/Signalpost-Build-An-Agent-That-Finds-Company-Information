@@ -1,5 +1,37 @@
 # Signalpost reference agent
 
+## Signalpost RC1 command
+
+The canonical research command accepts JSONL, JSON, CSV, TSV, or plain organisation-number input and writes one ordered terminal JSONL envelope per input row. Duplicate rows are preserved and identifiers are parsed as strings. Malformed JSON/JSONL rows are isolated and retain their row position. The provisional evaluator adapter is isolated in `signalpost/adapter.py` because Builderr has not supplied authoritative field names.
+
+Requirements: Python 3.12 or newer and `uv` 0.8.0. From a fresh checkout, install the pinned runtime/test environment from this directory:
+
+```bash
+uv sync --frozen --extra m08-test
+```
+
+Run from any working directory with the virtual environment's interpreter and the repository launcher:
+
+```bash
+/absolute/path/to/checkout/signalpost-starter-kit/.venv/bin/python \
+  /absolute/path/to/checkout/signalpost-starter-kit/run_signalpost.py \
+  --input /absolute/path/to/input.jsonl \
+  --output /absolute/path/to/output.jsonl \
+  --live-brreg --live-websites
+```
+
+An optional frozen registry JSONL snapshot can be supplied with `--registry-snapshot`; use the exact snapshot path, as-of date, source URL and terms supplied by Builderr. Without a supplied snapshot, the run uses the documented current official BRREG API foundation when `--live-brreg` is enabled; it does not infer that unavailable facts are zero. The default fallback budget is 1,800 seconds hard, 1,350 seconds soft, a 300-second completion reserve, `12 * input_rows + 1,000` physical requests, and zero paid cost. Builderr's actual injected budget and cutoff take precedence when supplied.
+
+The optional local UX command is also independent of the current working directory:
+
+```bash
+/absolute/path/to/checkout/signalpost-starter-kit/.venv/bin/python \
+  /absolute/path/to/checkout/signalpost-starter-kit/run_signalpost_web.py \
+  --data /absolute/path/to/output.jsonl --host 127.0.0.1 --port 8000
+```
+
+The UX reads canonical output only and makes no outbound requests. It is a local research interface; Builderr's required hosting/interface contract remains unknown. Search, model inference, paid APIs, ATS providers, and external activity providers are disabled. The enabled external sources and their rights assumptions are recorded in [`../docs/source-rights.md`](../docs/source-rights.md). M09 release results and current submission disposition are recorded in [`../docs/release/M09_RC1_REPORT.md`](../docs/release/M09_RC1_REPORT.md) and [`../SUBMISSION_READY.md`](../SUBMISSION_READY.md) after the candidate evidence is frozen.
+
 This is a runnable starting point for the Signalpost company-research challenge. It is intentionally a solid baseline, not a winning submission.
 
 The public universe contains 411,160 eligible companies. Run the starter on 100 companies before submitting. Larger local tests, including 1,000 or more companies, are encouraged but their precomputed profiles are not submitted or scored.

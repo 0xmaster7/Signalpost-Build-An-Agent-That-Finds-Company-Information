@@ -34,6 +34,16 @@ def validate_report(report: dict) -> None:
                 outcomes = value.get("simulated_identity_outcomes")
                 if outcomes != []:
                     raise ValueError(f"scheduler-only benchmark contains unmeasured identity outcomes at {path}")
+            if value.get("measurement_kind") == "offline_runner_benchmark":
+                rows = value.get("input_rows")
+                if (not isinstance(rows, int) or value.get("distinct_company_count") != rows
+                        or value.get("input_rows_distinct") is not True):
+                    raise ValueError(f"offline runner cohort must contain one distinct company per input row at {path}")
+                if value.get("output_rows") != rows or value.get("ordered") is not True:
+                    raise ValueError(f"offline runner lost rows or ordering at {path}")
+                for key in ("input_sha256", "output_sha256"):
+                    if not re.fullmatch(r"[0-9a-f]{64}", str(value.get(key, ""))):
+                        raise ValueError(f"offline runner lacks {key} at {path}")
             for key, child in value.items():
                 visit(child, f"{path}.{key}")
         elif isinstance(value, list):

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import subprocess
 import statistics
 import sys
 import time
@@ -29,7 +31,8 @@ def main() -> int:
     def p95(values: list[float]) -> float:
         return sorted(values)[max(0, math.ceil(len(values) * 0.95) - 1)]
     gold = json.loads(Path(args.gold).read_text(encoding="utf-8"))
-    profiles = load_profiles(TESTS / "fixtures/m08/canonical.jsonl")
+    canonical_path = TESTS / "fixtures/m08/canonical.jsonl"
+    profiles = load_profiles(canonical_path)
     index = build_index(profiles)
     find_results = []
     find_correct = 0
@@ -102,7 +105,13 @@ def main() -> int:
     overall_correct = (find_correct == len(gold["find"]) and compare_correct == len(gold["compare"])
         and verify_correct == len(gold["verify"]) and abstention_correct and unsupported == 0
         and fully_cited == assertions)
-    report = {"corpus": gold["corpus"], "company_count": len(profiles),
+    source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip())
+    report = {"measurement_kind": "offline_independent_gold_ux_regression",
+        "source_commit": source_sha, "source_tree_dirty": dirty,
+        "gold_sha256": hashlib.sha256(Path(args.gold).read_bytes()).hexdigest(),
+        "canonical_corpus_sha256": hashlib.sha256(canonical_path.read_bytes()).hexdigest(),
+        "corpus": gold["corpus"], "company_count": len(profiles),
         "find": {"correct_cases": find_correct, "cases": len(gold["find"]), "accuracy": find_correct / len(gold["find"]), "results": find_results,
                  "latency_ms": {"median": statistics.median(find_times), "p95": p95(find_times)}},
         "compare": {"correct_cases": compare_correct, "cases": len(gold["compare"]), "accuracy": compare_correct / len(gold["compare"]), "results": compare_results,
