@@ -13,4 +13,6 @@ M09's final cold 100-company host-context run reached terminal evaluator publica
 
 ## Disposition
 
-The operational RC1 gate passes after exact-SHA CI is confirmed for the package commit. The first-submission decision remains **HOLD**: the existing recall comparison did not demonstrate materially higher external coverage than the starter/registry baseline, and this live smoke is not a comparable held-out recall benchmark. No submission was made; Builderr-controlled unknowns remain explicit.
+The initial complete RC1 package commit `17d3b207f532e67262f0f9b92bb220551a3fea61` was pushed to `codex/m00-contract-audit`; the remote branch matched that SHA. [CI run 37245631189](https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/37245631189) passed for that exact SHA. The final completion-record commit adds this verified readiness status; its own exact-SHA CI result is reported by the release execution record.
+
+The operational RC1 gate passes. The first-submission decision remains **HOLD**: the existing recall comparison did not demonstrate materially higher external coverage than the starter/registry baseline, and this live smoke is not a comparable held-out recall benchmark. No submission was made; Builderr-controlled unknowns remain explicit.

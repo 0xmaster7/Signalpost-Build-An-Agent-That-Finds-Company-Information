@@ -6,7 +6,9 @@
 
 - Implementation SHA exercised by the final live run: `9ab896f9f7f39a85f2dd26a09970c9a5d8f42194`.
 - Branch: `codex/m00-contract-audit`.
-- Final package commit, remote SHA, and exact-SHA CI result are recorded in the release completion record after push/CI; see [M09 RC1 report](docs/release/M09_RC1_REPORT.md).
+- RC1 package commit: `17d3b207f532e67262f0f9b92bb220551a3fea61`; the remote branch matched this exact SHA.
+- Exact-SHA CI: [run 37245631189](https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/37245631189) — all jobs passed.
+- The final completion-record commit contains only readiness/CI documentation updates; its exact SHA and CI are reported in the M09 completion record.
 - Live smoke report: [M09 final live smoke](docs/release/M09_LIVE_SMOKE_PASS_2026-10-05.md).
 - Benchmark and deterministic gates: [M09 RC1 benchmark](docs/release/M09_RC1_BENCHMARK_2026-10-05.md).
 
@@ -20,7 +22,7 @@
 | Financial and workplace publication checks | READY | 0 unsupported financials; 0 invalid workplace attributions. |
 | Request, runtime, reserve, robots, and source policy | READY | 470 physical / 496 logical, under configured bounds; all purposes approved; explicit robots disallows 0; transport failures remain distinct. |
 | Deterministic live-shape, adversarial, M07, M08, crash/resume, scale, and clean-install gates | READY | Exact results in the benchmark report. |
-| Repository access / final remote commit / CI | PENDING | Must be verified against the final package SHA before M09 is reported complete. |
+| Repository access / RC1 package remote commit / CI | READY | Remote branch matched package SHA `17d3b207f532e67262f0f9b92bb220551a3fea61`; exact-SHA CI run 37245631189 passed. |
 | Comparable evidence of materially higher external recall than starter/registry baseline | BLOCKED | Existing opportunity comparison measured no incremental accepted-domain gain from the bounded keyless path. The final smoke is not a comparable held-out recall benchmark; jobs/activity are not measured. See [recall opportunity report](docs/release/M09_RECALL_OPPORTUNITY.md). |
 | Exact Builderr evaluator schema and duplicate-input rule | UNKNOWN | Provisional field naming remains isolated in the evaluator adapter; current fallback preserves one envelope per input row. |
 | Frozen registry mount, licence, as-of date, and retention terms | UNKNOWN | Live BRREG is the documented fallback if no authoritative frozen snapshot is supplied. |
