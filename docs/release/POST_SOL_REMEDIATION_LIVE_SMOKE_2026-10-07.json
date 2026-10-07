@@ -1,0 +1,365 @@
+{
+  "artifact_integrity": {
+    "output_sha256": "951cce4dc110d8c1cdb88273eda0339fc70def69370f98da21d8e0118d07a12e",
+    "state_company_count": 100,
+    "state_keys_match_inputs": true,
+    "state_sha256": "6bb80924460f9cf32f4fc7336e2e245feca7ee3881c8a5d59e9a97bb1f21140b"
+  },
+  "code_commit": "43dc4cb32d5a3b2f2e50796049c81b4a16ca383f",
+  "completed_at_utc": "2026-10-07T14:43:22.345749+00:00",
+  "config_sha256": "61b5c234d2c4c431dc3e8016d349614df028d348fd2f24935b35b20966310d1d",
+  "cost": {
+    "declared_third_party_cost_usd": "0.0000",
+    "usage_cost_estimate_usd": "0.0000"
+  },
+  "enabled_source_classes": [
+    "brreg_structured_api",
+    "exact_company_owned_website"
+  ],
+  "errors_by_code": {
+    "BRREG_FINANCIAL_UNIT_UNSUPPORTED": 1875,
+    "BRREG_POST_CUTOFF_EXCLUDED": 100,
+    "BRREG_SUBUNITS_MALFORMED": 25,
+    "ROBOTS_UNREACHABLE": 46
+  },
+  "evidence_cutoff": "2026-10-07T14:37:27.961448+00:00",
+  "evidence_cutoff_source": "run_start",
+  "exact_identity_rows": 100,
+  "external_cache_mode": "none; bundled Public Suffix List snapshot only",
+  "financial_history": {
+    "companies_with_records": 100,
+    "published_metric_claims": 0,
+    "records_preserved": 283,
+    "unsupported_financial_publications": 0
+  },
+  "hard_gate_failures": [],
+  "input_rows": 100,
+  "input_sha256": "67c3b3903eeecdffcc294a468402351367ca549053410b7f9c1c64ee76b32e2b",
+  "manual_or_adjudicated_audit": {
+    "accepted_external_domains_reviewed": 0,
+    "failures": 0,
+    "high_risk_cases_reviewed": 0,
+    "notes": "Release smoke checks subject and evidence organisation binding; prior M03 accepted-domain proof audit is separate.",
+    "reviewer": "automated claim/evidence subject binding; no human adjudication"
+  },
+  "measurement_kind": "live_brreg_and_bounded_website_smoke",
+  "measurements": {
+    "deterministically_tested": [
+      "adapter roundtrip",
+      "canonical envelope provenance contract"
+    ],
+    "live_measured": [
+      "row cardinality",
+      "identity anchors",
+      "requests",
+      "claims and provenance",
+      "financial and workplace observations",
+      "state artifact",
+      "runtime"
+    ],
+    "not_measured": [
+      "human-adjudicated website precision",
+      "population-wide recall"
+    ],
+    "simulated": []
+  },
+  "model_provider": null,
+  "model_usage": "none",
+  "network_policy": "direct",
+  "network_policy_version": "NetworkGateway policy as committed at code_commit",
+  "output_sha256": "951cce4dc110d8c1cdb88273eda0339fc70def69370f98da21d8e0118d07a12e",
+  "paid_api_usage": "none",
+  "peak_rss_bytes": 276271104,
+  "preserved_artifacts": {
+    "artifact_directory": "report.artifacts-artifacts",
+    "artifact_files": [
+      {
+        "bytes": 156825,
+        "path": "request-ledger.json",
+        "sha256": "d8e0be471ada22106478aaf5fcabe12e7003294359f96f7cfee8dd40738d31cb"
+      },
+      {
+        "bytes": 115,
+        "path": "run/config.json",
+        "sha256": "61b5c234d2c4c431dc3e8016d349614df028d348fd2f24935b35b20966310d1d"
+      },
+      {
+        "bytes": 12041758,
+        "path": "run/output.jsonl",
+        "sha256": "951cce4dc110d8c1cdb88273eda0339fc70def69370f98da21d8e0118d07a12e"
+      },
+      {
+        "bytes": 470,
+        "path": "run/output.jsonl.publication.json",
+        "sha256": "d6c7d1f9ad8575920cbe684d537ff61553669d1ef7090a3619fae8f220cb1682"
+      },
+      {
+        "bytes": 7513224,
+        "path": "run/state.sqlite",
+        "sha256": "6bb80924460f9cf32f4fc7336e2e245feca7ee3881c8a5d59e9a97bb1f21140b"
+      },
+      {
+        "bytes": 12308480,
+        "path": "run/state.sqlite.checkpoint.sqlite",
+        "sha256": "49050ae9577fe8bc0b15251dc347a962bf4a7e6f634205b94af48a149dc08657"
+      },
+      {
+        "bytes": 28495,
+        "path": "stdout.log",
+        "sha256": "53865d0db40bd741ac310c6934db3e66734137625a432ba6c4988761087b218c"
+      }
+    ],
+    "artifact_manifest": "manifest.json",
+    "request_ledger_path": "request-ledger.json",
+    "request_ledger_sha256": "d8e0be471ada22106478aaf5fcabe12e7003294359f96f7cfee8dd40738d31cb"
+  },
+  "previous_state_sha256": null,
+  "provenance_validation": {
+    "available_claims": 3449,
+    "available_claims_with_required_evidence": true,
+    "canonical_envelope_failures": [],
+    "canonical_envelopes_validated": 100,
+    "claim_to_evidence_to_snapshot_checked_by_canonical_contract": true,
+    "cross_envelope_evidence_id_reuse_count": 0,
+    "cross_envelope_snapshot_id_reuse_count": 0,
+    "duplicate_evidence_ids_within_envelopes": [],
+    "duplicate_snapshot_ids_within_envelopes": []
+  },
+  "registry_snapshot_sha256": null,
+  "requests": {
+    "by_class": {
+      "accounts": 100,
+      "entity": 100,
+      "feed": 2,
+      "robots": 23,
+      "roles": 100,
+      "sitemap": 6,
+      "subunits": 100,
+      "website_page": 28
+    },
+    "by_host": {
+      "arus.no": 2,
+      "biobank.no": 23,
+      "data.brreg.no": 402,
+      "nordvest-installasjon.no": 2,
+      "valvoline.no": 3,
+      "www.biobank.no": 6,
+      "www.hth.no": 2,
+      "www.mallingco.no": 2,
+      "www.maskinogmiljo.no": 2,
+      "www.usbl.no": 7,
+      "www.valvoline.no": 4,
+      "www.vannteknikk.com": 2,
+      "www.xn--karriereverkty-2qb.no": 2
+    },
+    "logical_limit": null,
+    "logical_total": 485,
+    "outcomes": {
+      "accounts:200:received": 100,
+      "entity:200:received": 100,
+      "feed:200:received": 2,
+      "robots:0:transport_error": 12,
+      "robots:200:received": 8,
+      "robots:301:received": 3,
+      "roles:200:received": 100,
+      "sitemap:200:received": 5,
+      "sitemap:301:received": 1,
+      "subunits:200:received": 100,
+      "website_page:200:received": 22,
+      "website_page:301:received": 5,
+      "website_page:500:received": 1
+    },
+    "physical_limit": 2200,
+    "strict_physical_total": 459
+  },
+  "resource_safety": {
+    "completion_reserve_remaining_seconds": 1451.68,
+    "completion_reserve_seconds": 300,
+    "hard_runtime_limit_seconds": 1800,
+    "logical_requests": 485,
+    "physical_requests": 459,
+    "request_ledger": {
+      "available": true,
+      "budget_accounting": {
+        "completion_reserve_active": false,
+        "elapsed_seconds": 350.1413860600005,
+        "hard_expired": false,
+        "logical_requests_remaining": null,
+        "logical_requests_reserved": 485,
+        "physical_requests_remaining": 1741,
+        "physical_requests_reserved": 459,
+        "requests_by_company": {
+          "819546622": 4,
+          "826940522": 4,
+          "828301632": 4,
+          "831076852": 4,
+          "835443892": 4,
+          "885664202": 4,
+          "889154632": 4,
+          "899591062": 4,
+          "911640228": 4,
+          "911765551": 4,
+          "913519302": 4,
+          "913600967": 4,
+          "914445388": 4,
+          "915016685": 4,
+          "915335284": 4,
+          "916170858": 4,
+          "916284233": 4,
+          "916643233": 4,
+          "916688369": 4,
+          "917065101": 4,
+          "917072469": 4,
+          "917507597": 4,
+          "918471774": 4,
+          "918790330": 4,
+          "918883517": 4,
+          "919122870": 4,
+          "919295287": 4,
+          "920043488": 4,
+          "921558937": 4,
+          "922048193": 4,
+          "922077274": 4,
+          "922739838": 4,
+          "922796831": 4,
+          "922851107": 4,
+          "923315446": 4,
+          "923434313": 4,
+          "924190396": 4,
+          "924445238": 4,
+          "924509058": 4,
+          "925178039": 4,
+          "925602930": 4,
+          "926008234": 4,
+          "926417371": 4,
+          "926627708": 4,
+          "926876295": 4,
+          "927173522": 4,
+          "927555719": 4,
+          "928269930": 4,
+          "928867463": 4,
+          "929699165": 4,
+          "929875737": 4,
+          "930536210": 4,
+          "930783900": 4,
+          "931065254": 4,
+          "931763563": 4,
+          "931857029": 4,
+          "931921061": 4,
+          "932112167": 4,
+          "932153319": 4,
+          "932262835": 4,
+          "933583260": 4,
+          "933702154": 4,
+          "933710947": 4,
+          "933748510": 4,
+          "934221621": 4,
+          "935019664": 4,
+          "935313171": 4,
+          "935378184": 4,
+          "936127460": 4,
+          "936538738": 4,
+          "936653049": 4,
+          "936662161": 4,
+          "944597204": 4,
+          "951861073": 4,
+          "958315309": 4,
+          "959830622": 4,
+          "960892089": 4,
+          "961967775": 4,
+          "971093323": 4,
+          "976019199": 4,
+          "976038975": 4,
+          "977570247": 4,
+          "980301060": 4,
+          "982788722": 4,
+          "984965516": 4,
+          "985764476": 4,
+          "986996796": 4,
+          "987709324": 4,
+          "989025406": 4,
+          "989130846": 4,
+          "989788981": 4,
+          "990185344": 4,
+          "992156929": 4,
+          "994680447": 4,
+          "995232375": 4,
+          "995854600": 4,
+          "996165981": 4,
+          "997824199": 4,
+          "998426405": 4,
+          "999008364": 4
+        },
+        "soft_expired": false
+      },
+      "budget_config": {
+        "completion_reserve_seconds": 300.0,
+        "global_http_concurrency": 32,
+        "hard_seconds": 1800.0,
+        "logical_request_limit": null,
+        "paid_cost_limit": "0",
+        "per_company_physical_limit": null,
+        "per_host_concurrency": 2,
+        "per_host_physical_limit": null,
+        "physical_request_limit": 2200,
+        "soft_seconds": 1350.0
+      },
+      "coalesced_requests": 0,
+      "logical_requests": 485,
+      "physical_requests": 459
+    },
+    "request_ledger_matches_accounting": true,
+    "runtime_seconds": 348.32,
+    "soft_deadline_seconds": 1350,
+    "within_limits": true
+  },
+  "roles_workplaces_groups": {
+    "ceo_role_states": {
+      "available": 68,
+      "not_available": 32
+    },
+    "companies_with_role_rows": 100,
+    "complete_workplace_lists": 75,
+    "group_lookups": 0,
+    "incomplete_workplace_lists": 25,
+    "role_family_states": {
+      "available": 100
+    },
+    "role_rows": 420,
+    "workplace_rows": 87
+  },
+  "run_id": "m09-rc1-cold-100",
+  "runtime_ms": 348414,
+  "source_policy_version": "sha256:ff5942fa97a4ca699567b7f949e9a4c4a366e8a1568872d204c5ccb27b96a68c",
+  "started_at_utc": "2026-10-07T14:37:27.956586+00:00",
+  "state_output_sha256": "6bb80924460f9cf32f4fc7336e2e245feca7ee3881c8a5d59e9a97bb1f21140b",
+  "terminal_envelopes": 100,
+  "terminal_state_distribution": {
+    "available": 100
+  },
+  "validation": {
+    "available_claims_have_required_evidence": true,
+    "cardinality": true,
+    "exact_identity_anchor_coverage": true,
+    "official_requests_made": true,
+    "only_authorized_source_classes": true,
+    "request_ledger_matches_run_accounting": true,
+    "request_runtime_and_reserve_limits": true,
+    "state_artifact": true,
+    "unique_evidence_and_snapshot_ids": true,
+    "unsupported_financial_publications": true,
+    "valid_workplace_attribution": true,
+    "vendor_schema_and_adapter_roundtrip": true,
+    "wrong_company_accepted_domains": true
+  },
+  "website_publication_observations": {
+    "adjudication": "structural_provenance check; independent human precision estimate unavailable",
+    "available_external_claims": 6,
+    "wrong_company_publications_by_subject_and_evidence_binding": 0
+  },
+  "working_tree_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "working_tree_dirty": false,
+  "workplace_validation": {
+    "invalid_workplace_attributions": 0
+  }
+}
