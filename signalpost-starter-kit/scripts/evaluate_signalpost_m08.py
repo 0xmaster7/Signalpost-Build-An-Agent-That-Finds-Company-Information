@@ -40,10 +40,10 @@ def main() -> int:
     for case in gold["find"]:
         filters = list(case.get("filters", []))
         if case.get("field"):
-            filters.append({key: case[key] for key in ("field", "operator", "value", "currency", "period_end", "scope") if key in case})
+            filters.append({key: case[key] for key in ("field", "operator", "value", "currency", "period_end", "scope", "unit") if key in case})
         typed = [FindFilter(item["field"], item["operator"],
             Decimal(str(item["value"])) if item["field"] in {"revenue", "employees", "annual_result"} else item["value"],
-            item.get("currency"), item.get("period_end"), item.get("scope")) for item in filters]
+            item.get("currency"), item.get("period_end"), item.get("scope"), item.get("unit")) for item in filters]
         start = time.perf_counter()
         result = find_companies(profiles, text=case.get("text", ""), filters=typed, index=index)
         find_times.append((time.perf_counter() - start) * 1000)
@@ -74,7 +74,7 @@ def main() -> int:
     verify_correct = 0
     for case in gold["verify"]:
         actual = verify_proposition(profiles, **{key: case[key] for key in
-            ("organisation_number", "field", "value", "currency", "period_end", "scope") if key in case})
+            ("organisation_number", "field", "value", "currency", "period_end", "scope", "unit") if key in case})
         correct = actual["status"] == case["expected"] and all(
             citation["evidence_id"] in profiles[case["organisation_number"]].evidence for citation in actual["citations"])
         verify_correct += int(correct)
