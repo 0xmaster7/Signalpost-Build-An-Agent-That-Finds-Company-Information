@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from signalpost.models import Envelope
+from signalpost.models import Envelope, SUPPORTED_FINANCIAL_UNITS, validate_batch_publication_graph
 from signalpost.brreg import SUPPORTED_CURRENCY_CODES
 from signalpost.history import SOURCE_POLICY_VERSION, validate_artifact
 from signalpost.adapter import to_evaluator, validate_vendor_payload
@@ -48,6 +48,8 @@ def unsupported_financial_claim(claim: dict) -> bool:
     if not isinstance(currency, str) or currency not in SUPPORTED_CURRENCY_CODES:
         return True
     if claim.get("scope") not in {"legal_entity", "group"}:
+        return True
+    if claim.get("unit") not in SUPPORTED_FINANCIAL_UNITS:
         return True
     value = claim.get("value")
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
@@ -183,6 +185,11 @@ def _validate_evaluator_rows(envelopes: list[dict], source_rows: list[dict]) -> 
             canonical_rows.append(envelope)
         except (KeyError, TypeError, ValueError) as exc:
             failures.append({"row": str(index), "reason": f"{type(exc).__name__}: {exc}"})
+    if not failures and canonical_rows:
+        try:
+            validate_batch_publication_graph(canonical_rows)
+        except (TypeError, ValueError) as exc:
+            failures.append({"row": "batch", "reason": f"{type(exc).__name__}: {exc}"})
     return canonical_rows, adapter_roundtrips, failures
 
 

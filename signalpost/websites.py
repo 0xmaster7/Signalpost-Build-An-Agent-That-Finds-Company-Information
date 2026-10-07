@@ -224,6 +224,8 @@ class PageRecord:
     directives: set[str] = field(default_factory=set)
     soft_error: str | None = None
     locator: str = "/html/body"
+    rights_status: str = "unknown_not_reviewed"
+    footer_blocks: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -262,8 +264,11 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
     text = trafilatura.extract(html, url=final_url, include_links=False, include_tables=True, favor_precision=True) or soup.get_text(" ", strip=True)
     text = " ".join(unescape(text).split())[:50_000]
     identity_nodes = soup.select("footer, address, [itemprop='legalName'], [itemprop='address'], [itemprop='identifier'], .legal, #legal, .contact, #contact, .about, #about")
-    identity_blocks = [" ".join(node.get_text(" ", strip=True).split())[:3000] for node in identity_nodes]
-    identity_text = " ".join(identity_blocks)[:12_000]
+    footer_blocks = [" ".join(node.get_text(" ", strip=True).split())[:3000]
+                     for node in identity_nodes if node.name == "footer" or node.find_parent("footer")]
+    identity_blocks = [" ".join(node.get_text(" ", strip=True).split())[:3000]
+                       for node in identity_nodes if not (node.name == "footer" or node.find_parent("footer"))]
+    identity_text = " ".join([*identity_blocks, *footer_blocks])[:12_000]
     links: list[dict[str, str]] = []
     for anchor in soup.select("a[href]"):
         href = urllib.parse.urljoin(final_url, str(anchor.get("href") or ""))
@@ -285,9 +290,11 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
     elif any(marker in body_text for marker in ("verify you are human", "just a moment...", "captcha")):
         soft_error = "waf_or_cookie_challenge"
     headings = [" ".join(node.get_text(" ", strip=True).split())[:220] for node in soup.select("h1,h2,h3")]
-    return PageRecord(requested_url, final_url, status, content_type, body, hashlib.sha256(body).hexdigest(),
+    page = PageRecord(requested_url, final_url, status, content_type, body, hashlib.sha256(body).hexdigest(),
                       datetime.now(timezone.utc), title, description, text, identity_text, identity_blocks, headings, links,
                       structured if isinstance(structured, dict) else {}, schemas, canonical, directives, soft_error)
+    page.footer_blocks = footer_blocks
+    return page
 
 
 def _exact_name(legal_names: list[str], text: str) -> str | None:
@@ -462,14 +469,26 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             continue
         final_parts = urllib.parse.urlsplit(page.final_url)
         homepage = final_parts.path in {"", "/"} and not final_parts.query
+        # Footer mentions do not establish ownership when a page represents
+        # another entity or lists several entities. Target-specific pages may
+        # still pass when title/headings and paired legal identity identify it.
+        visible_identity = " ".join([page.title, *page.headings, *page.identity_blocks, *page.footer_blocks])
+        visible_orgs = set(re.findall(r"(?<!\d)\d{9}(?!\d)", visible_identity))
+        foreign_orgs = visible_orgs - {org} - related
+        target_named_in_heading = bool(_exact_name(legal_names, " ".join([page.title, *page.headings])))
+        if target_context and (foreign_orgs and (homepage or not target_named_in_heading)
+                               or homepage and visible_orgs - {org}):
+            continue
         incompatible_legal_subjects = [node for node in owner_subjects
             if _as_text(node.get("legalName") or node.get("name"))
             and not any(_same_legal_name(expected, _as_text(node.get("legalName") or node.get("name"))) for expected in legal_names)
             and org not in (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID")))]
         legal_form_marker = re.compile(r"(?i)\b(?:AS|ASA|NUF|ENK|DA|ANS|BA)\b")
-        visible_identity_blocks = [page.title, *page.headings]
+        visible_identity_blocks = [page.title, *page.headings, *page.identity_blocks]
         conflicting_visible_identity = any(legal_form_marker.search(block)
             and not _exact_name(legal_names, block) for block in visible_identity_blocks if block)
+        if target_context and conflicting_visible_identity:
+            continue
         if homepage and conflicting_visible_identity:
             continue
         if homepage and incompatible_legal_subjects:
@@ -616,10 +635,11 @@ def _public_evidence(page: PageRecord, snapshots: list[SourceSnapshot], evidence
     observation_identity = json.dumps({"locator": locator or page.locator, "excerpt": observation_excerpt},
         sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     observation_key = hashlib.sha256(observation_identity.encode()).hexdigest()[:24]
-    evidence_id = f"website-page:{page_key}:{observation_key}"
+    # Content identity may be shared; subject-bound evidence identity may not.
+    evidence_id = f"website-page:{org}:{page_key}:{observation_key}"
     if not any(item.source_id == source_id for item in snapshots):
         snapshots.append(SourceSnapshot(source_id=source_id, source_url=page.final_url, retrieved_at=page.retrieved_at,
-            content_sha256=page.digest, http_status=page.status, cache_mode="transient", rights_status="public_web_factual_extract_transient"))
+            content_sha256=page.digest, http_status=page.status, cache_mode="transient", rights_status=page.rights_status))
     if not any(item.evidence_id == evidence_id for item in evidence):
         evidence.append(Evidence(evidence_id=evidence_id, source_url=page.final_url, retrieved_at=page.retrieved_at,
             content_sha256=page.digest, extraction_method=("website_feed_extract_v1" if "xml" in page.content_type.casefold() or "rss" in page.content_type.casefold() or "atom" in page.content_type.casefold() else "website_html_extract_v1"), json_pointer=locator or page.locator,
@@ -864,6 +884,8 @@ def _page_footprints(page: PageRecord, *, org: str, legal_name: str, verified_na
             status = status_raw
             if deadline and deadline < cutoff:
                 status = "closed"
+            elif deadline and deadline >= cutoff:
+                status = "open"
             elif status_raw:
                 status = status_raw
             job = {"title": title, "url": url, "location": _job_location(node.get("jobLocation")),
@@ -1049,7 +1071,8 @@ def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidat
 
 async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, shared_domains: set[str] | None = None,
                            enable_keyless: bool = True, evidence_cutoff: datetime | None = None,
-                           phase: str = "all", previous: WebsiteResearchResult | None = None) -> WebsiteResearchResult:
+                           phase: str = "all", previous: WebsiteResearchResult | None = None,
+                           rights_decisions: dict[str, str] | None = None) -> WebsiteResearchResult:
     """Fetch, verify, then shallowly research one target using the central gateway."""
     org = str(profile.get("organisation_number") or "")
     output = previous if previous is not None else WebsiteResearchResult()
@@ -1109,6 +1132,21 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             parsed = urllib.parse.urlsplit(url)
             host = parsed.hostname or ""
             root_domain = registered_domain(host) or host
+            configured_values = [(rights_decisions or {}).get(host), (rights_decisions or {}).get(root_domain)]
+            configured_rights = next((value for value in configured_values if value is not None), None)
+            source_rights = candidate.get("source_rights_status", "unknown_not_reviewed")
+            if source_rights not in {"allowed", "blocked", "unknown_not_reviewed"}:
+                source_rights = "unknown_not_reviewed"
+            rights_status = ("blocked" if "blocked" in set(configured_values + [source_rights])
+                else configured_rights or source_rights)
+            if rights_status not in {"allowed", "blocked", "unknown_not_reviewed"}:
+                raise ValueError("website rights decisions must be allowed, blocked, or unknown_not_reviewed")
+            candidate["rights_status"] = rights_status
+            if rights_status == "blocked":
+                output.audit["candidates"].append({"url": candidate["url"], "source": candidate["source"],
+                    "kind": "website", "rights_status": rights_status, "decision": "blocked_source_rights"})
+                saw_blocked = True
+                continue
             shared = root_domain in (shared_domains or set())
             allowed_hosts = _internal_hosts(url)
             gateway.set_rate_limit(host, 1.0)
@@ -1121,7 +1159,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 robots_error = str(exc)[:180]
                 state, delay = ("unreachable" if "did not resolve" in robots_error else "policy_skip"), None
             candidate_row: dict[str, Any] = {"url": url, "source": candidate["source"], "kind": "website", "registered_domain": root_domain,
-                "robots_state": state, "crawl_delay_seconds": delay, "decision": "candidate"}
+                "robots_state": state, "crawl_delay_seconds": delay, "rights_status": rights_status, "decision": "candidate"}
             if candidate.get("discovery"):
                 candidate_row["discovery"] = {key: candidate["discovery"].get(key) for key in
                     ("provider_id", "provider_version", "query_id", "result_id", "rank", "response_sha256")}
@@ -1212,6 +1250,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 if page is None:
                     candidate_row["decision"] = "rejected_non_html_or_oversized"
                     break
+                page.rights_status = rights_status
                 output.audit["page_count"] += 1
                 output.audit["pages"].append({"url": page.final_url, "kind": _kind(page.final_url, page.title), "sha256": page.digest, "bytes": len(page.body)})
                 if page.soft_error:
@@ -1701,7 +1740,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
     job_status_by_subject = {claim.subject_id: claim.value for claim in output.claims
         if claim.field_family == "jobs" and claim.field == "job_status"}
     current_job_subjects = {claim.subject_id for claim in output.claims if claim.field_family == "jobs"
-        and job_status_by_subject.get(claim.subject_id) != "closed"}
+        and str(job_status_by_subject.get(claim.subject_id, "")).casefold() in {"open", "active", "inprogress", "in progress"}}
     output.audit["jobs"]["current_subjects"] = len(current_job_subjects)
     output.audit["jobs"]["state"] = ("available" if current_job_subjects else
         "ambiguous" if output.audit["jobs"]["published_subjects"] else

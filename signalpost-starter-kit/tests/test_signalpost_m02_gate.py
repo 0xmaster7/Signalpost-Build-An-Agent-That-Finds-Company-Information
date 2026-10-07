@@ -7,12 +7,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "signalpost-starter-kit" / "scripts"))
 
-from run_m02_foundation_smoke import unsupported_financial_claim
+from run_m02_foundation_smoke import _permitted_request_purposes, unsupported_financial_claim
+from signalpost.websites import APPROVED_EXTERNAL_CLAIM_FAMILIES, APPROVED_WEBSITE_REQUEST_PURPOSES
 
 
 class M02SmokeGateTests(unittest.TestCase):
     def claim(self, **updates):
-        row = {"field": "revenue", "currency": "NOK", "scope": "legal_entity", "value": 0,
+        row = {"field": "revenue", "currency": "NOK", "unit": "NOK", "scope": "legal_entity", "value": 0,
             "period_start": "2024-01-01T00:00:00Z", "period_end": "2024-12-31T00:00:00Z"}
         row.update(updates)
         return row
@@ -28,12 +29,22 @@ class M02SmokeGateTests(unittest.TestCase):
             self.claim(period_start="bad-date"),
             self.claim(period_start="2025-01-01", period_end="2024-12-31"),
             self.claim(scope="unknown"),
+            self.claim(unit=None),
+            self.claim(unit="unknown"),
             self.claim(value="10"),
             self.claim(field="invented_metric"),
         ]
         for row in cases:
             with self.subTest(row=row):
                 self.assertTrue(unsupported_financial_claim(row))
+
+    def test_smoke_validator_uses_approved_feed_purpose_and_canonical_families(self):
+        self.assertIn("feed", APPROVED_WEBSITE_REQUEST_PURPOSES)
+        self.assertIn("feed", _permitted_request_purposes(live_websites=True))
+        self.assertNotIn("unapproved_provider", _permitted_request_purposes(live_websites=True))
+        self.assertEqual(APPROVED_EXTERNAL_CLAIM_FAMILIES,
+                         {"owned_web", "owned_profile", "jobs", "public_activity"})
+        self.assertNotIn("website", APPROVED_EXTERNAL_CLAIM_FAMILIES)
 
 
 if __name__ == "__main__":

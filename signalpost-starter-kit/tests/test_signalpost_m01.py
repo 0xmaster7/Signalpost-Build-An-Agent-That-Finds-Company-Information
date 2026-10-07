@@ -46,8 +46,11 @@ def valid_envelope(row: int = 1) -> Envelope:
                   evidence_ids=["e1"], source_snapshot_ids=["registry_fixture"])
     snapshot = SourceSnapshot(source_id="registry_fixture", source_url="https://data.brreg.no/x", retrieved_at=now,
                               content_sha256="a" * 64)
+    sections = {name: section.model_copy(deep=True) for name, section in SECTIONS.items()}
+    sections["identity_brand"].claims = [claim]
+    sections["claims_evidence_states"].claims = [claim]
     return Envelope(input_ref=f"row:{row}", row_number=row, organisation_number="923609016",
-                    terminal_state=PublicState.AVAILABLE, sections=SECTIONS,
+                    terminal_state=PublicState.AVAILABLE, sections=sections,
                     refresh=RefreshState(), claims=[claim], evidence=[evidence], source_snapshots=[snapshot], batch_id="b1", evidence_cutoff=now)
 
 
@@ -488,7 +491,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
         target = "923609016"
         period = {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}
         valid_record = {"id": "valid", "regnskapstype": "SELSKAP", "regnskapsperiode": period,
-            "valuta": "NOK", "resultatregnskapResultat": {"driftsresultat": {
+            "valuta": "NOK", "enhet": "NOK", "resultatregnskapResultat": {"driftsresultat": {
                 "driftsinntekter": {"sumDriftsinntekter": 10}}}}
         cases = (
             ("malformed", {"unexpected": "shape"}, 200, "failed", "BRREG_ACCOUNTS_MALFORMED"),
@@ -843,8 +846,8 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
             {"id": "missing-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "eiendeler": {"sumEiendeler": 12}},
             {"id": "unknown-scope", "regnskapstype": "SPECIAL", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 13}},
             {"id": "malformed", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": "zero-ish"}},
-            {"id": "valid-zero-v2", "versjon": 2, "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2023-01-01", "tilDato": "2023-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 0}},
-            {"id": "valid-eur", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2022-01-01", "tilDato": "2022-12-31"}, "valuta": "EUR", "eiendeler": {"sumEiendeler": 42}},
+            {"id": "valid-zero-v2", "versjon": 2, "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2023-01-01", "tilDato": "2023-12-31"}, "valuta": "NOK", "enhet": "NOK", "eiendeler": {"sumEiendeler": 0}},
+            {"id": "valid-eur", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2022-01-01", "tilDato": "2022-12-31"}, "valuta": "EUR", "enhet": "NOK", "eiendeler": {"sumEiendeler": 42}},
             {"id": "unknown-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "QQQ", "eiendeler": {"sumEiendeler": 14}},
             {"id": "lowercase-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "nok", "eiendeler": {"sumEiendeler": 15}},
             {"id": "malformed-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NO-K", "eiendeler": {"sumEiendeler": 16}},

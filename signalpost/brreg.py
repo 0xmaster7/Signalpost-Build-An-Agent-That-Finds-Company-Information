@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 from .inputs import normalize_org_number
-from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot
+from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot, SUPPORTED_FINANCIAL_UNITS
 from .network import NetworkGateway
 
 BASE = "https://data.brreg.no/enhetsregisteret/api"
@@ -125,19 +125,26 @@ def financial_records(body: Any) -> list[dict[str, Any]]:
         account_type = str(record.get("regnskapstype") or "").casefold()
         scope = "group" if account_type in {"konsern", "konsernregnskap"} else "legal_entity" if account_type in {"selskap", "selskapsregnskap"} else "unknown"
         values = {}
+        record_unit = record.get("enhet")
         for field, path in METRICS.items():
             val = _get(record, *path.split("/"))
             # Numeric field labels are intentionally exact: an unlabelled or mistyped
             # value is never guessed from a nearby account name.
             if isinstance(val, dict):
                 raw = val.get("sum") if isinstance(val.get("sum"), (int, float)) else None
-                unit = val.get("enhet") or val.get("valuta")
+                # Currency is a separate dimension. Never use it as a scale.
+                metric_unit = val.get("enhet")
+                unit_conflict = bool(metric_unit and record_unit
+                    and str(metric_unit).strip().upper() != str(record_unit).strip().upper())
+                unit = "__conflict__" if unit_conflict else metric_unit or record_unit
             else:
-                raw, unit = val, None
+                raw, unit = val, record_unit
+                unit_conflict = False
             values[field] = raw if (isinstance(raw, (int, float)) and not isinstance(raw, bool)
                                     and math.isfinite(float(raw))) else None
             if values[field] is not None:
                 values[field + "_unit"] = unit
+                values[field + "_unit_conflict"] = unit_conflict
         result.append({
             "record_id": record.get("id"), "filing_id": record.get("innsendingsId"), "record_version": record.get("versjon"),
             "source_version_or_filing_id": record.get("versjon") or record.get("innsendingsId") or record.get("id"),
@@ -214,8 +221,10 @@ def _account_collection_shape(body: Any) -> bool:
 def _role_collection_shape(body: Any) -> bool:
     if not isinstance(body, dict) or not isinstance(body.get("rollegrupper"), list):
         return False
-    return all(isinstance(group, dict) and isinstance(group.get("roller", []), list)
-               and all(isinstance(role, dict) for role in group.get("roller", []))
+    return all(isinstance(group, dict) and "roller" in group and isinstance(group.get("roller"), list)
+               and isinstance(group.get("type"), dict) and bool(group["type"].get("kode"))
+               and all(isinstance(role, dict) and isinstance(role.get("type"), dict)
+                       and bool(role["type"].get("kode")) for role in group.get("roller", []))
                for group in body["rollegrupper"])
 
 
@@ -451,9 +460,15 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                     message="Financial metrics were withheld because source metadata is missing or invalid: " + ",".join(missing),
                     source_id="accounts_history"))
             for metric, value in record["metrics"].items():
-                if metric.endswith("_unit") or value is None:
+                if metric.endswith("_unit") or metric.endswith("_unit_conflict") or value is None:
                     continue
                 if not metadata_valid:
+                    continue
+                unit = record["metrics"].get(metric + "_unit")
+                if not isinstance(unit, str) or unit.strip().upper() not in SUPPORTED_FINANCIAL_UNITS:
+                    errors.append(RunError(code="BRREG_FINANCIAL_UNIT_UNSUPPORTED",
+                        message=f"Financial metric {metric} was withheld because its source unit is missing or unsupported.",
+                        source_id="accounts_history"))
                     continue
                 # The record's own labels determine scope and periods. No calendar-year inference.
                 raw_metric = _get(record["raw"], *METRICS[metric].split("/"))
@@ -461,7 +476,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                 if isinstance(raw_metric, dict) and isinstance(raw_metric.get("sum"), (int, float)):
                     metric_pointer += "/sum"
                 add_claim(metric, value, "accounts_history", "financial", org, record["scope"], account_final or accounts_url,
-                          account_time, raw, metric_pointer, "accounts", unit=record["metrics"].get(metric + "_unit"),
+                          account_time, raw, metric_pointer, "accounts", unit=unit.strip().upper(),
                           currency=record["currency"], start=record["period_start"], end=record["period_end"],
                           as_of=record["filing_timestamp"], source_hash=account_hash,
                           extraction_method="brreg_financial_projection_v1" if isinstance(raw_metric, dict) else "brreg_json_pointer_v1")

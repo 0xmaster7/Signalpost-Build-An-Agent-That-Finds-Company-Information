@@ -15,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .models import Claim, Envelope, Evidence, PublicState, SourceSnapshot
+from .models import Claim, Envelope, Evidence, PublicState, SourceSnapshot, approved_frozen_hash_exception
 
 STATE_SCHEMA_VERSION = 1
 
@@ -286,14 +286,14 @@ def validate_artifact(raw: Any) -> StateArtifact:
                     raise PriorStateError("prior state claim does not retain its evidence snapshots")
                 for snapshot_id in item.source_snapshot_ids:
                     snapshot = snapshots_by_id[snapshot_id]
-                    if item.source_url != snapshot.source_url or (item.content_sha256 != snapshot.content_sha256 and item.extraction_method != "frozen_registry_jsonl_v1"):
+                    if item.source_url != snapshot.source_url or (item.content_sha256 != snapshot.content_sha256 and not approved_frozen_hash_exception(item, snapshot)):
                         raise PriorStateError("prior state evidence does not match its source snapshot")
         for item in evidence:
             if item.subject_organisation_number != org or not item.source_snapshot_ids or not set(item.source_snapshot_ids) <= snapshots_by_id.keys():
                 raise PriorStateError("prior state evidence is not anchored to its company snapshots")
             for snapshot_id in item.source_snapshot_ids:
                 snapshot = snapshots_by_id[snapshot_id]
-                if item.source_url != snapshot.source_url or (item.content_sha256 != snapshot.content_sha256 and item.extraction_method != "frozen_registry_jsonl_v1"):
+                if item.source_url != snapshot.source_url or (item.content_sha256 != snapshot.content_sha256 and not approved_frozen_hash_exception(item, snapshot)):
                     raise PriorStateError("prior state evidence does not match its source snapshot")
         coverage_evidence_ids = {ref for coverage in company.coverage.values()
                                  for ref in ([coverage.get("evidence_id")] + list(coverage.get("evidence_ids", []))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import math
 import os
@@ -8,6 +9,7 @@ import shutil
 import sqlite3
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -444,7 +446,40 @@ class OrderedAtomicWriter:
                 os.fsync(directory_fd)
             finally:
                 os.close(directory_fd)
-            return pending
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
+        return pending
+
+
+def publish_paired_artifacts(output_writer: OrderedAtomicWriter, state_writer: OrderedAtomicWriter,
+                             envelopes: list[Envelope], state_payload: bytes,
+                             *, serializer: Callable[[Envelope], dict[str, object]] | None = None) -> Path:
+    """Publish output/state with a durable commit marker consumers can verify."""
+    output_path, state_path = output_writer.output_path, state_writer.output_path
+    marker_path = output_path.with_name(output_path.name + ".publication.json")
+    if marker_path.resolve() in {output_path.resolve(), state_path.resolve()}:
+        raise ValueError("paired publication marker must have a distinct path")
+    marker = OrderedAtomicWriter(marker_path, estimated_bytes=4096)
+    publication_id = str(uuid.uuid4())
+    marker.write_bytes(json.dumps({"status": "publishing", "publication_id": publication_id,
+        "output_path": str(output_path), "state_path": str(state_path)}, sort_keys=True).encode() + b"\n")
+    output_writer.write(envelopes, serializer=serializer)
+    state_writer.write_bytes(state_payload)
+    final = {"status": "committed", "publication_id": publication_id,
+        "output_path": str(output_path), "output_sha256": hashlib.sha256(output_path.read_bytes()).hexdigest(),
+        "state_path": str(state_path), "state_sha256": hashlib.sha256(state_path.read_bytes()).hexdigest()}
+    marker.write_bytes(json.dumps(final, sort_keys=True).encode() + b"\n")
+    return marker_path
+
+
+def validate_paired_publication(marker_path: str | Path) -> dict[str, object]:
+    """Return the committed pair only when both artifact hashes still match."""
+    marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+    if marker.get("status") != "committed":
+        raise ValueError("output/state publication is incomplete")
+    for role in ("output", "state"):
+        path = Path(str(marker[f"{role}_path"]))
+        if hashlib.sha256(path.read_bytes()).hexdigest() != marker.get(f"{role}_sha256"):
+            raise ValueError(f"{role} artifact does not match its committed publication marker")
+    return marker

@@ -16,9 +16,10 @@ from urllib.parse import urlsplit
 
 from .adapter import to_evaluator
 from .inputs import load_input, normalize_org_number, registry_fixture, stream_registry_matches
-from .models import Claim, Envelope, Evidence, PublicState, RefreshState, RunError, Section, SourceSnapshot, empty_section
+from .models import (Claim, Envelope, Evidence, PublicState, RefreshState, RunError, Section, SourceSnapshot,
+                     empty_section, validate_batch_publication_graph)
 from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
-                         OrderedAtomicWriter, RunBudget)
+                         OrderedAtomicWriter, RunBudget, publish_paired_artifacts)
 from .network import NetworkGateway, StructuredLogger, registered_domain
 from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company
 from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, artifact_ref, canonical_json,
@@ -100,12 +101,13 @@ def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutof
         digest = hashlib.sha256(encoded).hexdigest()
         fetched = datetime.now(timezone.utc)
         source_url = str(record.get("source_url") or "urn:signalpost:registry-fixture")
+        snapshot_id = f"registry_fixture:{row.organisation_number}:{digest[:16]}"
         evidence.append(Evidence(evidence_id=f"{row.input_ref}:registry", source_url=source_url,
                                  retrieved_at=fetched, content_sha256=digest,
                                  extraction_method="frozen_registry_fixture", json_pointer="/",
                                  subject_organisation_number=row.organisation_number,
-                                 source_snapshot_ids=["registry_fixture"]))
-        snapshots.append(SourceSnapshot(source_id="registry_fixture", source_url=source_url,
+                                 source_snapshot_ids=[snapshot_id]))
+        snapshots.append(SourceSnapshot(source_id=snapshot_id, source_url=source_url,
                                         retrieved_at=fetched, content_sha256=digest, rights_status="fixture"))
         name = str(record.get("name") or record.get("legal_name") or "")
         if name:
@@ -113,7 +115,7 @@ def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutof
                           section="identity_brand", field_family="identity", subject_id=row.organisation_number,
                           field="legal_name", value=name, state=PublicState.AVAILABLE, scope="legal_entity",
                           verification_rule_id="frozen_registry_row_exact_org_v1", verification_score="1.0",
-                          evidence_ids=[evidence[0].evidence_id], source_snapshot_ids=["registry_fixture"])
+                          evidence_ids=[evidence[0].evidence_id], source_snapshot_ids=[snapshot_id])
             claims.append(claim)
             sections["identity_brand"] = Section(state=PublicState.AVAILABLE, claims=[claim])
             sections["claims_evidence_states"] = Section(state=PublicState.AVAILABLE, claims=[claim])
@@ -297,9 +299,13 @@ def run(args: argparse.Namespace) -> int:
                              os.environ.get("SIGNALPOST_CANONICAL_STATE_OUTPUT", "signalpost_state.json"))
     checkpoint_default = str(state_output_path) + ".checkpoint.sqlite"
     checkpoint_path = Path(args.checkpoint or os.environ.get("SIGNALPOST_CHECKPOINT", checkpoint_default))
-    resolved_paths = {path.resolve() for path in (output_path, state_output_path, checkpoint_path)}
-    if len(resolved_paths) != 3:
-        raise ValueError("evaluator output, canonical state, and SQLite checkpoint must use separate paths")
+    marker_path = output_path.with_name(output_path.name + ".publication.json")
+    read_only_paths = [Path(input_path), *[Path(value) for value in
+        (args.registry_snapshot, args.config, args.previous_state) if value]]
+    resolved_outputs = [path.resolve() for path in (output_path, state_output_path, checkpoint_path, marker_path)]
+    resolved_reads = [path.resolve() for path in read_only_paths]
+    if len(set(resolved_outputs)) != len(resolved_outputs) or set(resolved_outputs) & set(resolved_reads):
+        raise ValueError("output, state, checkpoint, and publication marker must not alias each other or read-only input/config/state artifacts")
     config_values: dict[str, Any] = {}
     config_bytes = b""
     if args.config:
@@ -307,6 +313,12 @@ def run(args: argparse.Namespace) -> int:
         config_values = json.loads(config_bytes.decode("utf-8"))
         if not isinstance(config_values, dict):
             raise ValueError("runtime config must be a JSON object")
+    website_rights_decisions = config_values.get("website_rights_decisions", {})
+    if (not isinstance(website_rights_decisions, dict)
+            or any(not isinstance(host, str) or not isinstance(status, str)
+                   or status not in {"allowed", "blocked", "unknown_not_reviewed"}
+                   for host, status in website_rights_decisions.items())):
+        raise ValueError("website_rights_decisions must map hostnames to allowed, blocked, or unknown_not_reviewed")
     previous: dict[str, dict[str, Any]] = {}
     previous_artifact = None
     previous_state_bytes = b""
@@ -536,7 +548,7 @@ def run(args: argparse.Namespace) -> int:
                     try:
                         return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
                             enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
-                            phase=phase, previous=previous)
+                            phase=phase, previous=previous, rights_decisions=website_rights_decisions)
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:
@@ -669,8 +681,9 @@ def run(args: argparse.Namespace) -> int:
     if len(actual_rows) != len(expected_rows) or actual_rows != expected_rows:
         raise RuntimeError("terminal output does not exactly match input row cardinality/order")
     finalization_started = time.monotonic()
-    writer.write(envelopes, serializer=to_evaluator)
-    state_writer.write_bytes(canonical_json(state_payload) + b"\n")
+    validate_batch_publication_graph(envelopes)
+    publication_marker = publish_paired_artifacts(writer, state_writer, envelopes,
+        canonical_json(state_payload) + b"\n", serializer=to_evaluator)
     finalization_seconds = time.monotonic() - finalization_started
     pending_path.unlink(missing_ok=True)
     ledger_purposes = {}
@@ -704,6 +717,7 @@ def run(args: argparse.Namespace) -> int:
                                     coalesced_requests=(getattr(gateway, "coalesced_requests", 0) if gateway else 0),
                                     runtime_seconds=round(time.monotonic() - run_started, 3),
                                     output_cardinality=len(envelopes),
+                                    publication_marker=str(publication_marker),
                                     finalization_seconds=round(finalization_seconds, 3),
                                     completion_reserve_remaining_seconds=(
                                         round(max(0.0, budget.hard_seconds - run_budget.elapsed), 3)),

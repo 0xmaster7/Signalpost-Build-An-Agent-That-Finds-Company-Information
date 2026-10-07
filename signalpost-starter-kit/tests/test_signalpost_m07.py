@@ -43,7 +43,8 @@ def make_envelope(specs: list[dict], *, retrieved: datetime | None = None,
         claims.append(Claim(claim_id=f"c{index}", organisation_number=ORG,
             section=spec.get("section", "identity_brand"), field_family=spec.get("family", "identity"),
             subject_id=spec.get("subject", ORG), field=spec["field"], value=spec["value"],
-            state=spec.get("state", PublicState.AVAILABLE), unit=spec.get("unit"),
+            state=spec.get("state", PublicState.AVAILABLE),
+            unit=spec.get("unit", "NOK" if spec.get("family") == "financial" else None),
             currency=spec.get("currency"), period_start=spec.get("period_start"),
             period_end=spec.get("period_end"), as_of=spec.get("as_of"), scope=spec.get("scope", "legal_entity"),
             verification_rule_id="fixture_exact_org_v1", verification_score="1.0",
@@ -59,6 +60,9 @@ def make_envelope(specs: list[dict], *, retrieved: datetime | None = None,
         snapshots.append(SourceSnapshot(source_id=snapshot_id, source_url=url, retrieved_at=retrieved,
             content_sha256=digest, http_status=200))
     sections = copy.deepcopy(SECTIONS)
+    for claim in claims:
+        sections[claim.section].claims.append(claim)
+        sections["claims_evidence_states"].claims.append(claim)
     sections["identity_brand"].state = identity_state
     sections["website_owned_profiles"].state = website_state
     sections["website_owned_profiles"].attempt_outcome = "completed" if website_state == PublicState.AVAILABLE else "failed"

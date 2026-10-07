@@ -1,0 +1,31 @@
+{
+  "record_type": "historical_live_smoke_hash_receipt",
+  "measurement_kind": "LIVE_MEASURED",
+  "run_id": "m09-rc1-cold-100",
+  "source_sha": "9ab896f9f7f39a85f2dd26a09970c9a5d8f42194",
+  "branch": "codex/m00-contract-audit",
+  "input_rows": 100,
+  "input_path": "signalpost-starter-kit/tests/fixtures/m02/foundation-input.jsonl",
+  "input_sha256": "67c3b3903eeecdffcc294a468402351367ca549053410b7f9c1c64ee76b32e2b",
+  "config_sha256": "61b5c234d2c4c431dc3e8016d349614df028d348fd2f24935b35b20966310d1d",
+  "runtime_seconds": 311.62,
+  "physical_requests": 470,
+  "logical_requests": 496,
+  "terminal_envelopes": 100,
+  "available_claims": 5335,
+  "financial_metric_claims_historical_unverified_units": 1875,
+  "evidence_hashes": {
+    "run_report": "4966551ce9ebd0f22153af756ae669347e63e1b105bebb0a1a75a2dccdf277e7",
+    "evaluator_output": "1af571fe6f621360c9c7b5b74713116dbeab908edd685c7caac92eeb5455ea14",
+    "state": "0271fe9bf9d776a13cb6af06167ca79171dd7b2617d0f5f629da026b49c763b7",
+    "checkpoint": "01ad9354bb651985ff1aa7da04ce48078a09b4e94e7fe8f4f8d283b6a95bcfdb",
+    "request_ledger": "9133629ff814d87e82c4e893a6db9209a6c1b459d9c605ecfc19ee02e00174ab",
+    "bundle_manifest": "933cc46868d1b1fbfd47285c713d6308619483c6418631594846ba024e1307b5",
+    "captured_stdout": "40446359edc3318f2f7c227c90d1cef6edc5de06d491e1297dd9b5c4cbbf08fe"
+  },
+  "historical_bundle_location": "/private/tmp/signalpost-m09-final-cold100-9ab896f.artifacts-artifacts",
+  "raw_bundle_retained_in_repository": false,
+  "retention_note": "The volatile host bundle was present and hash-verified during the independent audit, then removed by temporary-directory cleanup. This durable receipt preserves the previously recorded hashes and measurements, not the raw payload bytes.",
+  "release_report": "docs/release/M09_LIVE_SMOKE_PASS_2026-10-05.md",
+  "financial_validation_correction": "The historical unsupported-financial count did not validate the required financial unit. Unit-aware revalidation must use current canonical outputs; this receipt does not claim a corrected historical count."
+}

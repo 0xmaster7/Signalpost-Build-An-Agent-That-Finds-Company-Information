@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .identifiers import legacy_website_claim_value_digest, website_claim_value_digest
 
+SUPPORTED_FINANCIAL_UNITS = frozenset({"NOK", "TNOK", "MNOK", "1000 NOK", "1000000 NOK", "TUSEN NOK", "MILLIONER NOK"})
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -255,8 +257,14 @@ class Envelope(StrictModel):
                         if item.source_url != snapshot.source_url:
                             raise ValueError("evidence URL must match its source snapshot URL")
                         if (item.content_sha256 != snapshot.content_sha256
-                                and item.extraction_method != "frozen_registry_jsonl_v1"):
+                                and not approved_frozen_hash_exception(item, snapshot)):
                             raise ValueError("evidence hash must match its source snapshot hash")
+                if claim.field_family == "financial":
+                    if (claim.unit not in SUPPORTED_FINANCIAL_UNITS or not claim.currency
+                            or claim.period_start is None or claim.period_end is None
+                            or claim.period_start > claim.period_end
+                            or claim.scope not in {"legal_entity", "group"}):
+                        raise ValueError("available financial claims require supported unit, currency, period, and scope semantics")
         return self
 
     @field_validator("organisation_number")
@@ -288,6 +296,41 @@ class CacheManifestEntry(StrictModel):
 def validate_publication_graph(envelope: Envelope) -> Envelope:
     """Revalidate a possibly mutated envelope and its complete claim provenance graph."""
     return Envelope.model_validate(envelope.model_dump())
+
+
+def approved_frozen_hash_exception(evidence: Evidence, snapshot: SourceSnapshot) -> bool:
+    return (evidence.extraction_method == "frozen_registry_jsonl_v1"
+            and evidence.source_class == "official"
+            and evidence.source_url == snapshot.source_url
+            and snapshot.source_id.startswith("registry_snapshot:")
+            and snapshot.source_url == evidence.source_url
+            and snapshot.rights_status == "NLOD-2.0")
+
+
+def validate_batch_publication_graph(envelopes: list[Envelope]) -> list[Envelope]:
+    """Validate each envelope and reject cross-envelope identifier collisions."""
+    checked = [validate_publication_graph(item) for item in envelopes]
+    evidence_by_id: dict[str, Evidence] = {}
+    snapshots_by_id: dict[str, SourceSnapshot] = {}
+    for envelope in checked:
+        for item in envelope.evidence:
+            previous = evidence_by_id.get(item.evidence_id)
+            if previous is not None and previous.model_dump(mode="json") != item.model_dump(mode="json"):
+                raise ValueError(f"conflicting evidence identifier across envelopes: {item.evidence_id}")
+            evidence_by_id[item.evidence_id] = item
+        for item in envelope.source_snapshots:
+            previous = snapshots_by_id.get(item.source_id)
+            if previous is not None:
+                stable_previous = previous.model_dump(mode="json")
+                stable_current = item.model_dump(mode="json")
+                # Snapshot IDs represent URL/content objects; retrieval time is
+                # observation metadata and can differ across envelopes.
+                stable_previous.pop("retrieved_at", None)
+                stable_current.pop("retrieved_at", None)
+                if stable_previous != stable_current:
+                    raise ValueError(f"conflicting snapshot identifier across envelopes: {item.source_id}")
+            snapshots_by_id[item.source_id] = item
+    return checked
 
 
 def empty_section(state: PublicState = PublicState.NOT_AVAILABLE) -> Section:

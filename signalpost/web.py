@@ -74,7 +74,7 @@ def _known_claims(profile: CompanyProfile, field: str) -> list[Any]:
             and claim.organisation_number == profile.organisation_number]
 
 
-def _parse_filters(field: str, operator: str, value: str, currency: str, period_end: str, scope: str) -> list[FindFilter]:
+def _parse_filters(field: str, operator: str, value: str, currency: str, period_end: str, scope: str, unit: str = "") -> list[FindFilter]:
     if not field and not value:
         return []
     if not field:
@@ -99,7 +99,7 @@ def _parse_filters(field: str, operator: str, value: str, currency: str, period_
             raise QueryError("numeric filter value is malformed") from exc
     else:
         number = value
-    return [FindFilter(field, operator, number, currency or None, period_end or None, scope or None)]
+    return [FindFilter(field, operator, number, currency or None, period_end or None, scope or None, unit or None)]
 
 
 def create_app(data_path: str | Path) -> FastAPI:
@@ -116,17 +116,17 @@ def create_app(data_path: str | Path) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, q: str = "", field: str = "", op: str = "eq", value: str = "",
-             currency: str = "", period_end: str = "", scope: str = ""):
+             currency: str = "", period_end: str = "", scope: str = "", unit: str = ""):
         try:
-            filters = _parse_filters(field, op, value, currency, period_end, scope)
+            filters = _parse_filters(field, op, value, currency, period_end, scope, unit)
             extra_values = [request.query_params.getlist(key) for key in
-                            ("filter_field", "filter_op", "filter_value", "filter_currency", "filter_period_end", "filter_scope")]
+                            ("filter_field", "filter_op", "filter_value", "filter_currency", "filter_period_end", "filter_scope", "filter_unit")]
             if len(extra_values[0]) > 3:
                 raise QueryError("at most three additional AND filters are supported in the interface")
             for filter_index, extra_field in enumerate(extra_values[0][:3]):
                 extra = [values[filter_index] if len(values) > filter_index else "" for values in extra_values[1:]]
                 if extra_field or extra[1]:
-                    filters.extend(_parse_filters(extra_field, extra[0] or "eq", extra[1], extra[2], extra[3], extra[4]))
+                    filters.extend(_parse_filters(extra_field, extra[0] or "eq", extra[1], extra[2], extra[3], extra[4], extra[5]))
             result = find_companies(profiles.values(), text=q, filters=filters, index=index)
         except QueryError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -140,6 +140,7 @@ def create_app(data_path: str | Path) -> FastAPI:
             + '</select></label><label>Value <input name="value" maxlength="300" value="' + _esc(value) + '"></label>'
             '<label>Currency <input name="currency" maxlength="3" value="' + _esc(currency) + '"></label>'
             '<label>Period end <input name="period_end" type="date" value="' + _esc(period_end) + '"></label>'
+            '<label>Unit <input name="unit" maxlength="40" value="' + _esc(unit) + '"></label>'
             '<label>Scope <select name="scope"><option value="">Choose scope</option>' + "".join(f'<option{" selected" if scope==item else ""}>{item}</option>' for item in ("legal_entity","group","unknown"))
             + '</select></label>')
         for fieldset_index in range(3):
@@ -147,7 +148,7 @@ def create_app(data_path: str | Path) -> FastAPI:
                 f'<option value="{name}">{label}</option>' for name,label in field_options) + '</select></label><label>Operator <select name="filter_op">' + "".join(
                 f'<option value="{name}">{name}</option>' for name in ("eq","contains","gt","gte","lt","lte","range")) + '</select></label>' +
                 '<label>Value <input name="filter_value" maxlength="300"></label><label>Currency <input name="filter_currency" maxlength="3"></label>' +
-                '<label>Period end <input name="filter_period_end" type="date"></label><label>Scope <input name="filter_scope" maxlength="30"></label></fieldset>')
+                '<label>Period end <input name="filter_period_end" type="date"></label><label>Scope <input name="filter_scope" maxlength="30"></label><label>Unit <input name="filter_unit" maxlength="40"></label></fieldset>')
         form += '<button type="submit">Find companies</button></form>'
         entries = []
         for item in result["matches"]:
@@ -230,13 +231,13 @@ def create_app(data_path: str | Path) -> FastAPI:
         return _page("Compare companies", form + '<p>Missing values remain unknown/unavailable; incompatible dimensions are marked not comparable. No ranking or deltas are computed.</p>' + table)
 
     @app.get("/verify", response_class=HTMLResponse)
-    def verify(request: Request, org: str = "", field: str = "", value: str = "", currency: str = "", period_end: str = "", scope: str = ""):
-        form = '<form method="get" action="/verify"><label>Organisation number <input name="org" maxlength="9" required value="' + _esc(org) + '"></label><label>Canonical field <input name="field" maxlength="80" required value="' + _esc(field) + '"></label><label>Proposed value <input name="value" maxlength="500" required value="' + _esc(value) + '"></label><label>Currency <input name="currency" maxlength="3" value="' + _esc(currency) + '"></label><label>Period end <input name="period_end" type="date" value="' + _esc(period_end) + '"></label><label>Scope <input name="scope" maxlength="30" value="' + _esc(scope) + '"></label><button>Verify proposition</button></form>'
+    def verify(request: Request, org: str = "", field: str = "", value: str = "", currency: str = "", period_end: str = "", scope: str = "", unit: str = ""):
+        form = '<form method="get" action="/verify"><label>Organisation number <input name="org" maxlength="9" required value="' + _esc(org) + '"></label><label>Canonical field <input name="field" maxlength="80" required value="' + _esc(field) + '"></label><label>Proposed value <input name="value" maxlength="500" required value="' + _esc(value) + '"></label><label>Currency <input name="currency" maxlength="3" value="' + _esc(currency) + '"></label><label>Period end <input name="period_end" type="date" value="' + _esc(period_end) + '"></label><label>Scope <input name="scope" maxlength="30" value="' + _esc(scope) + '"></label><label>Unit <input name="unit" maxlength="40" value="' + _esc(unit) + '"></label><button>Verify proposition</button></form>'
         if not org and not field and not value:
             return _page("Verify a proposition", form + '<p>Verification compares the exact company, field and requested dimensions against canonical claims and cites the claim evidence.</p>')
         try:
             result = verify_proposition(profiles, organisation_number=org, field=field, value=value,
-                currency=currency or None, period_end=period_end or None, scope=scope or None)
+                currency=currency or None, period_end=period_end or None, scope=scope or None, unit=unit or None)
         except QueryError as exc:
             raise HTTPException(400, str(exc)) from exc
         citations = "".join(f'<li>{_link(item["source_url"])} · {_esc(item["retrieved_at"])} · SHA-256 {_esc(item["content_sha256"])}</li>' for item in result["citations"])

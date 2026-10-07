@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import gzip
 import hashlib
+import io
 import json
 import re
 from pathlib import Path
@@ -76,7 +77,9 @@ def parse_records(text: str, fmt: str | None = None) -> list[InputRow]:
                     values.append({"_malformed": line, "_parse_error": str(exc)})
     elif mode in {"csv", "tsv"}:
         delimiter = "\t" if mode == "tsv" else ","
-        reader = csv.DictReader(text.splitlines(), delimiter=delimiter)
+        # Preserve valid quoted newlines and reject unterminated quotes rather
+        # than consuming a following company row.
+        reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
         values = []
         for row in reader:
             values.append({"_malformed": str(row), "_parse_error": "invalid UTF-8"}

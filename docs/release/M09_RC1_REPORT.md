@@ -2,6 +2,8 @@
 
 M09's final cold 100-company host-context run reached terminal evaluator publication and passed the live release gates on frozen implementation SHA `9ab896f9f7f39a85f2dd26a09970c9a5d8f42194`. The final release packet and deterministic gates are recorded in [the live smoke report](M09_LIVE_SMOKE_PASS_2026-10-05.md) and [the RC1 benchmark](M09_RC1_BENCHMARK_2026-10-05.md).
 
+The independent post-RC1 review found that the historical financial smoke validator did not require source unit semantics. See [the financial validator correction](M09_FINANCIAL_VALIDATOR_CORRECTION.md); the historical measurements are retained without claiming unit-aware revalidation.
+
 ## Artifact index
 
 - Live input/output/state/ledger hashes, identity, provenance, synthesis, financial, roles/workplaces, website/network, and resource results: [M09 final live smoke](M09_LIVE_SMOKE_PASS_2026-10-05.md).

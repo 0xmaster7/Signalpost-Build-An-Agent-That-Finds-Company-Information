@@ -50,14 +50,17 @@ def make_envelope(org: str, name: str, facts: list[dict], *, states: dict | None
             evidence_ids=[evid], source_snapshot_ids=[snap])
         claims.append(claim)
         sections[claim.section].claims.append(claim)
+        sections["claims_evidence_states"].claims.append(claim)
     return Envelope(input_ref="m08:" + org, row_number=1, organisation_number=org,
         terminal_state=PublicState.AVAILABLE, sections=sections, refresh=RefreshState(),
         claims=claims, evidence=evidence, source_snapshots=snapshots, batch_id="m08-gold-fixture", evidence_cutoff=AS_OF)
 
 
-def finance(value, *, field="revenue", currency="NOK", end="2024-12-31", start="2024-01-01", scope="legal_entity"):
+def finance(value, *, field="revenue", currency="NOK", end="2024-12-31", start="auto", scope="legal_entity", unit="NOK"):
+    if start == "auto" and end:
+        start = end[:4] + "-01-01"
     return {"section": "accounts_history", "family": "financial", "field": field, "value": value,
-            "currency": currency, "period_start": datetime.fromisoformat(start).replace(tzinfo=timezone.utc) if start else None,
+            "currency": currency, "unit": unit, "period_start": datetime.fromisoformat(start).replace(tzinfo=timezone.utc) if start else None,
             "period_end": datetime.fromisoformat(end).replace(tzinfo=timezone.utc) if end else None, "scope": scope}
 
 
@@ -109,13 +112,13 @@ class FindContractTests(unittest.TestCase):
     def test_multiple_filters_are_and_and_unknown_does_not_match(self):
         result = find_companies(self.profiles.values(), filters=[FindFilter("municipality", "eq", "Oslo"), FindFilter("legal_form", "eq", "AS")])
         self.assertEqual([row["organisation_number"] for row in result["matches"]], ["001234567"])
-        blocked = find_companies(self.profiles.values(), filters=[FindFilter("revenue", "gt", Decimal("-1"), "NOK", "2024-12-31", "legal_entity")])
+        blocked = find_companies(self.profiles.values(), filters=[FindFilter("revenue", "gt", Decimal("-1"), "NOK", "2024-12-31", "legal_entity", "NOK")])
         self.assertEqual([row["organisation_number"] for row in blocked["matches"]], ["001234567", "123456789"])
         self.assertEqual([row["organisation_number"] for row in blocked["unknown"]], ["923609016"])
 
     def test_numeric_zero_negative_boundaries_and_range(self):
         def run(op, value):
-            return find_companies(self.profiles.values(), filters=[FindFilter("annual_result", op, value, "NOK", "2024-12-31", "legal_entity")])
+            return find_companies(self.profiles.values(), filters=[FindFilter("annual_result", op, value, "NOK", "2024-12-31", "legal_entity", "NOK")])
         self.assertEqual([r["organisation_number"] for r in run("eq", Decimal("-5"))["matches"]], ["001234567"])
         self.assertEqual([r["organisation_number"] for r in run("gte", Decimal("0"))["matches"]], [])
         self.assertEqual([r["organisation_number"] for r in run("range", (Decimal("-5"), Decimal("-5")))["matches"]], ["001234567"])
@@ -123,7 +126,7 @@ class FindContractTests(unittest.TestCase):
     def test_filter_rejects_currency_or_period_guessing(self):
         with self.assertRaises(QueryError):
             find_companies(self.profiles.values(), filters=[FindFilter("revenue", "gt", Decimal("10"))])
-        wrong_currency = find_companies(self.profiles.values(), filters=[FindFilter("revenue", "gt", Decimal("10"), "EUR", "2024-12-31", "legal_entity")])
+        wrong_currency = find_companies(self.profiles.values(), filters=[FindFilter("revenue", "gt", Decimal("10"), "EUR", "2024-12-31", "legal_entity", "NOK")])
         self.assertEqual(wrong_currency["matches"], [])
         self.assertEqual(wrong_currency["unknown_count"], 3)
         with self.assertRaises(QueryError):
@@ -141,15 +144,17 @@ class FindContractTests(unittest.TestCase):
         for value in (Decimal("NaN"), Decimal("Infinity"), Decimal("1e100")):
             with self.subTest(value=value), self.assertRaises(QueryError):
                 find_companies(self.profiles.values(), filters=[FindFilter(
-                    "revenue", "eq", value, "NOK", "2024-12-31", "legal_entity")])
+                    "revenue", "eq", value, "NOK", "2024-12-31", "legal_entity", "NOK")])
 
     def test_numeric_dimensions_are_exact_period_currency_and_scope(self):
         for kwargs in ({"currency": "EUR"}, {"period_end": "2023-12-31"}, {"scope": "group"}):
-            filters = FindFilter("revenue", "eq", Decimal("0"), "NOK", "2024-12-31", "legal_entity")
+            filters = FindFilter("revenue", "eq", Decimal("0"), "NOK", "2024-12-31", "legal_entity", "NOK")
             from dataclasses import replace
             result = find_companies(self.profiles.values(), filters=[replace(filters, **kwargs)])
             self.assertEqual(result["matches"], [])
             self.assertGreater(result["unknown_count"], 0)
+        different_unit = FindFilter("revenue", "eq", Decimal("0"), "NOK", "2024-12-31", "legal_entity", "TNOK")
+        self.assertEqual(find_companies(self.profiles.values(), filters=[different_unit])["matches"], [])
 
     def test_conflicting_scalar_values_remain_unknown_instead_of_being_excluded(self):
         one = make_envelope("001234567", "Acme AS", [{"field": "legal_form", "value": "AS"},
@@ -212,13 +217,8 @@ class CompareContractTests(unittest.TestCase):
         self.assertEqual(len(column["values"]), 3)
 
     def test_financial_missing_dimensions_are_not_comparable(self):
-        one = make_envelope("001234567", "Acme AS", [finance(1, currency=None, start=None)])
-        two = make_envelope("123456789", "Acme Services AS", [finance(2, currency=None, start=None)])
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "two.jsonl"
-            path.write_text(json.dumps(to_evaluator(one)) + "\n" + json.dumps(to_evaluator(two)) + "\n")
-            records = load_profiles(path)
-        self.assertEqual(compare_companies(records, ["001234567", "123456789"], ["revenue"])["columns"][0]["status"], "not_comparable")
+        with self.assertRaisesRegex(ValueError, "unit, currency, period, and scope"):
+            make_envelope("001234567", "Acme AS", [finance(1, currency=None, start=None)])
 
     def test_identity_isolation_and_exact_company_count(self):
         with self.assertRaises(QueryError):
@@ -236,7 +236,7 @@ class VerifyContractTests(unittest.TestCase):
 
     def test_supported_proposition_has_traceable_same_company_evidence(self):
         result = verify_proposition(self.profiles, organisation_number="001234567", field="revenue", value="0",
-            currency="NOK", period_end="2024-12-31", scope="legal_entity")
+            currency="NOK", period_end="2024-12-31", scope="legal_entity", unit="NOK")
         self.assertEqual(result["status"], "supported")
         self.assertEqual(len(result["citations"]), 1)
         self.assertEqual(result["citations"][0]["evidence_id"], "001234567:e3")
@@ -250,7 +250,7 @@ class VerifyContractTests(unittest.TestCase):
     def test_unknown_unavailable_incomplete_and_dimensions(self):
         self.assertEqual(verify_proposition(self.profiles, organisation_number="923609016", field="legal_name", value="Other")["status"], "contradicted")
         unavailable = verify_proposition(self.profiles, organisation_number="923609016", field="revenue", value="1",
-            currency="NOK", period_end="2024-12-31", scope="legal_entity")
+            currency="NOK", period_end="2024-12-31", scope="legal_entity", unit="NOK")
         self.assertEqual(unavailable["status"], "unavailable")
         no_dimensions = verify_proposition(self.profiles, organisation_number="001234567", field="revenue", value="0")
         self.assertEqual(no_dimensions["status"], "insufficient_evidence")
@@ -289,6 +289,7 @@ class VerifyContractTests(unittest.TestCase):
         aggregate_id = "registry_snapshot:aggregate"
         snapshot["source_id"] = aggregate_id
         snapshot["content_sha256"] = hashlib.sha256(b"aggregate frozen registry").hexdigest()
+        snapshot["rights_status"] = "NLOD-2.0"
         evidence["source_snapshot_ids"] = [aggregate_id]
         evidence["extraction_method"] = "frozen_registry_jsonl_v1"
         for claim in payload["claims"]:
@@ -482,7 +483,7 @@ class ServerRenderedUXTests(unittest.TestCase):
         compare = self.get("/compare", params=[("org", "001234567"), ("org", "123456789"), ("field", "revenue")])
         self.assertIn("not_comparable", compare.text)
         verify = self.get("/verify", params={"org": "001234567", "field": "revenue", "value": "0",
-            "currency": "NOK", "period_end": "2024-12-31", "scope": "legal_entity"})
+            "currency": "NOK", "period_end": "2024-12-31", "scope": "legal_entity", "unit": "NOK"})
         self.assertIn("supported", verify.text)
         self.assertEqual(self.get("/changes").status_code, 200)
         history = self.get("/changes", params={"org": "001234567"})

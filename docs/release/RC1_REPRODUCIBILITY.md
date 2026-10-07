@@ -32,6 +32,8 @@ The current fixed release live smoke is reproducible with:
 
 The smoke script uses the checked-in 100-company fixture and its release fallbacks. The live M09 evidence is frozen against implementation SHA `9ab896f9f7f39a85f2dd26a09970c9a5d8f42194` and preserved under `/private/tmp/signalpost-m09-final-cold100-9ab896f.artifacts-artifacts` on the execution host; see [the report](M09_LIVE_SMOKE_PASS_2026-10-05.md). Do not interpret a new invocation as required to reproduce the recorded historical run.
 
+The historical hash receipts and measured counts are also retained in [the durable RC1 evidence manifest](M09_RC1_DURABLE_EVIDENCE.json). The raw bundle was volatile and has since been removed; run `signalpost-starter-kit/scripts/verify_rc1_evidence.py` as a packaging gate. New output/state pairs include an adjacent `.publication.json` commit marker; consumers can verify it with `signalpost.operations.validate_paired_publication`.
+
 ## Previous state and material change
 
 The canonical CLI accepts an optional `--previous-state` path and writes state with `--state-output`. For refresh evaluation, preserve the previous state artifact and pass it explicitly to the next run. A no-prior-state invocation reports baseline mode; source failures do not erase previously supported facts. The deterministic recorded-snapshot replay command is:

@@ -2,18 +2,26 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 import re
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable
 
-from .models import ChangeEvent, Claim, Evidence, PublicState, SourceSnapshot
+from .models import ChangeEvent, Claim, Evidence, PublicState, SourceSnapshot, approved_frozen_hash_exception
 
 
 class QueryError(ValueError):
     pass
+
+
+def _decimal_equal(value: Any, proposed: Decimal) -> bool:
+    try:
+        candidate = Decimal(str(value))
+        return candidate.is_finite() and candidate == proposed
+    except (InvalidOperation, ValueError, TypeError):
+        return False
 
 
 @dataclass
@@ -116,8 +124,7 @@ def load_profiles(path: str | Path) -> dict[str, CompanyProfile]:
                     raise QueryError(f"evidence {evidence.evidence_id} lacks a bound source snapshot at row {line_number}")
                 if any(profile.snapshots[ref].source_url != evidence.source_url
                        or (profile.snapshots[ref].content_sha256 != evidence.content_sha256
-                           and not (evidence.extraction_method == "frozen_registry_jsonl_v1"
-                                    and ref.startswith("registry_snapshot:")))
+                           and not approved_frozen_hash_exception(evidence, profile.snapshots[ref]))
                        for ref in evidence.source_snapshot_ids):
                     raise QueryError(f"evidence {evidence.evidence_id} does not match its source snapshot")
                 if evidence.evidence_id in profile.evidence and profile.evidence[evidence.evidence_id] != evidence:
@@ -191,6 +198,7 @@ class FindFilter:
     currency: str | None = None
     period_end: str | None = None
     scope: str | None = None
+    unit: str | None = None
 
 
 def validate_filter(item: FindFilter) -> FindFilter:
@@ -201,8 +209,8 @@ def validate_filter(item: FindFilter) -> FindFilter:
     if item.field in NUMERIC_FIELDS:
         if item.operator not in {"eq", "gt", "gte", "lt", "lte", "range"}:
             raise QueryError("numeric fields require a numeric operator")
-        if item.field in FINANCIAL_FIELDS and not (item.currency and item.period_end and item.scope):
-            raise QueryError("financial filters require exact currency, period_end and scope dimensions")
+        if item.field in FINANCIAL_FIELDS and not (item.currency and item.period_end and item.scope and item.unit):
+            raise QueryError("financial filters require exact currency, period_end, scope, and unit dimensions")
         if item.scope not in {None, "legal_entity", "group", "unknown", "workplace"}:
             raise QueryError("unsupported numeric fact scope")
         if item.operator == "range":
@@ -253,9 +261,9 @@ def _truth(profile: CompanyProfile, item: FindFilter) -> tuple[bool | None, list
     if item.field in FINANCIAL_FIELDS:
         candidates = [claim for claim in candidates if claim.currency == item.currency
                      and (claim.period_end.date().isoformat() if claim.period_end else None) == item.period_end
-                     and claim.scope == item.scope]
+                     and claim.scope == item.scope and claim.unit == item.unit]
         if not candidates:
-            return None, [], "no fact with the requested currency, reporting period and scope"
+            return None, [], "no fact with the requested currency, reporting period, scope, and unit"
     matched = []
     for claim in candidates:
         value = claim.value
@@ -290,7 +298,7 @@ def find_companies(profiles: Iterable[CompanyProfile] | dict[str, CompanyProfile
     if len(filters or []) > 12:
         raise QueryError("at most 12 AND filters are supported")
     checked = [validate_filter(item) for item in (filters or [])]
-    if len({(item.field, item.operator, str(item.value), item.currency, item.period_end, item.scope) for item in checked}) != len(checked):
+    if len({(item.field, item.operator, str(item.value), item.currency, item.period_end, item.scope, item.unit) for item in checked}) != len(checked):
         raise QueryError("duplicate filters are not supported")
     index = index or build_index(profiles)
     query = text.strip().casefold()
@@ -323,9 +331,9 @@ def find_companies(profiles: Iterable[CompanyProfile] | dict[str, CompanyProfile
             if item.field in FINANCIAL_FIELDS:
                 dimension_rows = [claim for claim in rows if claim.currency == item.currency
                     and (claim.period_end.date().isoformat() if claim.period_end else None) == item.period_end
-                    and claim.scope == item.scope]
+                    and claim.scope == item.scope and claim.unit == item.unit]
                 if not dimension_rows:
-                    unknown_reasons[org].append(f"{item.field}: no fact with the requested currency, reporting period and scope")
+                    unknown_reasons[org].append(f"{item.field}: no fact with the requested currency, reporting period, scope, and unit")
                     continue
             matched = []
             for claim in dimension_rows:
@@ -427,7 +435,7 @@ def compare_companies(profiles: dict[str, CompanyProfile], organisation_numbers:
                     "period_end": claim.period_end.isoformat() if claim.period_end else None,
                     "scope": claim.scope, "unit": claim.unit,
                     "citations": profile.claim_citations(claim)})
-        dimensions_complete = all(all(part is not None for part in dim[:4]) for dim in dimensions) if financial_field else True
+        dimensions_complete = all(all(part is not None for part in dim) for dim in dimensions) if financial_field else True
         comparable = (len(dimensions) == 1 and dimensions_complete and single_fact_per_company
                       and all(item["status"] == "available" for item in values))
         columns.append({"field": canonical_field, "status": "comparable" if comparable else "not_comparable",
@@ -447,7 +455,7 @@ def _missing_status(profile: CompanyProfile, field: str) -> str:
 
 def verify_proposition(profiles: dict[str, CompanyProfile], *, organisation_number: str, field: str,
                        value: str, currency: str | None = None, period_end: str | None = None,
-                       scope: str | None = None) -> dict[str, Any]:
+                       scope: str | None = None, unit: str | None = None) -> dict[str, Any]:
     if len(value) > 500 or len(field) > 80:
         raise QueryError("proposition exceeds the allowed input size")
     if not re.fullmatch(r"\d{9}", organisation_number):
@@ -459,15 +467,24 @@ def verify_proposition(profiles: dict[str, CompanyProfile], *, organisation_numb
     field = FIELD_ALIASES.get(field, field)
     if field not in set(FIELD_ALIASES.values()):
         raise QueryError("field is not represented by a canonical claim in the dataset")
+    proposed_numeric: Decimal | None = None
+    if field in {FIELD_ALIASES[item] for item in FINANCIAL_FIELDS}:
+        try:
+            proposed_numeric = Decimal(value)
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise QueryError("financial proposition must be a finite numeric value") from exc
+        if not proposed_numeric.is_finite() or len(proposed_numeric.as_tuple().digits) > 30 or abs(proposed_numeric.adjusted()) > 18:
+            raise QueryError("financial proposition must be a finite numeric value in the supported range")
     candidates = [claim for claim in profile.claims if claim.organisation_number == organisation_number
                   and _claim_matches_field(claim, field) and claim.state == PublicState.AVAILABLE]
-    if field in {FIELD_ALIASES[item] for item in FINANCIAL_FIELDS} and not (currency and period_end and scope):
+    if field in {FIELD_ALIASES[item] for item in FINANCIAL_FIELDS} and not (currency and period_end and scope and unit):
         return {"status": "insufficient_evidence", "organisation_number": organisation_number,
-                "field": field, "reason": "financial verification requires exact currency, period_end and scope dimensions",
+                "field": field, "reason": "financial verification requires exact currency, period_end, scope, and unit dimensions",
                 "citations": []}
-    if currency is not None or period_end is not None or scope is not None:
+    if currency is not None or period_end is not None or scope is not None or unit is not None:
         candidates = [claim for claim in candidates if claim.currency == currency
-            and (claim.period_end.date().isoformat() if claim.period_end else None) == period_end and claim.scope == scope]
+            and (claim.period_end.date().isoformat() if claim.period_end else None) == period_end
+            and claim.scope == scope and claim.unit == unit]
     if not candidates:
         state = _missing_status(profile, field)
         return {"status": "unavailable" if state == "unavailable" else "insufficient_evidence",
@@ -475,12 +492,15 @@ def verify_proposition(profiles: dict[str, CompanyProfile], *, organisation_numb
                 "reason": f"no comparable available claim; canonical source state is {state}", "citations": []}
     if field in {FIELD_ALIASES[item] for item in FINANCIAL_FIELDS}:
         dims = {(claim.currency, claim.period_start.isoformat() if claim.period_start else None,
-                 claim.period_end.isoformat() if claim.period_end else None, claim.scope) for claim in candidates}
+                 claim.period_end.isoformat() if claim.period_end else None, claim.scope, claim.unit) for claim in candidates}
         if len(dims) != 1 or any(part is None for part in next(iter(dims))):
             return {"status": "insufficient_evidence", "organisation_number": organisation_number,
                     "field": field, "reason": "multiple or incomplete financial dimensions prevent verification",
                     "citations": []}
-    exact = [claim for claim in candidates if str(claim.value).casefold() == value.casefold()]
+    if proposed_numeric is not None:
+        exact = [claim for claim in candidates if _decimal_equal(claim.value, proposed_numeric)]
+    else:
+        exact = [claim for claim in candidates if str(claim.value).casefold() == value.casefold()]
     if exact:
         selected = exact
         status, reason = "supported", "an exact canonical claim supports the proposition"
