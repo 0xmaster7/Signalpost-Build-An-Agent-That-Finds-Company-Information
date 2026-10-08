@@ -4,7 +4,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from .brreg import SUPPORTED_CURRENCY_CODES
-from .models import Envelope, PublicState, SUPPORTED_FINANCIAL_UNITS, validate_publication_graph
+from .models import (Envelope, PublicState, SUPPORTED_FINANCIAL_UNITS,
+                     financial_dimensions_compatible, validate_publication_graph)
 
 
 VENDOR_REQUIRED_FIELDS = ("input_ref", "organisation_number", "terminal_state", "sections", "claims", "evidence",
@@ -56,7 +57,8 @@ def to_evaluator(envelope: Envelope) -> dict[str, Any]:
             raise ValueError(f"canonical claim is missing from the claims/evidence section: {claim.claim_id}")
     for claim in envelope.claims:
         if claim.state == PublicState.AVAILABLE and claim.field_family == "financial":
-            if (claim.unit not in SUPPORTED_FINANCIAL_UNITS or claim.currency not in SUPPORTED_CURRENCY_CODES
+            if (not financial_dimensions_compatible(claim.unit, claim.currency)
+                    or claim.currency not in SUPPORTED_CURRENCY_CODES
                     or claim.period_start is None or claim.period_end is None
                     or claim.period_start > claim.period_end or claim.scope not in {"legal_entity", "group"}
                     or isinstance(claim.value, bool) or not isinstance(claim.value, (int, float, Decimal))):
@@ -68,12 +70,10 @@ def to_evaluator(envelope: Envelope) -> dict[str, Any]:
             if not numeric.is_finite():
                 raise ValueError("financial publication value must be finite numeric data")
     synthesis_summary = envelope.synthesis.get("summary") if isinstance(envelope.synthesis, dict) else None
+    from .synthesis import validate_synthesis, validate_synthesis_schema
+    validate_synthesis_schema(envelope.synthesis)
     if isinstance(synthesis_summary, dict):
-        from .synthesis import validate_synthesis
         validate_synthesis(envelope, synthesis_summary)
-    elif isinstance(envelope.synthesis, dict) and "sentences" in envelope.synthesis:
-        from .synthesis import validate_synthesis
-        validate_synthesis(envelope, envelope.synthesis)
     payload = {
         "input_ref": envelope.input_ref,
         "organisation_number": envelope.organisation_number,
@@ -84,7 +84,7 @@ def to_evaluator(envelope: Envelope) -> dict[str, Any]:
         "source_snapshots": [item.model_dump(mode="json") for item in envelope.source_snapshots],
         "refresh": {**envelope.refresh.model_dump(mode="json"),
                     "changes": [_evaluator_change(item.model_dump(mode="json")) for item in envelope.refresh.changes]},
-        "synthesis": envelope.synthesis,
+        "synthesis": {"schema_version": 1, **envelope.synthesis},
         "errors": [item.model_dump(mode="json") for item in envelope.errors],
         "operations": [item.model_dump(mode="json") for item in envelope.operations],
         "run": {"created_at": envelope.created_at.isoformat()},

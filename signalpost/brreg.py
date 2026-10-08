@@ -126,6 +126,8 @@ def financial_records(body: Any) -> list[dict[str, Any]]:
         scope = "group" if account_type in {"konsern", "konsernregnskap"} else "legal_entity" if account_type in {"selskap", "selskapsregnskap"} else "unknown"
         values = {}
         record_unit = record.get("enhet")
+        record_unit_present = "enhet" in record
+        record_unit_state = _unit_state(record_unit, present=record_unit_present)
         for field, path in METRICS.items():
             val = _get(record, *path.split("/"))
             # Numeric field labels are intentionally exact: an unlabelled or mistyped
@@ -133,18 +135,32 @@ def financial_records(body: Any) -> list[dict[str, Any]]:
             if isinstance(val, dict):
                 raw = val.get("sum") if isinstance(val.get("sum"), (int, float)) else None
                 # Currency is a separate dimension. Never use it as a scale.
+                metric_unit_present = "enhet" in val
                 metric_unit = val.get("enhet")
-                unit_conflict = bool(metric_unit and record_unit
-                    and str(metric_unit).strip().upper() != str(record_unit).strip().upper())
-                unit = "__conflict__" if unit_conflict else metric_unit or record_unit
+                metric_unit_state = _unit_state(metric_unit, present=metric_unit_present)
+                if metric_unit_state == "absent":
+                    unit = record_unit if record_unit_state == "supported" else None
+                    unit_state = record_unit_state
+                elif metric_unit_state == "supported":
+                    unit = metric_unit
+                    unit_state = "supported"
+                else:
+                    unit = None
+                    unit_state = metric_unit_state
+                if (metric_unit_state == "supported" and record_unit_state == "supported"
+                        and str(metric_unit).strip().upper() != str(record_unit).strip().upper()):
+                    unit, unit_state = "__conflict__", "conflict"
+                unit_conflict = unit_state == "conflict"
             else:
-                raw, unit = val, record_unit
+                raw, unit = val, (record_unit if record_unit_state == "supported" else None)
+                unit_state = record_unit_state
                 unit_conflict = False
             values[field] = raw if (isinstance(raw, (int, float)) and not isinstance(raw, bool)
                                     and math.isfinite(float(raw))) else None
             if values[field] is not None:
                 values[field + "_unit"] = unit
                 values[field + "_unit_conflict"] = unit_conflict
+                values[field + "_unit_state"] = unit_state
         result.append({
             "record_id": record.get("id"), "filing_id": record.get("innsendingsId"), "record_version": record.get("versjon"),
             "source_version_or_filing_id": record.get("versjon") or record.get("innsendingsId") or record.get("id"),
@@ -164,6 +180,20 @@ def financial_records(body: Any) -> list[dict[str, Any]]:
         digest = hashlib.sha256(json.dumps(record["raw"], sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
         unique.setdefault(digest, record)
     return list(unique.values())
+
+
+def _unit_state(value: Any, *, present: bool) -> str:
+    """Classify source unit metadata without truthiness-based fallback."""
+    if not present:
+        return "absent"
+    if value is None:
+        return "explicit_null"
+    if not isinstance(value, str):
+        return "malformed"
+    normalized = value.strip().upper()
+    if not normalized:
+        return "malformed"
+    return "supported" if normalized in SUPPORTED_FINANCIAL_UNITS else "unsupported"
 
 
 def role_records(body: Any) -> list[dict[str, Any]]:

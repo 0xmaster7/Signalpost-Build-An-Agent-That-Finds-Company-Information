@@ -202,16 +202,22 @@ def _attach_frozen_baseline(envelope: Envelope, record: dict[str, Any] | None, s
     if selected and selected.get("source") == "frozen" and not any(c.section == "identity_brand" for c in envelope.claims):
         raw_bytes = json.dumps({k: v for k, v in record.items() if not k.startswith("__signalpost_")}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         row_hash = record.get("__signalpost_snapshot_row_sha256") or hashlib.sha256(raw_bytes).hexdigest()
-        source_id = f"registry_snapshot:{snapshot_sha[:16]}"
+        # Evidence points at a deterministic internal representation of the
+        # frozen snapshot. The external source URL remains in baseline_identity;
+        # the internal URI binds the aggregate snapshot identity to its hash.
+        frozen_source_id = f"registry_snapshot:{snapshot_sha}"
+        frozen_source_url = f"urn:signalpost:frozen-registry:{snapshot_sha}"
+        source_id = frozen_source_id
         existing_snapshot = next((s for s in envelope.source_snapshots if s.source_id == source_id), None)
         if not existing_snapshot:
-            envelope.source_snapshots.append(SourceSnapshot(source_id=source_id, source_url=source_url,
-                retrieved_at=datetime.now(timezone.utc), content_sha256=snapshot_sha, cache_mode="transient", rights_status=RIGHTS))
+            envelope.source_snapshots.append(SourceSnapshot(source_id=source_id, source_url=frozen_source_url,
+                retrieved_at=datetime.now(timezone.utc), content_sha256=snapshot_sha, cache_mode="transient",
+                rights_status=RIGHTS))
         for key, value, pointer in (("legal_name", name, "/navn" if "navn" in record else "/legal_name" if "legal_name" in record else "/name"),
                                     ("legal_form", legal_form, "/organisasjonsform/kode" if isinstance(record.get("organisasjonsform"), dict) else "/legal_form")):
             if value is None: continue
             evidence_id = f"{envelope.organisation_number}:frozen:{key}"
-            envelope.evidence.append(Evidence(evidence_id=evidence_id, source_url=source_url,
+            envelope.evidence.append(Evidence(evidence_id=evidence_id, source_url=frozen_source_url,
                 retrieved_at=datetime.now(timezone.utc), content_sha256=row_hash, extraction_method="frozen_registry_jsonl_v1",
                 json_pointer=pointer, source_class="official", subject_organisation_number=envelope.organisation_number,
                 source_snapshot_ids=[source_id]))

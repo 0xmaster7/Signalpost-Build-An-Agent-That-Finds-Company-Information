@@ -9,7 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .identifiers import legacy_website_claim_value_digest, website_claim_value_digest
 
-SUPPORTED_FINANCIAL_UNITS = frozenset({"NOK", "TNOK", "MNOK", "1000 NOK", "1000000 NOK", "TUSEN NOK", "MILLIONER NOK"})
+SUPPORTED_FINANCIAL_UNITS = frozenset({"NOK", "TNOK", "MNOK", "1000 NOK", "1000000 NOK", "TUSEN NOK", "MILLIONER NOK", "EUR"})
+
+
+def financial_dimensions_compatible(unit: str | None, currency: str | None) -> bool:
+    """NOK scales require NOK; an explicit same-currency unit remains compatible."""
+    if currency == "NOK":
+        return unit in SUPPORTED_FINANCIAL_UNITS - {"EUR"}
+    return bool(currency and unit == currency and unit in SUPPORTED_FINANCIAL_UNITS)
 
 
 class StrictModel(BaseModel):
@@ -260,7 +267,7 @@ class Envelope(StrictModel):
                                 and not approved_frozen_hash_exception(item, snapshot)):
                             raise ValueError("evidence hash must match its source snapshot hash")
                 if claim.field_family == "financial":
-                    if (claim.unit not in SUPPORTED_FINANCIAL_UNITS or not claim.currency
+                    if (not financial_dimensions_compatible(claim.unit, claim.currency)
                             or claim.period_start is None or claim.period_end is None
                             or claim.period_start > claim.period_end
                             or claim.scope not in {"legal_entity", "group"}):
@@ -299,11 +306,19 @@ def validate_publication_graph(envelope: Envelope) -> Envelope:
 
 
 def approved_frozen_hash_exception(evidence: Evidence, snapshot: SourceSnapshot) -> bool:
-    return (evidence.extraction_method == "frozen_registry_jsonl_v1"
+    # The frozen row hash may differ from its aggregate input snapshot hash.
+    # Qualify only snapshots produced by the source-versioned internal URN and
+    # make the snapshot identifier cryptographically track the full aggregate
+    # hash. Metadata labels alone (or an arbitrary URL) cannot opt in.
+    import re
+    match = re.fullmatch(r"urn:signalpost:frozen-registry:([a-f0-9]{64})", snapshot.source_url)
+    return bool(match
+            and evidence.extraction_method == "frozen_registry_jsonl_v1"
             and evidence.source_class == "official"
+            and evidence.json_pointer in {"/navn", "/legal_name", "/name", "/organisasjonsform/kode", "/legal_form"}
             and evidence.source_url == snapshot.source_url
-            and snapshot.source_id.startswith("registry_snapshot:")
-            and snapshot.source_url == evidence.source_url
+            and snapshot.source_id == "registry_snapshot:" + match.group(1)
+            and snapshot.content_sha256 == match.group(1)
             and snapshot.rights_status == "NLOD-2.0")
 
 

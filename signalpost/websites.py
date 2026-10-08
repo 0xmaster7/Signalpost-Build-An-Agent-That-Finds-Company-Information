@@ -458,6 +458,11 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
         safe_identity_text = " ".join([page.title, *(block for block in page.identity_blocks
             if not _negative_subject_context(block, org))])
         page_identity_name = _exact_name(legal_names, safe_identity_text)
+        # A separate customer/supplier paragraph can be far from an identity
+        # footer block. Textual pairing is therefore not ownership proof when
+        # the page itself describes the target in a non-owner role. A root,
+        # subject-scoped Organization node remains independently sufficient.
+        non_owner_page_context = _negative_subject_context(page.identity_text + " " + page.visible_text, org)
         relevant_text = page.title + " " + page.identity_text + " " + page.visible_text[:15_000]
         address = _address_match(profile, relevant_text)
         role_match = next((str(role) for role in profile.get("registered_roles", []) if len(normalize_name(role)) > 5 and normalize_name(role) in normalize_name(relevant_text)), None)
@@ -499,11 +504,11 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             if any(_same_legal_name(expected, name) for expected in legal_names)), None)
         if compatible_target_subject:
             identity_pages.append({"page": page, "method": "subject_scoped_structured_org_number", "name": compatible_target_subject, "address": address, "subject_ids": sorted(set(subject_ids))})
-        elif target_context and exact_name:
+        elif target_context and exact_name and not non_owner_page_context:
             identity_pages.append({"page": page, "method": "subject_scoped_legal_org_number", "name": exact_name, "address": address, "subject_ids": sorted(set(subject_ids))})
-        elif page_identity_name and address and candidate_source != "keyless_no":
+        elif page_identity_name and address and candidate_source != "keyless_no" and not non_owner_page_context:
             identity_pages.append({"page": page, "method": "exact_legal_name_and_registered_address", "name": page_identity_name, "address": address, "subject_ids": sorted(set(subject_ids))})
-        elif page_identity_name and address and (role_match or (candidate_source == "keyless_no" and contact_signal)):
+        elif page_identity_name and address and not non_owner_page_context and (role_match or (candidate_source == "keyless_no" and contact_signal)):
             method = "legal_name_address_registered_role" if role_match else "legal_name_address_official_contact"
             proof_row = {"page": page, "method": method, "name": page_identity_name, "address": address,
                          "subject_ids": sorted(set(subject_ids))}
@@ -854,6 +859,22 @@ def _job_location(value: Any) -> str | None:
     return ", ".join(dict.fromkeys(part for part in parts if part))[:300] or None
 
 
+def _job_status(raw: Any, deadline: datetime | None, cutoff: datetime) -> str | None:
+    """Resolve posting status conservatively; closure wins any contradiction."""
+    token = _schema_text(raw)
+    token = token.rsplit("/", 1)[-1].rsplit("#", 1)[-1].casefold().replace("-", "_").replace(" ", "_") if token else ""
+    explicit_closed = token in {"closed", "expired", "inactive", "closed_to_applications"}
+    explicit_open = token in {"open", "active", "open_for_applications"}
+    deadline_closed = bool(deadline and deadline < cutoff)
+    if explicit_closed or deadline_closed:
+        return "closed"
+    if explicit_open:
+        return "open"
+    if token:
+        return None
+    return "open" if deadline and deadline >= cutoff else None
+
+
 def _page_footprints(page: PageRecord, *, org: str, legal_name: str, verified_names: set[str],
                      cutoff: datetime, lookback_days: int = 365) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Extract conservative same-site job and dated activity observations."""
@@ -880,14 +901,8 @@ def _page_footprints(page: PageRecord, *, org: str, legal_name: str, verified_na
             if _contains_direct_contact_or_identifier(title) or (posted and posted > cutoff):
                 counts["job_future"] += int(bool(posted and posted > cutoff))
                 continue
-            status_raw = _schema_text(node.get("jobStatus") or node.get("employmentStatus"))
-            status = status_raw
-            if deadline and deadline < cutoff:
-                status = "closed"
-            elif deadline and deadline >= cutoff:
-                status = "open"
-            elif status_raw:
-                status = status_raw
+            status_raw = node.get("jobStatus") if node.get("jobStatus") is not None else node.get("employmentStatus")
+            status = _job_status(status_raw, deadline, cutoff)
             job = {"title": title, "url": url, "location": _job_location(node.get("jobLocation")),
                    "employment_type": _schema_text(node.get("employmentType")), "posting_date": posted,
                    "posting_date_raw": node.get("datePosted"), "deadline": deadline,
@@ -952,7 +967,7 @@ def _page_footprints(page: PageRecord, *, org: str, legal_name: str, verified_na
                     location_parts.append(str(prop_node.get("content") or prop_node.get_text(" ", strip=True)))
             location = ", ".join(dict.fromkeys(part.strip() for part in location_parts if part.strip()))[:300] or None
         employment = itemprop("employmentType")
-        status = itemprop("jobStatus") or ("closed" if deadline and deadline < cutoff else None)
+        status = _job_status(itemprop("jobStatus") or itemprop("employmentStatus"), deadline, cutoff)
         fingerprint = hashlib.sha256(json.dumps([org, title.casefold(), location, url],
             ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:24]
         jobs.append({"subject": f"{org}:job:{fingerprint}", "title": title, "url": url, "location": location,

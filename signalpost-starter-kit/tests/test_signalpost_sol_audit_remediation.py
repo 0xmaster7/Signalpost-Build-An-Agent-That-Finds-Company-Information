@@ -15,7 +15,8 @@ sys.path.insert(0, str(ROOT / "signalpost-starter-kit" / "scripts"))
 from signalpost.adapter import to_evaluator
 from signalpost.brreg import _role_collection_shape, financial_records
 from signalpost.inputs import parse_records
-from signalpost.models import Claim, Evidence, PublicState, SourceSnapshot, validate_batch_publication_graph
+from signalpost.models import (Claim, Evidence, PublicState, SourceSnapshot,
+    validate_batch_publication_graph, validate_publication_graph)
 from signalpost.operations import OrderedAtomicWriter, publish_paired_artifacts, validate_paired_publication
 from signalpost.websites import PageRecord, _parse_page, _public_evidence, verify_site_pages
 from signalpost.websites import _page_footprints, research_company
@@ -41,6 +42,62 @@ def valid_financial_envelope():
 
 
 class SolAuditRemediationTests(unittest.TestCase):
+    def test_research_company_rejects_customer_reference_as_target_website_but_keeps_owned_shared_site(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        org, name = "923609016", "Acme AS"
+        rival_html = ("<html><head><title>Acme AS</title></head><body>"
+            "<main><h1>Customer story</h1><p>Acme AS is our customer.</p></main>"
+            "<address>Acme AS 923609016, Main Street 1, 0123 Oslo</address>"
+            "<footer>Customer references</footer></body></html>").encode()
+        profile = {"organisation_number": org, "name": name,
+            "registered_address": {"adresse": ["Main Street 1"], "postnummer": "0123", "poststed": "Oslo"},
+            "website_candidates": [{"raw": "https://rival.no/customer-stories/acme", "source": "registry_live"}]}
+        result = asyncio.run(research_company(profile, FakeGateway({
+            "https://rival.no/customer-stories/acme": (200, {"Content-Type": "text/html"}, rival_html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(result.claims)
+        self.assertNotEqual(result.audit["candidates"][0]["decision"], "accepted")
+
+        owned_html = (f'<html><head><title>{name}</title><script type="application/ld+json">'
+            + json.dumps({"@type": "Organization", "name": name, "legalName": name, "identifier": org})
+            + '</script></head><body><h1>Acme AS</h1><p>Acme products and services for customers.</p></body></html>').encode()
+        owned = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": "https://group.no/acme", "source": "registry_live"}]},
+            FakeGateway({"https://group.no/acme": (200, {"Content-Type": "text/html"}, owned_html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF, shared_domains={"group.no"}))
+        self.assertTrue(any(claim.field == "verified_website_domain" for claim in owned.claims))
+
+    def test_production_job_status_reconciles_explicit_status_and_dates(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF, LEGAL, ORG
+        cases = [
+            ({"jobStatus": "closed", "validThrough": "2027-01-01"}, "closed", 0),
+            ({"jobStatus": "open", "validThrough": "2026-01-01"}, "closed", 0),
+            ({"jobStatus": "pending_review", "validThrough": "2027-01-01"}, None, 0),
+            ({"validThrough": "not-a-date"}, None, 0),
+            ({"validThrough": "2027-01-01"}, "open", 1),
+        ]
+        for status_fields, expected, current_count in cases:
+            with self.subTest(status_fields=status_fields):
+                posting = {"@context": "https://schema.org", "@type": "JobPosting", "title": "Engineer",
+                    "url": "/jobs/1", "datePosted": "2026-09-01",
+                    "hiringOrganization": {"@type": "Organization", "name": LEGAL, "identifier": ORG},
+                    **status_fields}
+                home = (f'<html><head><title>{LEGAL}</title><script type="application/ld+json">'
+                    + json.dumps({"@type": "Organization", "legalName": LEGAL, "identifier": ORG})
+                    + '</script></head><body><h1>Company</h1><a href="/careers">Careers</a></body></html>').encode()
+                careers = (f'<html><head><title>Careers</title><script type="application/ld+json">'
+                    + json.dumps(posting) + '</script></head><body><h1>Careers</h1></body></html>').encode()
+                result = asyncio.run(research_company({"organisation_number": ORG, "name": LEGAL,
+                    "website_candidates": [{"raw": "https://company.no/", "source": "registry_live"}]},
+                    FakeGateway({"https://company.no/": (200, {"Content-Type": "text/html"}, home),
+                                "https://company.no/careers": (200, {"Content-Type": "text/html"}, careers)}),
+                    enable_keyless=False, evidence_cutoff=CUTOFF))
+                statuses = [claim.value for claim in result.claims if claim.field == "job_status"]
+                self.assertEqual(statuses, [expected] if expected else [])
+                self.assertEqual(result.audit["jobs"]["current_subjects"], current_count)
+
     def test_rival_main_identity_and_target_footer_is_ambiguous(self):
         page = PageRecord(requested_url="https://rival.no/", final_url="https://rival.no/", status=200,
             content_type="text/html", body=b"fixture", digest="a" * 64, retrieved_at=NOW,
@@ -143,6 +200,45 @@ class SolAuditRemediationTests(unittest.TestCase):
         record["valuta"] = "NOK"
         self.assertIsNone(financial_records([record])[0]["metrics"].get("revenue_unit"))
 
+    def test_financial_unit_classification_preserves_absent_null_malformed_unsupported_and_conflict(self):
+        def record(metric_unit=... , record_unit=...):
+            metric = {"sum": 0}
+            if metric_unit is not ...:
+                metric["enhet"] = metric_unit
+            row = {"regnskapstype": "SELSKAP", "valuta": "NOK",
+                "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"},
+                "resultatregnskapResultat": {"driftsresultat": {"driftsinntekter": {"sumDriftsinntekter": metric}}}}
+            if record_unit is not ...:
+                row["enhet"] = record_unit
+            return financial_records([row])[0]["metrics"]
+        self.assertEqual((record(record_unit="TNOK")["revenue_unit"], record(record_unit="TNOK")["revenue_unit_state"]), ("TNOK", "supported"))
+        self.assertEqual(record(metric_unit="NOK", record_unit="TNOK")["revenue_unit_state"], "conflict")
+        self.assertEqual(record(record_unit="TNOK", metric_unit=None)["revenue_unit_state"], "explicit_null")
+        self.assertEqual(record(record_unit="TNOK", metric_unit=0)["revenue_unit_state"], "malformed")
+        self.assertEqual(record(record_unit="TNOK", metric_unit="")["revenue_unit_state"], "malformed")
+        self.assertEqual(record(metric_unit="UNKNOWN")["revenue_unit_state"], "unsupported")
+        self.assertEqual(record()["revenue_unit_state"], "absent")
+        self.assertEqual(record(record_unit=None)["revenue_unit_state"], "explicit_null")
+        self.assertEqual(record(record_unit=0)["revenue_unit_state"], "malformed")
+        self.assertEqual(record(record_unit="")["revenue_unit_state"], "malformed")
+        self.assertEqual(record(record_unit="UNKNOWN")["revenue_unit_state"], "unsupported")
+        self.assertEqual(record(record_unit="TNOK", metric_unit="EUR")["revenue_unit_state"], "conflict")
+
+    def test_financial_currency_unit_pair_is_rejected_at_canonical_and_final_boundaries(self):
+        envelope = valid_financial_envelope()
+        envelope.claims[1].currency = "EUR"
+        with self.assertRaisesRegex(ValueError, "supported unit, currency"):
+            validate_publication_graph(envelope)
+        envelope = valid_financial_envelope()
+        envelope.claims[1].currency = "EUR"
+        with self.assertRaisesRegex(ValueError, "supported unit, currency"):
+            to_evaluator(envelope)
+        for value in (0, -1):
+            valid = valid_financial_envelope()
+            valid.claims[1].value = value
+            validate_publication_graph(valid)
+            to_evaluator(valid)
+
     def test_incomplete_roles_group_is_not_complete_empty(self):
         self.assertFalse(_role_collection_shape({"rollegrupper": [{"type": {"kode": "LEDE"}}]}))
         self.assertFalse(_role_collection_shape({"rollegrupper": [{"type": {"kode": "LEDE"}, "roller": None}]}))
@@ -161,6 +257,23 @@ class SolAuditRemediationTests(unittest.TestCase):
         envelope.sections["identity_brand"].claims = [claim]
         with self.assertRaisesRegex(ValueError, "inconsistent"):
             to_evaluator(envelope)
+
+    def test_adapter_rejects_unknown_top_level_and_nested_synthesis_fields(self):
+        from signalpost.synthesis import synthesize
+        for location in ("top", "summary", "website_research", "nested_audit"):
+            with self.subTest(location=location):
+                envelope = valid_envelope()
+                envelope.synthesis["summary"] = synthesize(envelope)
+                if location == "top":
+                    envelope.synthesis["unsupported_financial_prose"] = "Revenue is one billion NOK."
+                elif location == "summary":
+                    envelope.synthesis["summary"]["unsupported_financial_prose"] = "Revenue is one billion NOK."
+                elif location == "website_research":
+                    envelope.synthesis["website_research"] = {"unsupported_financial_prose": "Revenue is one billion NOK."}
+                else:
+                    envelope.synthesis["website_research"] = {"jobs": {"nested": {"unsupported_financial_prose": "Revenue is one billion NOK."}}}
+                with self.assertRaisesRegex(ValueError, "unknown .*synthesis fields"):
+                    to_evaluator(envelope)
 
     def test_adapter_rejects_missing_synthesis_citation_and_missing_section_claim(self):
         from signalpost.synthesis import synthesize
@@ -230,6 +343,32 @@ class SolAuditRemediationTests(unittest.TestCase):
         from signalpost.models import validate_publication_graph
         with self.assertRaisesRegex(ValueError, "hash must match"):
             validate_publication_graph(envelope)
+
+    def test_frozen_hash_exception_requires_internal_exact_hash_bound_snapshot(self):
+        from signalpost.models import approved_frozen_hash_exception
+        full_hash = "c" * 64
+        urn = f"urn:signalpost:frozen-registry:{full_hash}"
+        evidence = Evidence(evidence_id="x", source_url=urn, retrieved_at=NOW, content_sha256="a" * 64,
+            extraction_method="frozen_registry_jsonl_v1", source_class="official", json_pointer="/navn",
+            subject_organisation_number="923609016", source_snapshot_ids=[f"registry_snapshot:{full_hash}"])
+        snapshot = SourceSnapshot(source_id=f"registry_snapshot:{full_hash}", source_url=urn,
+            retrieved_at=NOW, content_sha256=full_hash, rights_status="NLOD-2.0")
+        self.assertTrue(approved_frozen_hash_exception(evidence, snapshot))
+        mutations = [
+            {"source_url": "https://forged.example/registry.jsonl"},
+            {"source_id": "registry_snapshot:" + "d" * 64},
+            {"rights_status": "MIT"},
+            {"content_sha256": "d" * 64},
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                changed = snapshot.model_copy(update=mutation)
+                self.assertFalse(approved_frozen_hash_exception(evidence, changed))
+        for mutation in ({"source_url": "https://forged.example/registry.jsonl"},
+                         {"extraction_method": "website_html_extract_v1"},
+                         {"source_class": "public_web"}, {"json_pointer": "/forged"}):
+            changed_evidence = evidence.model_copy(update=mutation)
+            self.assertFalse(approved_frozen_hash_exception(changed_evidence, snapshot))
 
     def test_verify_compares_integral_financial_decimals_with_dimensions(self):
         from signalpost.models import Claim, PublicState

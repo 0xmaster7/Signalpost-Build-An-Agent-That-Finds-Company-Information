@@ -96,7 +96,7 @@ def main() -> int:
         for sentence in summary["sentences"]:
             assertions += 1
             try:
-                validate_synthesis(envelope, {"sentences": [sentence]})
+                validate_synthesis(envelope, {**summary, "sentences": [sentence]})
                 fully_cited += 1
             except ValueError:
                 unsupported += 1

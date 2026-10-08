@@ -7,6 +7,78 @@ from typing import Any
 from .identifiers import canonical_product_heading
 from .models import Envelope, PublicState
 
+SYNTHESIS_SCHEMA_VERSION = 1
+SYNTHESIS_ROOT_KEYS = frozenset({"summary", "brreg_observations", "baseline_identity",
+    "live_identity_observation", "cutoff_identity_source", "evidence_cutoff",
+    "evidence_cutoff_source", "website_research"})
+_SYNTHESIS_KEYS = frozenset("""
+summary brreg_observations baseline_identity live_identity_observation cutoff_identity_source
+evidence_cutoff evidence_cutoff_source website_research schema_version mode sentences unknown_sections
+text fact_ids change_ids evidence_ids organisation_number name legal_form as_of source_url content_sha256
+state reason fields retrieved_at accounts_state_evidence_id ceo_state entity_http_status
+group_checked rule_id
+entity_removed_from_disclosure financial_records identity_profile identity_state_evidence_id
+business_address employees historical_names industry_codes latest_submitted_accounts
+legal_form_description municipality_number parent_organisation_number postal_address status status_dates website
+registrertIForetaksregisteret kode beskrivelse evidence_id raw source_snapshot_id
+role_family_state roles_completeness_evidence_id roles_count roles_state_evidence_id
+subunits_state_evidence_id target_is_subunit website_candidates workplace_count workplace_rows_returned
+workplaces_complete workplaces_completeness_evidence_id workplaces_completeness_evidence_ids workplaces_state
+accepted_domains activity ats_origins bytes_received candidates crawl_state duplicate_accepted_proofs_deduplicated
+bytes sha256
+elapsed_ms high_risk_review hiring_activity_state jobs max_absolute_pages max_default_pages max_depth
+page_count page_requests pages request_count_scope request_outcomes source_policy state_counts
+website_claim_families url source kind registered_domain robots_state crawl_delay_seconds rights_status
+decision final_url http_status proof target_url proof_record_id proof_evidence_id source_candidate_evidence_id
+discovery error redirect_target review_reason claim_count provider_id provider_version query_id result_id rank
+response_sha256 json_ld_subject_match compatible_legal_name page_url page_sha256 registered_address_match
+shared_domain conflicting_subject_ids domain proof_method organisation_number candidate_source
+subject_ids method address municipality postcode street registered_role additional_signal
+execution_state claims request_count jobs_candidates published explicit_zero identity_rejected
+candidate_count
+future_dated_skipped published_subjects current_subjects state activity_candidates undated future outside_window
+deduplicated subject_rejected lookback_days page_discovery_target max_from_already_fetched_feed_responses
+source_class external_sources_enabled terms_policy accepted ambiguous blocked failed
+""".split())
+
+
+def validate_synthesis_schema(synthesis: dict[str, Any]) -> None:
+    """Validate the closed v1 synthesis object before it crosses serialization."""
+    if not isinstance(synthesis, dict):
+        raise ValueError("synthesis must be an object")
+    unknown_root = set(synthesis) - (SYNTHESIS_ROOT_KEYS | {"schema_version"})
+    if unknown_root:
+        raise ValueError(f"unknown synthesis fields: {', '.join(sorted(unknown_root))}")
+    if synthesis.get("schema_version", SYNTHESIS_SCHEMA_VERSION) != SYNTHESIS_SCHEMA_VERSION:
+        raise ValueError("unsupported synthesis schema version")
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            unknown = set(value) - _SYNTHESIS_KEYS
+            if unknown:
+                raise ValueError(f"unknown nested synthesis fields: {', '.join(sorted(unknown))}")
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+    visit(synthesis)
+    summary = synthesis.get("summary")
+    if summary is not None:
+        if not isinstance(summary, dict) or set(summary) != {"schema_version", "mode", "sentences", "unknown_sections"}:
+            raise ValueError("synthesis summary does not match schema v1")
+        if summary.get("schema_version") != SYNTHESIS_SCHEMA_VERSION or summary.get("mode") != "deterministic_verified_facts":
+            raise ValueError("unsupported synthesis summary schema or mode")
+        if not isinstance(summary.get("sentences"), list) or not isinstance(summary.get("unknown_sections"), list):
+            raise ValueError("synthesis summary sentences and unknown sections must be arrays")
+        for sentence in summary["sentences"]:
+            if not isinstance(sentence, dict):
+                raise ValueError("synthesis sentence must be an object")
+            keys = set(sentence)
+            factual = {"text", "fact_ids", "evidence_ids"}
+            changed = {"text", "fact_ids", "change_ids", "evidence_ids"}
+            if keys not in (factual, changed):
+                raise ValueError("synthesis sentence does not match schema v1")
+
 
 def _value_text(value: Any) -> str:
     if isinstance(value, str):
@@ -89,7 +161,7 @@ def synthesize(envelope: Envelope) -> dict[str, Any]:
         if event.provenance_complete and event_evidence:
             sentences.append({"text": _change_sentence(event), "fact_ids": [], "change_ids": [event.event_id],
                               "evidence_ids": event_evidence})
-    result = {"mode": "deterministic_verified_facts", "sentences": sentences,
+    result = {"schema_version": SYNTHESIS_SCHEMA_VERSION, "mode": "deterministic_verified_facts", "sentences": sentences,
               "unknown_sections": sorted(name for name, section in envelope.sections.items()
                   if section.state in {None, PublicState.NOT_AVAILABLE, PublicState.AMBIGUOUS,
                                        PublicState.BLOCKED, PublicState.FAILED}
@@ -100,6 +172,12 @@ def synthesize(envelope: Envelope) -> dict[str, Any]:
 
 def validate_synthesis(envelope: Envelope, synthesis: dict[str, Any]) -> None:
     """Reject any sentence without exact, same-company canonical support."""
+    # The same closed sentence schema applies whether this is the canonical
+    # summary object or a direct caller's synthesized result.
+    if set(synthesis) != {"schema_version", "mode", "sentences", "unknown_sections"}:
+        raise ValueError("synthesis summary does not match schema v1")
+    if synthesis.get("schema_version") != SYNTHESIS_SCHEMA_VERSION:
+        raise ValueError("unsupported synthesis summary schema")
     claims = {claim.claim_id: claim for claim in envelope.claims}
     evidence = {item.evidence_id: item for item in envelope.evidence}
     changes = {item.event_id: item for item in envelope.refresh.changes}

@@ -56,11 +56,11 @@ def make_envelope(org: str, name: str, facts: list[dict], *, states: dict | None
         claims=claims, evidence=evidence, source_snapshots=snapshots, batch_id="m08-gold-fixture", evidence_cutoff=AS_OF)
 
 
-def finance(value, *, field="revenue", currency="NOK", end="2024-12-31", start="auto", scope="legal_entity", unit="NOK"):
+def finance(value, *, field="revenue", currency="NOK", end="2024-12-31", start="auto", scope="legal_entity", unit=None):
     if start == "auto" and end:
         start = end[:4] + "-01-01"
     return {"section": "accounts_history", "family": "financial", "field": field, "value": value,
-            "currency": currency, "unit": unit, "period_start": datetime.fromisoformat(start).replace(tzinfo=timezone.utc) if start else None,
+            "currency": currency, "unit": unit or currency, "period_start": datetime.fromisoformat(start).replace(tzinfo=timezone.utc) if start else None,
             "period_end": datetime.fromisoformat(end).replace(tzinfo=timezone.utc) if end else None, "scope": scope}
 
 
@@ -286,12 +286,16 @@ class VerifyContractTests(unittest.TestCase):
     def test_frozen_registry_row_hash_is_bound_to_aggregate_snapshot_by_id(self):
         payload = to_evaluator(make_envelope("001234567", "Acme AS", []))
         snapshot, evidence = payload["source_snapshots"][0], payload["evidence"][0]
-        aggregate_id = "registry_snapshot:aggregate"
+        full_hash = hashlib.sha256(b"aggregate frozen registry").hexdigest()
+        aggregate_id = "registry_snapshot:" + full_hash
         snapshot["source_id"] = aggregate_id
-        snapshot["content_sha256"] = hashlib.sha256(b"aggregate frozen registry").hexdigest()
+        snapshot["source_url"] = f"urn:signalpost:frozen-registry:{full_hash}"
+        snapshot["content_sha256"] = full_hash
         snapshot["rights_status"] = "NLOD-2.0"
+        evidence["source_url"] = snapshot["source_url"]
         evidence["source_snapshot_ids"] = [aggregate_id]
         evidence["extraction_method"] = "frozen_registry_jsonl_v1"
+        evidence["json_pointer"] = "/navn"
         for claim in payload["claims"]:
             claim["source_snapshot_ids"] = [aggregate_id]
         with tempfile.TemporaryDirectory() as tmp:
