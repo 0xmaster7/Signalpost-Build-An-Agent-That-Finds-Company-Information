@@ -46,6 +46,9 @@ def _entity_body(company: dict) -> dict:
         "organisasjonsform": {"kode": company["legal_form"], "beskrivelse": "Sanitized fixture entity"},
         "registrertIForetaksregisteret": True, "antallAnsatte": 12,
         "naeringskode1": {"kode": "62.010", "beskrivelse": "Programming activities"}}
+    body.update(company.get("registry_status_fields", {}))
+    if company.get("registry_address"):
+        body["forretningsadresse"] = company["registry_address"]
     if company.get("parent"):
         body["overordnetEnhet"] = company["parent"]
     if company.get("website"):
@@ -376,6 +379,36 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
                     (("claims", "claim_id"), ("evidence", "evidence_id"), ("source_snapshots", "source_id"))}
                     for row in rows]
             self.assertEqual(identities(first), identities(second))
+
+    def test_live_registry_status_fields_pass_closed_synthesis_and_final_publication(self):
+        company = next(item for item in self.companies if item["organisation_number"] == "100000008")
+        company["registry_status_fields"] = {
+            "konkurs": False,
+            "registrertIMvaregisteret": True,
+            "underAvvikling": False,
+            "underTvangsavviklingEllerTvangsopplosning": False,
+            "registreringsdatoEnhetsregisteret": "2010-08-25",
+            "stiftelsesdato": "2010-08-12",
+        }
+        company["registry_address"] = {"adresse": ["Examplegata 1"], "postnummer": "0123",
+            "poststed": "OSLO", "kommunenummer": "0301", "kommune": "OSLO"}
+        with tempfile.TemporaryDirectory(prefix="signalpost-m09-live-status-fields-") as temporary:
+            rows, _state, _transport, _gateway = self._run_full_pipeline(Path(temporary))
+
+        company_row = next(row for row in rows if row["organisation_number"] == "100000008")
+        validate_vendor_payload(company_row)
+        status = company_row["synthesis"]["brreg_observations"]["identity_profile"]["status"]
+        status_fields = {key: value for key, value in company["registry_status_fields"].items()
+            if key not in {"registreringsdatoEnhetsregisteret", "stiftelsesdato"}}
+        self.assertEqual({key: status[key] for key in status_fields}, status_fields)
+        status_dates = company_row["synthesis"]["brreg_observations"]["identity_profile"]["status_dates"]
+        self.assertEqual({key: status_dates[key] for key in ("registreringsdatoEnhetsregisteret", "stiftelsesdato")},
+            {key: company["registry_status_fields"][key]
+                for key in ("registreringsdatoEnhetsregisteret", "stiftelsesdato")})
+        status_claims = {claim["field"]: claim["value"] for claim in company_row["claims"]
+            if claim["field"].startswith("status.")}
+        self.assertEqual(status_claims, {f"status.{key}": value for key, value in status.items()})
+        self.assertEqual(company_row["terminal_state"], "available")
 
 
 def to_sorted(rows: list[dict], key: str) -> list[dict]:
