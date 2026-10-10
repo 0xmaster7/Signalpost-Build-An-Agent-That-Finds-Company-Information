@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -469,17 +470,94 @@ def publish_paired_artifacts(output_writer: OrderedAtomicWriter, state_writer: O
     final = {"status": "committed", "publication_id": publication_id,
         "output_path": str(output_path), "output_sha256": hashlib.sha256(output_path.read_bytes()).hexdigest(),
         "state_path": str(state_path), "state_sha256": hashlib.sha256(state_path.read_bytes()).hexdigest()}
+    final["marker_sha256"] = _publication_marker_digest(final)
     marker.write_bytes(json.dumps(final, sort_keys=True).encode() + b"\n")
     return marker_path
 
 
-def validate_paired_publication(marker_path: str | Path) -> dict[str, object]:
-    """Return the committed pair only when both artifact hashes still match."""
-    marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+def _publication_marker_digest(marker: dict[str, object]) -> str:
+    content = {key: value for key, value in marker.items() if key != "marker_sha256"}
+    encoded = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _inside(root: Path, path: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def validate_paired_publication(marker_path: str | Path, *, bundle_root: str | Path | None = None,
+                                expected_marker_sha256: str | None = None) -> dict[str, object]:
+    """Validate an active pair or a relocated release bundle.
+
+    Active markers keep their original absolute-path behavior. Archived absolute
+    paths can be rebased only with an explicit bundle root; an external marker
+    hash is required for legacy markers that predate the embedded metadata hash.
+    """
+    marker_file = Path(marker_path)
+    if marker_file.is_symlink():
+        raise ValueError("publication marker must not be a symlink")
+    marker_bytes = marker_file.read_bytes()
+    marker_file_hash = hashlib.sha256(marker_bytes).hexdigest()
+    if expected_marker_sha256 is not None:
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_marker_sha256) or marker_file_hash != expected_marker_sha256:
+            raise ValueError("publication marker does not match its external release hash")
+    elif bundle_root is not None:
+        raise ValueError("relocated publication requires an external marker hash")
+    marker = json.loads(marker_bytes)
+    if not isinstance(marker, dict):
+        raise ValueError("publication marker must be a JSON object")
     if marker.get("status") != "committed":
         raise ValueError("output/state publication is incomplete")
+    if not isinstance(marker.get("publication_id"), str) or not marker["publication_id"]:
+        raise ValueError("publication marker has no publication identity")
+    for key in ("output_sha256", "state_sha256"):
+        if not isinstance(marker.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", marker[key]):
+            raise ValueError(f"publication marker has invalid {key}")
+    embedded_marker_hash = marker.get("marker_sha256")
+    if embedded_marker_hash is not None:
+        if (not isinstance(embedded_marker_hash, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", embedded_marker_hash)
+                or embedded_marker_hash != _publication_marker_digest(marker)):
+            raise ValueError("publication marker metadata integrity check failed")
+
+    artifact_paths: dict[str, Path] = {}
+    if bundle_root is None:
+        artifact_paths = {role: Path(str(marker[f"{role}_path"])) for role in ("output", "state")}
+    else:
+        root = Path(bundle_root).resolve(strict=True)
+        marker_resolved = marker_file.resolve(strict=True)
+        if not root.is_dir() or marker_file.is_symlink() or not _inside(root, marker_resolved):
+            raise ValueError("publication marker is outside the release bundle root")
+        output_name = Path(str(marker.get("output_path", ""))).name
+        expected_output_name = marker_file.name.removesuffix(".publication.json")
+        state_name = Path(str(marker.get("state_path", ""))).name
+        if (not output_name or output_name != expected_output_name or not state_name
+                or output_name == state_name):
+            raise ValueError("publication artifact names do not match the archived pair")
+        for role, name in (("output", output_name), ("state", state_name)):
+            raw = str(marker[f"{role}_path"])
+            raw_path = Path(raw)
+            if raw_path.is_absolute():
+                # An archived absolute path is rebased by its basename only;
+                # the marker name fixes output identity and state is colocated.
+                path = marker_resolved.parent / name
+            else:
+                if ".." in raw_path.parts:
+                    raise ValueError("relative publication path escapes its bundle")
+                path = root / raw_path
+            if path.is_symlink():
+                raise ValueError("publication artifact must not be a symlink")
+            resolved = path.resolve(strict=True)
+            if not _inside(root, resolved):
+                raise ValueError("publication artifact escapes its bundle root")
+            artifact_paths[role] = resolved
     for role in ("output", "state"):
-        path = Path(str(marker[f"{role}_path"]))
-        if hashlib.sha256(path.read_bytes()).hexdigest() != marker.get(f"{role}_sha256"):
+        path = artifact_paths[role]
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != marker.get(f"{role}_sha256"):
             raise ValueError(f"{role} artifact does not match its committed publication marker")
-    return marker
+    return {**marker, "verified_output_path": str(artifact_paths["output"]),
+            "verified_state_path": str(artifact_paths["state"])}

@@ -63,6 +63,11 @@ def make_envelope(specs: list[dict], *, retrieved: datetime | None = None,
     for claim in claims:
         sections[claim.section].claims.append(claim)
         sections["claims_evidence_states"].claims.append(claim)
+    if roles_complete:
+        sections["leadership_workplaces"].diagnostics.append("roles_completeness_evidence_id:e-roles-complete")
+    if workplaces_complete:
+        sections["leadership_workplaces"].diagnostics.append(
+            "workplaces_completeness_evidence_id:e-workplaces-complete")
     sections["identity_brand"].state = identity_state
     sections["website_owned_profiles"].state = website_state
     sections["website_owned_profiles"].attempt_outcome = "completed" if website_state == PublicState.AVAILABLE else "failed"
@@ -162,6 +167,24 @@ class CanonicalRefreshTests(unittest.TestCase):
         closed = changes(old_workplace, make_envelope([], workplaces_complete=True))
         self.assertEqual([event["type"] for event in closed], ["closed_workplace"])
         self.assertTrue(closed[0]["removal_confirmation_evidence_ids"])
+
+    def test_unbound_synthesis_cannot_claim_complete_role_or_website_coverage(self):
+        role = {"field": "role.name", "family": "role", "section": "leadership_workplaces",
+                "scope": "person_role", "value": "Person A"}
+        old = make_envelope([role], roles_complete=True)
+        incomplete = make_envelope([], roles_complete=False, website_state=PublicState.FAILED)
+        incomplete.synthesis["brreg_observations"] = {
+            "roles_completeness_evidence_id": "e-roles-complete",
+            "workplaces_complete": True,
+            "workplaces_completeness_evidence_id": "forged-evidence",
+        }
+        incomplete.synthesis["website_research"] = {"execution_state": "completed", "crawl_state": "available"}
+        events = changes(old, incomplete)
+        self.assertFalse(any(event["type"] in {"ended_role", "closed_workplace"} for event in events))
+        coverage = state(incomplete).coverage
+        self.assertFalse(coverage["_roles"]["complete"])
+        self.assertFalse(coverage["_workplaces"]["complete"])
+        self.assertFalse(coverage["_website"]["complete"])
 
     def test_role_and_workplace_additions_are_typed_and_deduplicated(self):
         role = {"field": "role.name", "family": "role", "section": "leadership_workplaces",

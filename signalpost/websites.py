@@ -367,6 +367,25 @@ def _walk_schema_subjects(value: Any, path: tuple[str, ...] = ()) -> list[tuple[
     return found
 
 
+def _schema_entity_url_binds_page(node: dict[str, Any], page: PageRecord, *, shared_domain: bool) -> bool:
+    """Require an Organization URL to bind it to this site when page text is non-owner context."""
+    values = node.get("url") or node.get("@id")
+    values = values if isinstance(values, list) else [values]
+    page_url = urllib.parse.urlsplit(page.final_url)
+    page_host = (page_url.hostname or "").casefold().removeprefix("www.")
+    page_path = page_url.path.rstrip("/") or "/"
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        parsed = urllib.parse.urlsplit(urllib.parse.urljoin(page.final_url, value))
+        host = (parsed.hostname or "").casefold().removeprefix("www.")
+        if parsed.scheme not in {"http", "https"} or host != page_host:
+            continue
+        if not shared_domain or (parsed.path.rstrip("/") or "/") == page_path:
+            return True
+    return False
+
+
 def _address_match(profile: dict[str, Any], text: str) -> dict[str, Any] | None:
     folded = normalize_name(text)
     address = profile.get("registered_address") or profile.get("business_address") or {}
@@ -389,19 +408,52 @@ def _address_match(profile: dict[str, Any], text: str) -> dict[str, Any] | None:
     return None
 
 
-def _negative_subject_context(text: str, org: str) -> bool:
-    lowered = unicodedata.normalize("NFC", text).casefold()
-    # Interpret the identifier's local clause as a role reference. This is
-    # combined with same-block name/id pairing and structured subject scope.
-    negative_labels = ("customer", "client", "kunde", "partner", "supplier", "leverandør", "designer", "webmaster",
-        "auditor", "revisor", "board member", "styremedlem", "procurement", "anskaffelse",
-        "designed by", "design by", "website by", "site by", "web by", "developed by",
-        "provided by", "powered by", "hosted by", "web developer", "web agency", "webbyrå",
-        "webbureau", "website development", "website design", "leverandør av nettside")
-    for match in re.finditer(r"(?<!\d)" + re.escape(org) + r"(?!\d)", text):
-        context = lowered[max(0, match.start() - 90):match.end() + 50]
-        if any(label in context for label in negative_labels):
-            return True
+def _negative_subject_context(text: str, org: str, legal_names: list[str] | None = None) -> bool:
+    """Detect when the target is locally described in a non-owner role.
+
+    Both exact identifiers and exact legal-name forms are classified. This is
+    intentionally local to the subject mention; a target-owned site may still
+    discuss its customers when independent target ownership evidence exists.
+    """
+    normalized_text = unicodedata.normalize("NFC", text)
+    negative_labels = (
+        "customer", "customers", "customer case", "customer story", "customer reference", "client", "clients",
+        "kunde", "kunder", "partner", "supplier", "leverandør", "designer", "webmaster", "auditor", "revisor",
+        "board member", "styremedlem", "procurement", "anskaffelse", "case study", "case-study", "reference customer",
+        "article subject", "subject of this article", "group member", "subsidiary of", "member of the group",
+        "designed by", "design by", "website by", "site by", "web by", "developed by", "provided by", "powered by",
+        "hosted by", "web developer", "web agency", "webbyrå", "webbureau", "website development",
+        "website design", "leverandør av nettside", "our customers", "our client", "our partner", "our supplier",
+    )
+    # Do not let a separate paragraph/title/footer role spill into a target
+    # mention merely because the flattened page text is nearby. Classify within
+    # one sentence or DOM-derived block.
+    segments = [part for part in re.split(r"\n+|(?<=[.!?])\s+", normalized_text) if part.strip()]
+    for segment in segments:
+        lowered = segment.casefold()
+        subject_spans: list[tuple[int, int]] = []
+        if org:
+            subject_spans.extend((match.start(), match.end()) for match in
+                re.finditer(r"(?<!\d)" + re.escape(org) + r"(?!\d)", segment))
+        # Match exact legal-name spellings (including punctuation variants
+        # around legal suffixes), never partial brand tokens.
+        for legal in legal_names or []:
+            raw = unicodedata.normalize("NFC", str(legal or "")).strip()
+            if not raw:
+                continue
+            words = normalize_name(raw).split()
+            if not words:
+                continue
+            base = r"[\W_]+".join(re.escape(word) for word in words)
+            suffix_present = re.search(r"(?i)\s+(?:a\s*[./-]?\s*s(?:\s*[./-]?\s*a)?|as|asa|enk|nuf|da|ans|ba|ab|oy|ltd|limited|inc|gmbh|plc)\s*[.,]?\s*$", raw)
+            suffix = (r"[\W_]+(?:a\s*[./-]?\s*s(?:\s*[./-]?\s*a)?|as|asa|enk|nuf|da|ans|ba|ab|oy|ltd|limited|inc|gmbh|plc)"
+                      if suffix_present else "")
+            subject_spans.extend((match.start(), match.end()) for match in
+                re.finditer(r"(?<!\w)" + base + suffix + r"(?!\w)", segment, re.IGNORECASE))
+        for start, end in subject_spans:
+            context = lowered[max(0, start - 100):min(len(lowered), end + 80)]
+            if any(label in context for label in negative_labels):
+                return True
     return False
 
 
@@ -420,11 +472,12 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
         subject_names: list[str] = []
         subject_ids: list[str] = []
         target_schema_names: list[str] = []
+        target_schema_page_bound_names: set[str] = set()
         conflict_schema: list[dict[str, str]] = []
-        non_owner_relationships = {"customer", "client", "supplier", "partner", "about", "mentions",
-            "author", "employee", "member", "sponsor", "designer", "provider", "founder",
-            "parentorganization", "suborganization", "department", "affiliate", "employer",
-            "hiringorganization"}
+        non_owner_relationships = {"customer", "client", "supplier", "partner", "about", "mentions", "mainentity",
+            "subjectof", "subject", "author", "publisher", "employee", "member", "memberof", "sponsor", "designer",
+            "provider", "founder", "parentorganization", "suborganization", "department", "affiliate", "employer",
+            "hiringorganization", "itemreviewed", "reviewed", "citation", "ispartof", "worksfor"}
         schema_subjects = _walk_schema_subjects(page.structured.get("json-ld", []))
         known_nodes = {id(node) for node, _path in schema_subjects}
         schema_subjects.extend((node, ()) for node in page.schema_organizations if id(node) not in known_nodes)
@@ -445,6 +498,8 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
                     conflict_schema.append({"name": name, "organisation_numbers": ids})
                     continue
                 target_schema_names.append(name)
+                if _schema_entity_url_binds_page(node, page, shared_domain=shared_domain):
+                    target_schema_page_bound_names.add(name)
             elif ids and any(identifier not in related and identifier != org for identifier in ids) and name and not nested_non_owner:
                 conflict_schema.append({"name": name, "organisation_numbers": ids})
         # A visible organization number and a name are a text proof only when
@@ -452,19 +507,20 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
         # with exact node scope; values from separate graph nodes never combine.
         paired_identity_blocks = [block for block in page.identity_blocks
             if re.search(r"(?<!\d)" + re.escape(org) + r"(?!\d)", block)
-            and _exact_name(legal_names, block) and not _negative_subject_context(block, org)]
+            and _exact_name(legal_names, block) and not _negative_subject_context(block, org, legal_names)]
         target_context = bool(paired_identity_blocks)
         exact_name = next((_exact_name(legal_names, block) for block in paired_identity_blocks), None)
         safe_identity_text = " ".join([page.title, *(block for block in page.identity_blocks
-            if not _negative_subject_context(block, org))])
+            if not _negative_subject_context(block, org, legal_names))])
         page_identity_name = _exact_name(legal_names, safe_identity_text)
-        # A separate customer/supplier paragraph can be far from an identity
-        # footer block. Textual pairing is therefore not ownership proof when
-        # the page itself describes the target in a non-owner role. A root,
-        # subject-scoped Organization node remains independently sufficient.
-        non_owner_page_context = _negative_subject_context(page.identity_text + " " + page.visible_text, org)
+        # A separate customer/supplier paragraph can be far from the site's
+        # contact block. Exclude footer/address snippets from ownership proof,
+        # and do not combine a title mention with an unrelated footer address.
+        non_owner_page_context = _negative_subject_context(
+            "\n".join([page.title, *page.headings, page.identity_text, page.visible_text]), org, legal_names)
         relevant_text = page.title + " " + page.identity_text + " " + page.visible_text[:15_000]
-        address = _address_match(profile, relevant_text)
+        subject_identity_text = " ".join([page.title, *page.headings, *page.identity_blocks])
+        address = _address_match(profile, subject_identity_text)
         role_match = next((str(role) for role in profile.get("registered_roles", []) if len(normalize_name(role)) > 5 and normalize_name(role) in normalize_name(relevant_text)), None)
         has_contact_endpoint = bool(re.search(rb"(?i)(?:mailto:|tel:)", page.body))
         contact_page = _kind(page.final_url, page.title) == "contact"
@@ -503,7 +559,8 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
         compatible_target_subject = next((name for name in target_schema_names
             if any(_same_legal_name(expected, name) for expected in legal_names)), None)
         if compatible_target_subject:
-            identity_pages.append({"page": page, "method": "subject_scoped_structured_org_number", "name": compatible_target_subject, "address": address, "subject_ids": sorted(set(subject_ids))})
+            if not non_owner_page_context or compatible_target_subject in target_schema_page_bound_names:
+                identity_pages.append({"page": page, "method": "subject_scoped_structured_org_number", "name": compatible_target_subject, "address": address, "subject_ids": sorted(set(subject_ids))})
         elif target_context and exact_name and not non_owner_page_context:
             identity_pages.append({"page": page, "method": "subject_scoped_legal_org_number", "name": exact_name, "address": address, "subject_ids": sorted(set(subject_ids))})
         elif page_identity_name and address and candidate_source != "keyless_no" and not non_owner_page_context:

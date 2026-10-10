@@ -324,7 +324,7 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
             revenue = [claim for claim in finance if claim["field"] == "revenue"]
             self.assertEqual(len(revenue), 2)
             self.assertEqual({claim["period_end"][:4] for claim in revenue}, {"2023", "2024"})
-            self.assertEqual(acme["synthesis"]["brreg_observations"]["financial_records"], 2)
+            self.assertEqual(len({claim["period_end"] for claim in revenue}), 2)
             self.assertEqual(len(acme["synthesis"]["summary"]["sentences"]),
                 len({item["text"] for item in acme["synthesis"]["summary"]["sentences"]}))
 
@@ -344,8 +344,9 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
             self.assertFalse(any(claim["field_family"] == "financial" for claim in missing["claims"]))
             failed_optional = by_org["100000024"]
             self.assertEqual(failed_optional["sections"]["accounts_history"]["state"], "failed")
-            self.assertEqual(failed_optional["synthesis"]["brreg_observations"]["role_family_state"], "failed")
-            self.assertFalse(failed_optional["synthesis"]["brreg_observations"]["workplaces_complete"])
+            self.assertEqual(failed_optional["sections"]["leadership_workplaces"]["state"], "failed")
+            self.assertTrue(any("workplace_coverage:partial_or_unavailable" in diagnostic
+                for diagnostic in failed_optional["sections"]["leadership_workplaces"]["diagnostics"]))
             self.assertFalse(any(claim["field_family"] in {"role", "workplace", "financial"}
                 for claim in failed_optional["claims"]))
 
@@ -397,17 +398,16 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
 
         company_row = next(row for row in rows if row["organisation_number"] == "100000008")
         validate_vendor_payload(company_row)
-        status = company_row["synthesis"]["brreg_observations"]["identity_profile"]["status"]
         status_fields = {key: value for key, value in company["registry_status_fields"].items()
             if key not in {"registreringsdatoEnhetsregisteret", "stiftelsesdato"}}
-        self.assertEqual({key: status[key] for key in status_fields}, status_fields)
-        status_dates = company_row["synthesis"]["brreg_observations"]["identity_profile"]["status_dates"]
-        self.assertEqual({key: status_dates[key] for key in ("registreringsdatoEnhetsregisteret", "stiftelsesdato")},
+        status_claims = {claim["field"].removeprefix("status."): claim["value"] for claim in company_row["claims"]
+            if claim["field"].startswith("status.")}
+        self.assertEqual({key: status_claims[key] for key in status_fields}, status_fields)
+        status_date_claims = {claim["field"].removeprefix("status_dates."): claim["value"]
+            for claim in company_row["claims"] if claim["field"].startswith("status_dates.")}
+        self.assertEqual({key: status_date_claims[key] for key in ("registreringsdatoEnhetsregisteret", "stiftelsesdato")},
             {key: company["registry_status_fields"][key]
                 for key in ("registreringsdatoEnhetsregisteret", "stiftelsesdato")})
-        status_claims = {claim["field"]: claim["value"] for claim in company_row["claims"]
-            if claim["field"].startswith("status.")}
-        self.assertEqual(status_claims, {f"status.{key}": value for key, value in status.items()})
         self.assertEqual(company_row["terminal_state"], "available")
 
         roles_as_of_cutoff = next(row for row in rows if row["organisation_number"] == "100000008")

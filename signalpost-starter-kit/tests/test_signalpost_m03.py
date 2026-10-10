@@ -274,7 +274,7 @@ class WebsiteIdentityTests(unittest.TestCase):
             self.assertEqual(envelope["organisation_number"], org)
             self.assertEqual(envelope["sections"]["website_owned_profiles"]["state"], "available")
             self.assertTrue(any(claim["field"] == "verified_website_domain" for claim in envelope["claims"]))
-            self.assertIn("website_research", envelope["synthesis"])
+            self.assertEqual(set(envelope["synthesis"]), {"schema_version", "summary"})
             self.assertFalse(any(snapshot["rights_status"] == "NLOD-2.0" and snapshot["source_url"] == "https://registry.example/snapshot"
                 for snapshot in envelope["source_snapshots"]))
 

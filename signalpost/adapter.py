@@ -69,11 +69,18 @@ def to_evaluator(envelope: Envelope) -> dict[str, Any]:
                 raise ValueError("financial publication value must be finite numeric data") from exc
             if not numeric.is_finite():
                 raise ValueError("financial publication value must be finite numeric data")
-    synthesis_summary = envelope.synthesis.get("summary") if isinstance(envelope.synthesis, dict) else None
-    from .synthesis import validate_synthesis, validate_synthesis_schema
+    from .synthesis import synthesize, validate_synthesis, validate_synthesis_schema
     validate_synthesis_schema(envelope.synthesis)
-    if isinstance(synthesis_summary, dict):
-        validate_synthesis(envelope, synthesis_summary)
+    # Nested operational observations in Envelope.synthesis are useful during
+    # orchestration, but they are not publication facts unless represented in
+    # the canonical claim/evidence graph. Rebuild the published summary from
+    # that graph and reject a stale or edited supplied summary.
+    expected_summary = synthesize(envelope)
+    supplied_summary = envelope.synthesis.get("summary")
+    if supplied_summary is not None and supplied_summary != expected_summary:
+        validate_synthesis(envelope, supplied_summary)
+        raise ValueError("synthesis summary differs from deterministic canonical output")
+    validate_synthesis(envelope, expected_summary)
     payload = {
         "input_ref": envelope.input_ref,
         "organisation_number": envelope.organisation_number,
@@ -84,7 +91,7 @@ def to_evaluator(envelope: Envelope) -> dict[str, Any]:
         "source_snapshots": [item.model_dump(mode="json") for item in envelope.source_snapshots],
         "refresh": {**envelope.refresh.model_dump(mode="json"),
                     "changes": [_evaluator_change(item.model_dump(mode="json")) for item in envelope.refresh.changes]},
-        "synthesis": {"schema_version": 1, **envelope.synthesis},
+        "synthesis": {"schema_version": 1, "summary": expected_summary},
         "errors": [item.model_dump(mode="json") for item in envelope.errors],
         "operations": [item.model_dump(mode="json") for item in envelope.operations],
         "run": {"created_at": envelope.created_at.isoformat()},

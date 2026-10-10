@@ -470,8 +470,8 @@ class OfflineCliTests(unittest.TestCase):
             self.assertEqual([item["input_ref"] for item in envelopes], ["row:1", "row:2"])
             self.assertTrue(all(item["terminal_state"] == "available" for item in envelopes))
             self.assertTrue(all(len(item["sections"]) == 7 for item in envelopes))
-            self.assertTrue(all(item["batch"]["evidence_cutoff"] == item["synthesis"]["evidence_cutoff"] for item in envelopes))
-            self.assertTrue(all(item["synthesis"]["evidence_cutoff_source"] == "run_start" for item in envelopes))
+            self.assertTrue(all(item["batch"]["evidence_cutoff"] for item in envelopes))
+            self.assertTrue(all(set(item["synthesis"]) == {"schema_version", "summary"} for item in envelopes))
             self.assertFalse((root / "out.jsonl.pending.jsonl").exists())
 
 

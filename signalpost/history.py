@@ -171,25 +171,34 @@ def _coverage(envelope: Envelope) -> dict[str, dict[str, Any]]:
         coverage[name] = {"state": section.state.value if section.state else None,
                           "attempt_outcome": section.attempt_outcome,
                           "diagnostics": sorted(section.diagnostics)}
-    observations = envelope.synthesis.get("brreg_observations", {})
     leadership_diagnostics = envelope.sections["leadership_workplaces"].diagnostics
     def diagnostic_refs(prefix: str) -> list[str]:
         return sorted(value.split(":", 1)[1] for value in leadership_diagnostics
                       if value.startswith(prefix + ":") and ":" in value)
-    coverage["_roles"] = {"complete": bool(observations.get("roles_completeness_evidence_id")),
-                          "evidence_id": observations.get("roles_completeness_evidence_id"),
+    evidence_ids = {item.evidence_id for item in envelope.evidence}
+    role_completeness = [ref for ref in diagnostic_refs("roles_completeness_evidence_id") if ref in evidence_ids]
+    workplace_completeness = [ref for ref in diagnostic_refs("workplaces_completeness_evidence_id") if ref in evidence_ids]
+    role_claims = [claim for claim in envelope.claims if claim.field_family == "role" and claim.state == PublicState.AVAILABLE]
+    workplace_claims = [claim for claim in envelope.claims if claim.field_family == "workplace" and claim.state == PublicState.AVAILABLE]
+    section_state = envelope.sections["leadership_workplaces"].state
+    coverage["_roles"] = {"complete": bool(role_completeness),
+                          "evidence_id": role_completeness[0] if role_completeness else None,
                           "state_evidence_ids": diagnostic_refs("roles_state_evidence_id"),
-                          "state": observations.get("role_family_state")}
-    coverage["_workplaces"] = {"complete": observations.get("workplaces_complete") is True,
-                               "evidence_id": observations.get("workplaces_completeness_evidence_id"),
-                               "evidence_ids": observations.get("workplaces_completeness_evidence_ids", []),
+                          "state": (PublicState.AVAILABLE.value if role_claims else
+                                    PublicState.NOT_AVAILABLE.value if role_completeness else
+                                    section_state.value if section_state else None)}
+    coverage["_workplaces"] = {"complete": bool(workplace_completeness),
+                               "evidence_id": workplace_completeness[0] if workplace_completeness else None,
+                               "evidence_ids": workplace_completeness,
                                "state_evidence_ids": diagnostic_refs("subunits_state_evidence_id"),
-                               "state": observations.get("workplaces_state")}
-    website = envelope.synthesis.get("website_research", {})
-    coverage["_website"] = {"complete": (website.get("execution_state") == "completed"
-                                           and website.get("crawl_state") == "available"),
-                             "execution_state": website.get("execution_state"),
-                             "crawl_state": website.get("crawl_state")}
+                               "state": (PublicState.AVAILABLE.value if workplace_claims else
+                                         PublicState.NOT_AVAILABLE.value if workplace_completeness else
+                                         section_state.value if section_state else None)}
+    website = envelope.sections["website_owned_profiles"]
+    coverage["_website"] = {"complete": (website.attempt_outcome == "completed"
+                                           and website.state == PublicState.AVAILABLE),
+                             "execution_state": website.attempt_outcome,
+                             "crawl_state": website.state.value if website.state else None}
     return coverage
 
 

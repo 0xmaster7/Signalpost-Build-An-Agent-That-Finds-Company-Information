@@ -485,13 +485,14 @@ class CheckpointResumeTests(unittest.TestCase):
                        "--state-output", str(state), "--registry-snapshot", str(registry)]
             self.assertEqual(main(options), 0)
             first = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
-            self.assertEqual(first["batch"]["evidence_cutoff"], first["synthesis"]["evidence_cutoff"])
-            self.assertEqual(first["synthesis"]["evidence_cutoff_source"], "run_start")
+            self.assertTrue(first["batch"]["evidence_cutoff"])
+            self.assertNotIn("evidence_cutoff", first["synthesis"])
+            self.assertNotIn("evidence_cutoff_source", first["synthesis"])
             self.assertEqual(main(options + ["--resume"]), 0)
             second = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
             self.assertEqual(first["batch"]["evidence_cutoff"], second["batch"]["evidence_cutoff"])
 
-    def test_evaluator_cutoff_precedes_release_config_and_records_its_source(self):
+    def test_evaluator_cutoff_precedes_release_config_and_is_bound_in_batch(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source, registry, output, state, config = (root / name for name in ("input.txt", "registry.jsonl", "out.jsonl", "state.sqlite", "config.json"))
@@ -505,4 +506,4 @@ class CheckpointResumeTests(unittest.TestCase):
             self.assertEqual(main(options), 0)
             result = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
             self.assertEqual(result["batch"]["evidence_cutoff"], "2026-02-01T00:00:00+00:00")
-            self.assertEqual(result["synthesis"]["evidence_cutoff_source"], "evaluator")
+            self.assertNotIn("evidence_cutoff_source", result["synthesis"])

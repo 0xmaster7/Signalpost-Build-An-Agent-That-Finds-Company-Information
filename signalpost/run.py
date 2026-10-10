@@ -154,6 +154,12 @@ def _live_envelope(row: Any, result: Any, batch_id: str, cutoff: datetime, previ
             if name == "leadership_workplaces":
                 for key in ("roles_state_evidence_id", "subunits_state_evidence_id"):
                     if observation.get(key): diagnostics.append(f"{key}:{observation[key]}")
+                if observation.get("roles_completeness_evidence_id"):
+                    diagnostics.append(f"roles_completeness_evidence_id:{observation['roles_completeness_evidence_id']}")
+                completeness_ids = observation.get("workplaces_completeness_evidence_ids") or (
+                    [observation["workplaces_completeness_evidence_id"]]
+                    if observation.get("workplaces_completeness_evidence_id") else [])
+                diagnostics.extend(f"workplaces_completeness_evidence_id:{item}" for item in completeness_ids)
                 diagnostics.append(f"ceo_state:{observation.get('ceo_state', 'unknown')}")
                 if not observation.get("workplaces_complete"):
                     diagnostics.append("workplace_coverage:partial_or_unavailable")

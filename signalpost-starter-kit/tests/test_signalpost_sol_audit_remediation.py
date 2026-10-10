@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -42,6 +43,212 @@ def valid_financial_envelope():
 
 
 class SolAuditRemediationTests(unittest.TestCase):
+    def test_final_sol_customer_case_with_incidental_target_footer_is_not_owned_site(self):
+        """Reproduction of the final Sol audit's no-target-org-number fixture."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        html = ("<html><head><title>Acme AS — Customer story</title></head><body>"
+            "<main><h1>Acme AS is a valued customer</h1><p>Rival Group supplies Acme AS.</p>"
+            "<p>Our customer Acme AS (923609016) selected Rival Group for its supplier services.</p></main>"
+            "<footer><address>Acme AS, 0150 Oslo</address></footer></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "registered_address": {"postnummer": "0150", "poststed": "Oslo"},
+            "website_candidates": [{"raw": "https://rival.no/cases/acme", "source": "registry_live"}]},
+            FakeGateway({"https://rival.no/cases/acme": (200, {"Content-Type": "text/html"}, html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_customer_supplier_and_partner_mentions_cannot_borrow_identity_blocks(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        scenarios = [
+            ("Nordic Valve AS", "913456782", "customer case", "is our customer", "0310 Oslo"),
+            ("Blue Fjord Logistics Ltd", "912345674", "supplier reference", "supplies us", "5003 Bergen"),
+            ("Ålesund Data ASA", "923456789", "partner story", "our partner", "6002 Ålesund"),
+        ]
+        for name, org, title_context, body_context, address in scenarios:
+            with self.subTest(name=name, context=title_context):
+                html = (f"<html><head><title>{name} | {title_context}</title></head><body>"
+                    f"<main><h1>{title_context}</h1><p>{name} {body_context} to Rival Group AS.</p></main>"
+                    f"<footer><address>{name}, {address}</address></footer></body></html>").encode()
+                result = asyncio.run(research_company({"organisation_number": org, "name": name,
+                    "registered_address": {"postnummer": address[:4], "poststed": address[5:]},
+                    "website_candidates": [{"raw": "https://rival.no/cases/target", "source": "registry_live"}]},
+                    FakeGateway({"https://rival.no/cases/target": (200, {"Content-Type": "text/html"}, html)}),
+                    enable_keyless=False, evidence_cutoff=CUTOFF))
+                self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_structured_target_nested_as_case_subject_is_not_site_owner(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        structured = {"@context": "https://schema.org", "@type": "Article", "headline": "Customer case",
+            "publisher": {"@type": "Organization", "name": "Rival Group AS"},
+            "mainEntity": {"@type": "Organization", "legalName": name, "identifier": org}}
+        html = (f"<html><head><title>{name} customer story</title><script type='application/ld+json'>"
+            f"{json.dumps(structured)}</script></head><body><h1>Customer story</h1><p>{name} is Rival Group's customer.</p>"
+            f"<footer><address>{name}, 0150 Oslo</address></footer></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "registered_address": {"postnummer": "0150", "poststed": "Oslo"},
+            "website_candidates": [{"raw": "https://rival.no/case/acme", "source": "registry_live"}]},
+            FakeGateway({"https://rival.no/case/acme": (200, {"Content-Type": "text/html"}, html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_unbound_root_organization_schema_cannot_override_customer_page_context(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        graph = [
+            {"@type": "Article", "headline": "Acme AS customer story"},
+            {"@type": "Organization", "legalName": name, "identifier": org},
+        ]
+        html = (f"<html><head><title>{name} Customer Story</title><script type='application/ld+json'>"
+            f"{json.dumps(graph)}</script></head><body><h1>{name} is a customer</h1>"
+            f"<p>Rival Group supplies {name}.</p><footer><address>{name}, 0150 Oslo</address></footer></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "registered_address": {"postnummer": "0150", "poststed": "Oslo"},
+            "website_candidates": [{"raw": "https://rival.no/case/acme", "source": "registry_live"}]},
+            FakeGateway({"https://rival.no/case/acme": (200, {"Content-Type": "text/html"}, html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_target_owned_structured_site_and_target_specific_shared_subpage_remain_accepted(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        org, name = "923609016", "Acme AS"
+        pages = [
+            ("https://acme.no/", f'<script type="application/ld+json">{json.dumps({"@type":"Organization","legalName":name,"identifier":org,"url":"https://acme.no/"})}</script><h1>{name}</h1><p>Our customers use our products.</p>'),
+            ("https://group.no/acme", f'<script type="application/ld+json">{json.dumps({"@type":"Organization","legalName":name,"identifier":org,"url":"https://group.no/acme"})}</script><h1>{name}</h1><p>Target-specific subsidiary information.</p>'),
+        ]
+        for url, body in pages:
+            with self.subTest(url=url):
+                result = asyncio.run(research_company({"organisation_number": org, "name": name,
+                    "website_candidates": [{"raw": url, "source": "registry_live"}]},
+                    FakeGateway({url: (200, {"Content-Type": "text/html"}, body.encode())}),
+                    enable_keyless=False, evidence_cutoff=CUTOFF,
+                    shared_domains={"group.no"} if "group.no" in url else set()))
+                self.assertTrue(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_final_adapter_omits_unbound_recognized_synthesis_observations(self):
+        from signalpost.synthesis import synthesize
+        supplements = {
+            "brreg_observations": {"identity_profile": {"name": "Rival AS", "organisation_number": "917065101"},
+                "financial_records": 999999, "roles_count": 888, "workplace_count": 777,
+                "status_dates": {"registrertIForetaksregisteret": "2099-12-31"}},
+            "baseline_identity": {"organisation_number": "917065101", "name": "Rival AS", "as_of": "2099-12-31"},
+            "live_identity_observation": {"fields": {"name": "Rival AS", "organisation_number": "917065101"},
+                "retrieved_at": "2099-12-31T00:00:00Z"},
+            "cutoff_identity_source": "unverified_rival",
+            "evidence_cutoff": "2099-12-31T00:00:00Z",
+            "evidence_cutoff_source": "fabricated_source",
+            "website_research": {"accepted_domains": ["rival.no"], "crawl_state": "available",
+                "claims": 10000, "candidate_count": 999},
+        }
+        for key, value in supplements.items():
+            with self.subTest(section=key):
+                envelope = valid_envelope()
+                envelope.synthesis = {"summary": synthesize(envelope), key: value}
+                payload = to_evaluator(envelope)
+                self.assertEqual(set(payload["synthesis"]), {"schema_version", "summary"})
+                self.assertEqual(payload["synthesis"]["summary"], synthesize(envelope))
+
+    def test_final_adapter_rejects_stale_or_fabricated_recognized_synthesis_summary(self):
+        from signalpost.synthesis import synthesize
+        for mutation in (
+            lambda value: value["sentences"][0].update(text="Rival AS has revenue NOK 999999999."),
+            lambda value: value.update(unknown_sections=["hiring_activity"]),
+            lambda value: value.update(schema_version=9),
+        ):
+            envelope = valid_envelope()
+            envelope.synthesis["summary"] = synthesize(envelope)
+            mutation(envelope.synthesis["summary"])
+            with self.assertRaises(ValueError):
+                to_evaluator(envelope)
+
+    def test_archived_publication_bundle_validates_after_relocation_and_requires_external_marker_hash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "original"
+            source.mkdir()
+            output = OrderedAtomicWriter(source / "output.jsonl")
+            state = OrderedAtomicWriter(source / "state.sqlite")
+            marker = publish_paired_artifacts(output, state, [], b"state-payload")
+            marker_hash = __import__("hashlib").sha256(marker.read_bytes()).hexdigest()
+            archived = root / "archive"
+            archived.mkdir()
+            for filename in ("output.jsonl", "state.sqlite", marker.name):
+                shutil.copy2(source / filename, archived / filename)
+            marker_copy = archived / marker.name
+            shutil.rmtree(source)
+            with self.assertRaises(ValueError):
+                validate_paired_publication(marker_copy)
+            self.assertEqual(validate_paired_publication(marker_copy, bundle_root=archived,
+                expected_marker_sha256=marker_hash)["status"], "committed")
+            marker_data = json.loads(marker_copy.read_text())
+            marker_data["publication_id"] = "tampered"
+            marker_copy.write_text(json.dumps(marker_data, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(ValueError, "external release hash|metadata integrity"):
+                validate_paired_publication(marker_copy, bundle_root=archived,
+                    expected_marker_sha256=marker_hash)
+
+    def test_relocated_publication_rejects_artifact_tamper_traversal_and_symlink_escape(self):
+        import hashlib
+        from signalpost.operations import _publication_marker_digest
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = OrderedAtomicWriter(root / "output.jsonl")
+            state = OrderedAtomicWriter(root / "state.sqlite")
+            marker = publish_paired_artifacts(output, state, [], b"state")
+            marker_hash = hashlib.sha256(marker.read_bytes()).hexdigest()
+            for role in ("output", "state"):
+                original = root / ("output.jsonl" if role == "output" else "state.sqlite")
+                saved = original.read_bytes()
+                original.write_bytes(saved + b"tamper")
+                with self.assertRaisesRegex(ValueError, role + " artifact"):
+                    validate_paired_publication(marker, bundle_root=root, expected_marker_sha256=marker_hash)
+                original.write_bytes(saved)
+            payload = json.loads(marker.read_text())
+            payload["state_path"] = "../outside/state.sqlite"
+            payload["marker_sha256"] = _publication_marker_digest(payload)
+            marker.write_text(json.dumps(payload, sort_keys=True) + "\n")
+            changed_hash = hashlib.sha256(marker.read_bytes()).hexdigest()
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                validate_paired_publication(marker, bundle_root=root, expected_marker_sha256=changed_hash)
+            payload["state_path"] = str(root / "state.sqlite")
+            payload["marker_sha256"] = _publication_marker_digest(payload)
+            marker.write_text(json.dumps(payload, sort_keys=True) + "\n")
+            outside = root.parent / (root.name + "-outside-state")
+            outside.write_bytes(b"state")
+            (root / "state.sqlite").unlink()
+            (root / "state.sqlite").symlink_to(outside)
+            marker_hash = hashlib.sha256(marker.read_bytes()).hexdigest()
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                validate_paired_publication(marker, bundle_root=root, expected_marker_sha256=marker_hash)
+
+    def test_relocated_publication_rejects_missing_artifact_and_cross_run_pairing(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pairs = []
+            for index in (1, 2):
+                run = root / str(index)
+                run.mkdir()
+                out = OrderedAtomicWriter(run / "output.jsonl")
+                state = OrderedAtomicWriter(run / "state.sqlite")
+                marker = publish_paired_artifacts(out, state, [], f"state-{index}".encode())
+                marker_hash = hashlib.sha256(marker.read_bytes()).hexdigest()
+                pairs.append((run, marker, marker_hash))
+            first, second = pairs
+            (first[0] / "state.sqlite").write_bytes((second[0] / "state.sqlite").read_bytes())
+            with self.assertRaisesRegex(ValueError, "state artifact"):
+                validate_paired_publication(first[1], bundle_root=first[0], expected_marker_sha256=first[2])
+            (first[0] / "state.sqlite").write_bytes(b"state-1")
+            (first[0] / "state.sqlite").unlink()
+            with self.assertRaises(FileNotFoundError):
+                validate_paired_publication(first[1], bundle_root=first[0], expected_marker_sha256=first[2])
+
     def test_research_company_rejects_customer_reference_as_target_website_but_keeps_owned_shared_site(self):
         import asyncio
         from test_signalpost_m05 import FakeGateway, CUTOFF
@@ -60,7 +267,8 @@ class SolAuditRemediationTests(unittest.TestCase):
         self.assertNotEqual(result.audit["candidates"][0]["decision"], "accepted")
 
         owned_html = (f'<html><head><title>{name}</title><script type="application/ld+json">'
-            + json.dumps({"@type": "Organization", "name": name, "legalName": name, "identifier": org})
+            + json.dumps({"@type": "Organization", "name": name, "legalName": name, "identifier": org,
+                "url": "https://group.no/acme"})
             + '</script></head><body><h1>Acme AS</h1><p>Acme products and services for customers.</p></body></html>').encode()
         owned = asyncio.run(research_company({"organisation_number": org, "name": name,
             "website_candidates": [{"raw": "https://group.no/acme", "source": "registry_live"}]},
