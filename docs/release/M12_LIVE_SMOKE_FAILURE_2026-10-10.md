@@ -30,11 +30,17 @@ BRREG retrieval completed for all 100 inputs and all rows were terminalized in t
 | Duplicate claim / evidence / snapshot IDs across batch | 0 / 0 / 0 |
 | Canonical financial metrics published | 0 |
 | Website claims / hiring-activity claims | 6 / 0 |
+| BRREG role records observed / canonical role claims published | 420 / 0 |
+| Returned workplace rows / complete / malformed subunit collections | 87 / 75 / 25 |
 | Final evaluator envelopes / committed paired output-state | 0 / no |
 
-Website section execution was `not_attempted` for 49 companies, `robots_unreachable` for 46, completed for one, with the remaining four represented by their per-row outcomes (`ambiguous` three, `failed` one). These measurements indicate a real access limitation for much of this cohort while robots retrieval failed closed; they do not justify changing robots policy. The hiring/activity section was not attempted for all 100 rows. The leadership/workplaces section had no published facts and was `not_available` for all 100 rows. None of those states is evidence of factual absence.
+Website section execution was `not_attempted` for 49 companies, `robots_unreachable` for 46, completed for one, with the remaining four represented by their per-row outcomes (`ambiguous` three, `failed` one). These measurements indicate a real access limitation for much of this cohort while robots retrieval failed closed; they do not justify changing robots policy. The hiring/activity section was not attempted for all 100 rows. BRREG returned 420 role rows; all 100 role collections were complete and available. However, no canonical role claims were published because their observations were after the run-start cutoff and the role facts had no `as_of`. Of 87 returned workplace rows, 75 subunit collections were complete and 25 malformed; no workplace claims were published. `BRREG_POST_CUTOFF_EXCLUDED=100` was recorded. These states do not establish factual absence.
 
 All 100 canonical financial account histories were retrieved, but zero financial metric claims were published because authoritative scale semantics remain unresolved. The batch recorded 3,750 `BRREG_FINANCIAL_UNIT_UNSUPPORTED` diagnostics; those candidate values were withheld rather than guessed. No population-level precision or recall claim is made from this cohort.
+
+## Comparison with earlier cohorts
+
+The post-Sol 2026-10-07 run used the same fixed 100-row cohort and recorded the same request totals and purpose counts (459 physical / 485 logical), the same 46 `robots_unreachable` candidates, 420 role rows, 75 complete versus 25 malformed subunit collections, and six website claims. The current run therefore shows no measured source-availability improvement or regression relative to that comparable cohort. The October 5 M09 run published 1,875 candidate financial metrics; the later post-Sol/M12 zero-metric result reflects the deliberate fail-closed unit/scale correction, not a retrieval failure. Website claim counts from the October 5 run are not directly comparable to the later robots/ownership remediation. These fixed-cohort comparisons do not establish population-wide coverage.
 
 ## Preserved live evidence
 
@@ -45,11 +51,13 @@ Artifacts are preserved under `/private/tmp/signalpost-m12-final-live-hostnetwor
 - Request ledger SHA-256: `4842498c8aea006f98b03a4da5e11825d2735d835d52bf741dc12373832d6dcc` (459 ledger entries, 485 logical requests).
 - The original artifact manifest recorded the SQLite main file at SHA-256 `bcc69f506235d33f0b613dc0148224b2259eefb53d3b007a2f732f1b053896e9` (12,595,200 bytes), with its WAL at `63198396caf5f57fd2ceaee663dcfc548100e2720f09d70e68fb5bf9f748a32a` (4,264,232 bytes). During offline inspection I opened the checkpoint with SQLite's default read-write connection; SQLite checkpointed the WAL on close. The current main file is SHA-256 `22e27e0bc07bc464f87fae9f7b80262d35cf9fd3913c15305a7144e387e550f5` (12,734,464 bytes), and the WAL/SHM files are gone. The original manifest is preserved unchanged, and its recorded hashes establish the pre-inspection bytes, but the original checkpoint byte stream is no longer present. The current database still yielded all 100 canonical envelopes used in the offline replay. This evidence-preservation deviation is recorded explicitly rather than representing the checkpoint as byte-immutable.
 - Preserved traceback SHA-256: `738d289dcca882c965e5190139342a918641b6f18a362bff652fa4e47195f498`.
-- The temporary output's publication marker remains `publishing`; no committed output or canonical state artifact was reported. The immutable failed-run bundle was retained.
+- The temporary output's publication marker remains `publishing`; no committed output or canonical state artifact was reported. The failed-run bundle and original manifest remain; the checkpoint's post-inspection byte change is disclosed above.
 
 ## Fix and offline replay
 
 The original M12 source failed because the closed synthesis key allowlist omitted observed BRREG identity/status-date/address members and a `robots_error` audit field. The fix admits only the concrete observed fields in the existing closed schema; unknown nested keys still fail closed. The deterministic six-company production-path test now includes registry status booleans, status dates, and business-address data and checks their final evaluator serialization.
+
+The same live measurements identified a date-aware publication bug. The role adapter extracted BRREG's group-level `sistEndret` but did not bind it as the role claim's `as_of`. Thus source-dated roles were treated as undated and withheld when retrieval followed a run-start cutoff. BRREG documents `sistEndret` in its [official open-data API documentation](https://data.brreg.no/enhetsregisteret/api/dokumentasjon/en/index.html). The fix now uses that source date for role claims. An offline production-path test proves that a pre-cutoff date is published, a future date is withheld, and a missing date stays fail-closed. Live response bodies were not retained, so the 420 role rows cannot be replayed to determine how many qualify. Subunit rows lack equivalent source-dated evidence and remain cutoff-withheld when retrieved after cutoff.
 
 The preserved checkpoint was replayed offline through canonical envelope validation, per-envelope and batch claim/evidence/snapshot graph validation, current synthesis schema/support validation, `to_evaluator`, and final vendor-payload validation. It produced 100 ordered evaluator envelopes from 100 preserved canonical envelopes, 3,449 claims, 7,590 evidence records, 388 snapshots, and 3,447 synthesis sentences. There were zero duplicate factual sentence texts within an envelope, zero evaluator serialization failures, and zero publication-graph failures. The replay JSONL SHA-256 is `22cce477f2415b7c8bc70d8ea07a3756ebf883ba6e37998fa7b93e2cf99b4cca` at `/private/tmp/signalpost-m12-offline-replay-fixed-synthesis/evaluator.jsonl`.
 
@@ -57,10 +65,11 @@ This replay proves the captured canonical data now passes the fixed post-retriev
 
 ## Repair verification
 
-- Complete pytest suite: **390 passed, 91 subtests passed**.
+- Complete pytest suite: **391 passed, 91 subtests passed**.
 - M07 contract suite: **32 passed**; deterministic refresh replay: **12/12 profiles**, six expected changes, zero FP/FN, provenance complete, idempotent event IDs.
 - M08 contract suite: **35 passed, 3 subtests passed**; M08 gold: find/compare/verify accuracy 1.0, citation completeness 1.0, unsupported assertions 0; local UX smoke and XSS gate passed.
-- M09 live-shape and M09 tests: **15 passed, 5 subtests passed**, including the new source-shaped status/address serialization test.
+- M09 live-shape and M09 tests: all **16 collected tests** pass within the full suite, including the source-shaped status/address serialization and role-cutoff production-path regressions.
+- Focused role-cutoff production-path regression: **1 passed**; pre-cutoff `sistEndret` is retained as claim `as_of`, while future-dated and undated role rows remain withheld with the cutoff diagnostic.
 - Offline process crash/resume gate: pass at kill points 25, 50, and 90 of 100 rows; all resumed outputs matched uninterrupted semantics and retained cardinality/order.
 - M06 scale gate: passed with the current verifier; offline measurement remains a scheduler simulation with identity safety explicitly `not_measured`.
 - Clean-CWD evaluator: four of four offline input rows published, with zero physical requests.

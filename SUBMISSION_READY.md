@@ -2,7 +2,7 @@
 
 ## M12 re-checkpoint (2026-10-10)
 
-**Disposition remains HOLD; this packet is not ready for submission.** The authorized current-source live attempt used `7a8e1690793f4f7e1b5c36f07daea1bf0443c787`, stayed within its request/runtime limits, and terminalized all 100 rows, but failed the final evaluator boundary on valid live BRREG status fields not yet admitted by the closed synthesis schema. The issue is fixed and the preserved canonical envelopes pass offline post-retrieval validation on the repair; no successful current-source live publication exists and no second cohort was run. Details and exact preserved evidence are in [the M12 live smoke outcome](docs/release/M12_LIVE_SMOKE_FAILURE_2026-10-10.md).
+**Disposition remains HOLD; this packet is not ready for submission.** The authorized current-source live attempt used `7a8e1690793f4f7e1b5c36f07daea1bf0443c787`, stayed within its request/runtime limits, and terminalized all 100 rows, but failed the final evaluator boundary on valid live BRREG status fields not yet admitted by the closed synthesis schema. Offline analysis also found role facts missing their source `sistEndret` date at the cutoff boundary. Both defects are fixed and covered locally; the preserved canonical envelopes pass offline post-retrieval validation, but no successful current-source live publication exists and no second cohort was run. Details and exact preserved evidence are in [the M12 live smoke outcome](docs/release/M12_LIVE_SMOKE_FAILURE_2026-10-10.md).
 
 M12 checks and the current live-gate failure are recorded in [the M12 final-freeze checkpoint](docs/release/M12_FINAL_FREEZE_CHECKPOINT.md). No final submission SHA is declared. No Builderr submission or revision slot was used.
 

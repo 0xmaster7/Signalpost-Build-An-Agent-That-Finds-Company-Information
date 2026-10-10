@@ -68,10 +68,10 @@ def _role_body(company: dict, companies: dict[str, dict]) -> dict:
         return {"rollegrupper": []}
     if mode == "parent_organisation_holder":
         parent = companies[company["parent"]]
-        return {"rollegrupper": [{"type": {"kode": "STYR", "beskrivelse": "Board"}, "sistEndret": "2025-01-01",
+        return {"rollegrupper": [{"type": {"kode": "STYR", "beskrivelse": "Board"}, "sistEndret": company.get("roles_last_changed", "2025-01-01"),
             "roller": [{"enhet": {"organisasjonsnummer": parent["organisation_number"], "navn": parent["name"]},
                 "type": {"kode": "STYRLEDER", "beskrivelse": "Chair"}, "fraDato": "2020-01-01"}]}]}
-    return {"rollegrupper": [{"type": {"kode": "DAGL", "beskrivelse": "Management"}, "sistEndret": "2025-01-01",
+    return {"rollegrupper": [{"type": {"kode": "DAGL", "beskrivelse": "Management"}, "sistEndret": company.get("roles_last_changed", "2025-01-01"),
         "roller": [{"person": {"navn": {"fornavn": "Alex", "etternavn": "Example"}},
             "type": {"kode": "DAGL", "beskrivelse": "Managing director"}, "fraDato": "2020-01-01"}]}]}
 
@@ -187,7 +187,7 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
         self.fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
         self.companies = self.fixture["companies"]
 
-    def _run_full_pipeline(self, root: Path) -> tuple[list[dict], dict, LiveShapeTransport, NetworkGateway]:
+    def _run_full_pipeline(self, root: Path, *, evidence_cutoff: str = "2099-12-31T23:59:59Z") -> tuple[list[dict], dict, LiveShapeTransport, NetworkGateway]:
         root.mkdir(parents=True, exist_ok=True)
         input_path = root / "input.jsonl"
         output_path, state_path, checkpoint_path = root / "output.jsonl", root / "state.json", root / "checkpoint.sqlite"
@@ -209,7 +209,7 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
              contextlib.redirect_stdout(io.StringIO()):
             status = run_module.main(["--input", str(input_path), "--format", "jsonl", "--live-brreg",
                 "--live-websites", "--no-keyless-websites", "--config", str(config_path),
-                "--evidence-cutoff", "2099-12-31T23:59:59Z",
+                "--evidence-cutoff", evidence_cutoff,
                 "--output", str(output_path), "--state-output", str(state_path), "--checkpoint", str(checkpoint_path),
                 "--batch-id", "m09-live-shape-fixture"])
         self.assertEqual(status, 0)
@@ -409,6 +409,27 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
             if claim["field"].startswith("status.")}
         self.assertEqual(status_claims, {f"status.{key}": value for key, value in status.items()})
         self.assertEqual(company_row["terminal_state"], "available")
+
+        roles_as_of_cutoff = next(row for row in rows if row["organisation_number"] == "100000008")
+        self.assertTrue(any(claim["field_family"] == "role" and claim["as_of"] == "2025-01-01T00:00:00Z"
+            for claim in roles_as_of_cutoff["claims"]))
+
+    def test_roles_use_source_last_changed_for_cutoff_and_withhold_future_or_undated(self):
+        before_cutoff = next(item for item in self.companies if item["organisation_number"] == "100000008")
+        before_cutoff["roles_last_changed"] = "2025-01-01"
+        future_dated = next(item for item in self.companies if item["organisation_number"] == "100000016")
+        future_dated["roles_last_changed"] = "2027-01-01"
+        undated = next(item for item in self.companies if item["organisation_number"] == "100000024")
+        undated["roles_last_changed"] = None
+        with tempfile.TemporaryDirectory(prefix="signalpost-m09-role-cutoff-") as temporary:
+            rows, _state, _transport, _gateway = self._run_full_pipeline(Path(temporary),
+                evidence_cutoff="2026-10-10T00:00:00Z")
+        by_org = {row["organisation_number"]: row for row in rows}
+        self.assertTrue(any(claim["field_family"] == "role"
+            and claim["as_of"] == "2025-01-01T00:00:00Z" for claim in by_org["100000008"]["claims"]))
+        for org in ("100000016", "100000024"):
+            self.assertFalse(any(claim["field_family"] == "role" for claim in by_org[org]["claims"]))
+            self.assertIn("BRREG_POST_CUTOFF_EXCLUDED", {error["code"] for error in by_org[org]["errors"]})
 
 
 def to_sorted(rows: list[dict], key: str) -> list[dict]:

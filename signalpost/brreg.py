@@ -594,6 +594,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             method = "brreg_role_name_join_v1" if key == "name" else "brreg_role_status_normalization_v1" if key in {"inactive", "holder_kind"} else "brreg_json_pointer_v1"
             add_claim(f"role.{key}", value, "leadership_workplaces", "role", org, "person_role",
                       roles_final or roles_url, roles_time, roles_body, role_path, "roles", source_hash=roles_hash,
+                      as_of=role.get("last_changed"),
                       extraction_method=method)
     locations: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
     subunits_malformed = subunit_status == 200 and not _subunit_collection_shape(subunit_body)
