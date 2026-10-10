@@ -1,6 +1,12 @@
 # RC1 submission checklist
 
-**Disposition: HOLD.** The M09 operational release candidate has passed its final live cohort and is being packaged for independent audit. This file does not authorize or record an external submission.
+## M12 re-checkpoint (2026-10-10)
+
+**Disposition remains HOLD; this packet is not ready for submission.** The current release-preparation source is `afade4bcc7935886e7cec7a8ba24cd5b800904ea` on `codex/signalpost-m12`. Exact-SHA CI run [38040538880](https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/38040538880) passed for that SHA. The M11 commit changed documentation only; no current-source 100-company live smoke has been run after the later production remediation. The historic M09 and post-Sol live reports remain historical evidence and do not satisfy that current-source gate.
+
+M12 offline checks and the reason for the hold are recorded in [the M12 final-freeze checkpoint](docs/release/M12_FINAL_FREEZE_CHECKPOINT.md). No final submission SHA is declared. The cold 100-company smoke requires a separate explicit authorization; no Builderr submission or revision slot was used.
+
+**Historical M09 disposition: HOLD.** The M09 operational candidate passed its then-authorized live cohort. This section preserves that historical record; the M12 update above is the current status. This file does not authorize or record an external submission.
 
 ## Candidate identity
 
