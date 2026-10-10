@@ -1,10 +1,10 @@
 # RC1 submission checklist
 
-## M12 re-checkpoint (2026-10-10)
+## M12 post-repair acceptance (2026-10-10)
 
-**Disposition remains HOLD; this packet is not ready for submission.** The authorized current-source live attempt used `7a8e1690793f4f7e1b5c36f07daea1bf0443c787`, stayed within its request/runtime limits, and terminalized all 100 rows, but failed the final evaluator boundary on valid live BRREG status fields not yet admitted by the closed synthesis schema. Offline analysis also found role facts missing their source `sistEndret` date at the cutoff boundary. Both defects are fixed and covered locally; the preserved canonical envelopes pass offline post-retrieval validation, but no successful current-source live publication exists and no second cohort was run. Details and exact preserved evidence are in [the M12 live smoke outcome](docs/release/M12_LIVE_SMOKE_FAILURE_2026-10-10.md).
+**M12 live acceptance passed; competition submission remains HOLD.** The single authorized post-repair cold cohort ran at `7d4fe04867cd746389c48a47f360afd7ac4b8fb1`: 100 ordered terminal evaluator envelopes, 100 matching state companies, 459 physical / 485 logical requests, 347.077 seconds, committed output/state marker with matching retained hashes, and zero structural wrong-company/provenance/workplace failures. The repaired closed synthesis adapter passed all 100 rows. The role freshness mapping published eligible source-dated role claims. Financial metrics, workplaces beyond the cutoff, jobs, and activity remain withheld or unmeasured under the current evidence and policy. See the [M12 post-repair live acceptance report](docs/release/M12_POST_REPAIR_LIVE_ACCEPTANCE_2026-10-10.md) and [M12 final-freeze checkpoint](docs/release/M12_FINAL_FREEZE_CHECKPOINT.md).
 
-M12 checks and the current live-gate failure are recorded in [the M12 final-freeze checkpoint](docs/release/M12_FINAL_FREEZE_CHECKPOINT.md). No final submission SHA is declared. No Builderr submission or revision slot was used.
+The preceding attempt at `7a8e1690793f4f7e1b5c36f07daea1bf0443c787` remains a historical failure and is preserved in [the M12 failed-run report](docs/release/M12_LIVE_SMOKE_FAILURE_2026-10-10.md); this later run does not rewrite it. The exact source live-tested is not yet the final documentation-packet commit. No Builderr submission or revision slot was used. Final competition submission remains **HOLD** pending stronger comparable coverage evidence and the independent Sol High audit.
 
 **Historical M09 disposition: HOLD.** The M09 operational candidate passed its then-authorized live cohort. This section preserves that historical record; the M12 update above is the current status. This file does not authorize or record an external submission.
 

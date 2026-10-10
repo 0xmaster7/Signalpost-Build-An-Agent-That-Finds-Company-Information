@@ -1,5 +1,13 @@
 # M12 final-freeze checkpoint
 
+## Post-repair live acceptance (2026-10-10)
+
+M12's outstanding live acceptance gate passed on clean source SHA `7d4fe04867cd746389c48a47f360afd7ac4b8fb1` using the same fixed 100-company cohort and approved production configuration. The run produced 100 ordered evaluator envelopes and 100 state companies; the output/state publication marker was `committed`, and its hashes matched the independently rehashed retained output and state. Final adapter, synthesis, provenance, identity, and release hard gates passed with zero failures. It used 459 physical / 485 logical requests in 347.077 seconds.
+
+The repair also restored 3,467 eligible role-field claims across the cohort from 420 role rows by using BRREG's role-group `sistEndret` only as freshness (`as_of`), without inferring role-effective dates. Financial metrics remain withheld (283 records, zero canonical metrics, 3,750 unsupported-unit diagnostics). No workplace facts passed the run-start cutoff; jobs/activity remain at zero published claims. Website outcomes remain constrained by `robots_unreachable=46` and `not_attempted=49`; no robots behavior was changed. These measurements do not establish population precision or recall. The exact cohort, artifact hashes, coverage, validators, and limitations are in the [M12 post-repair live acceptance report](M12_POST_REPAIR_LIVE_ACCEPTANCE_2026-10-10.md).
+
+The final live-source SHA had exact-SHA GitHub Actions run [38044614342](https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/38044614342), Success. The release packet is being finalized in documentation-only changes and must receive its own exact-SHA CI result before it is frozen for independent review. Submission remains **HOLD**, and the independent Sol High audit remains pending.
+
 ## Authorized live attempt update (2026-10-10)
 
 The user authorized one cold fixed-cohort 100-company live smoke at `7a8e1690793f4f7e1b5c36f07daea1bf0443c787`. It reached live BRREG for all rows and stayed within limits (459 physical / 485 logical requests; 352.625 seconds), but failed during final evaluator serialization on source-derived BRREG identity/status fields absent from the closed synthesis allowlist. It did not commit a paired output/state artifact. The failure, per-source measurements, correction, offline canonical-envelope replay, and evidence-handling note are recorded in [the M12 live smoke outcome](M12_LIVE_SMOKE_FAILURE_2026-10-10.md). No second live cohort was run.
@@ -33,11 +41,9 @@ The M06 verifier also rejects the previously checked-in historical `docs/audit/m
 
 ## Live and submission gates
 
-The one authorized M12 live attempt is the failed current-source attempt described above. It does not satisfy the 100-company complete-publication gate. No earlier live report was overwritten or reclassified, and no additional cohort was executed after the failure.
+The first current-source live attempt at `7a8e1690793f4f7e1b5c36f07daea1bf0443c787` failed final synthesis serialization and did not publish a committed output/state pair. That failure remains preserved in [the M12 live smoke outcome](M12_LIVE_SMOKE_FAILURE_2026-10-10.md). The single separately authorized post-repair attempt is documented above and passed the 100-company complete-publication gate. No earlier live report was overwritten or reclassified.
 
-The audited submission decision remains `HOLD`: the comparable opportunity study did not demonstrate materially higher external coverage than the registry/starter baseline, and no official Builderr score or adjudicated run feedback exists. M11 found no supported safe change that would improve that result. The M12 live attempt additionally failed final publication, though its captured canonical data passes the fixed offline replay. No final release SHA is declared, and this is not `READY_FOR_USER_SUBMISSION`.
-
-The next live gate is one cold 100-company smoke on an explicitly selected clean SHA using the fixed M09 cohort and existing limits/source policy. That is substantial external traffic. The previous one-shot smoke authorizations do not authorize another run. The user's mission authorizes implementation and ordinary release work, but does not explicitly authorize this fresh cohort. Stop here for authorization before any live request.
+The audited submission decision remains `HOLD`: the comparable opportunity study did not demonstrate materially higher external coverage than the registry/starter baseline, and no official Builderr score or adjudicated run feedback exists. The repaired live run satisfies the current M12 operational live gate but is not a comparable held-out recall benchmark. No final candidate is frozen until this documentation packet has a clean commit and exact-SHA green CI. Do not infer submission readiness from this safety/acceptance cohort.
 
 ## Current declarations
 
@@ -45,4 +51,5 @@ The next live gate is one cold 100-company smoke on an explicitly selected clean
 - Paid cost and model usage: `$0`; none.
 - Search, ATS, browser automation, paid providers, PDF acquisition, and new credentials: disabled/not used.
 - BRREG financial unit/scale semantics, frozen-registry injection details, exact evaluator mapping questions, and Builderr run-specific feedback remain unresolved under their documented conservative fallbacks.
-- No Builderr contact, submission, or revision slot was used. Independent Sol High audit remains pending and must follow a genuinely ready candidate; it has not been performed here.
+- The single authorized post-repair M12 live cohort is complete. No further live cohort was run or authorized by this checkpoint.
+- No Builderr contact, submission, or revision slot was used. Independent Sol High audit remains pending and has not been performed here.
