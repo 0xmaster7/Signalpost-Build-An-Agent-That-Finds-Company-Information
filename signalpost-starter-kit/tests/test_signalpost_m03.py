@@ -91,7 +91,7 @@ class WebsiteIdentityTests(unittest.TestCase):
         doc = page(f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@context":"https://schema.org","@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><footer>{LEGAL}</footer></body></html>''')
         result = verify_site_pages(self.profile(), [doc])
         self.assertEqual(result["decision"], "accepted")
-        self.assertEqual(result["proof"]["method"], "subject_scoped_structured_org_number")
+        self.assertEqual(result["proof"]["method"], "site_operator_organization")
 
     def test_structured_identity_rejects_multiple_distinct_ids_but_normalizes_duplicates(self):
         cases = [
@@ -148,14 +148,16 @@ class WebsiteIdentityTests(unittest.TestCase):
         self.assertEqual(verify_site_pages(self.profile(), [doc], candidate_source="registry_live")["decision"], "accepted")
         self.assertEqual(verify_site_pages(self.profile(), [doc], candidate_source="keyless_no")["decision"], "ambiguous")
         role_profile = self.profile(registered_roles=["Daglig leder: Kari Nordmann"])
-        self.assertEqual(verify_site_pages(role_profile, [page(html + '<footer>Daglig leder: Kari Nordmann</footer>')], candidate_source="keyless_no")["decision"], "accepted")
+        role_html = (f'<html><body><div class="contact"><address>{LEGAL}, Storgata 4, 0123 Oslo</address>'
+            'Daglig leder: Kari Nordmann</div></body></html>')
+        self.assertEqual(verify_site_pages(role_profile, [page(role_html)], candidate_source="keyless_no")["decision"], "accepted")
 
     def test_keyless_no_org_acceptance_requires_address_and_company_contact_signal(self):
         html = f'<html><head><title>{LEGAL}</title></head><body><address>{LEGAL}, Storgata 4, 0123 Oslo</address><a href="mailto:post@example.no">Contact</a></body></html>'
         contact = page(html, "https://example.no/contact")
         result = verify_site_pages(self.profile(), [contact], candidate_source="keyless_no")
         self.assertEqual(result["decision"], "accepted")
-        self.assertEqual(result["proof"]["method"], "legal_name_address_official_contact")
+        self.assertEqual(result["proof"]["method"], "keyless_contact_identity")
         self.assertEqual(verify_site_pages(self.profile(), [page(html.replace('<a href="mailto:post@example.no">Contact</a>', ''), "https://example.no/contact")], candidate_source="keyless_no")["decision"], "ambiguous")
 
     def test_wrong_postcode_does_not_match_exact_registered_address(self):

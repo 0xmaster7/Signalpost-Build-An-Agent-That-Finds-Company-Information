@@ -191,6 +191,18 @@ def _walk_schema(value: Any) -> list[dict[str, Any]]:
     return found
 
 
+def _contains_schema_type(value: Any, wanted: set[str]) -> bool:
+    if isinstance(value, dict):
+        kind = value.get("@type")
+        kinds = kind if isinstance(kind, list) else [kind]
+        if any(isinstance(item, str) and item.casefold().rsplit("/", 1)[-1] in wanted for item in kinds):
+            return True
+        return any(_contains_schema_type(child, wanted) for child in value.values())
+    if isinstance(value, list):
+        return any(_contains_schema_type(child, wanted) for child in value)
+    return False
+
+
 def _identifier_values(value: Any) -> list[str]:
     if isinstance(value, str):
         return [re.sub(r"\D", "", match.group(0)) for match in
@@ -226,6 +238,8 @@ class PageRecord:
     locator: str = "/html/body"
     rights_status: str = "unknown_not_reviewed"
     footer_blocks: list[str] = field(default_factory=list)
+    operator_identity_blocks: list[str] = field(default_factory=list)
+    article_document: bool | None = None
 
 
 @dataclass
@@ -269,6 +283,16 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
     identity_blocks = [" ".join(node.get_text(" ", strip=True).split())[:3000]
                        for node in identity_nodes if not (node.name == "footer" or node.find_parent("footer"))]
     identity_text = " ".join([*identity_blocks, *footer_blocks])[:12_000]
+    operator_identity_blocks: list[str] = []
+    for node in soup.select("address, [itemprop='legalName'], [itemprop='address'], [itemprop='identifier'], .legal, #legal, .contact, #contact"):
+        if (node.find_parent(["article", "footer"]) or node.find_parent(class_=re.compile(r"(?i)(?:^|[-_ ])(?:about|article|story|case-study|blog-post)(?:$|[-_ ])"))
+                or node.find_parent(id=re.compile(r"(?i)^(?:about|article|story|case-study|blog-post)$"))):
+            continue
+        text_block = " ".join(node.get_text(" ", strip=True).split())[:3000]
+        if text_block and text_block not in operator_identity_blocks:
+            operator_identity_blocks.append(text_block)
+    article_document = bool(soup.select_one("article, [itemprop='articleBody'], [itemtype*='Article'], .article, .news-article, .blog-post"))
+    article_document = article_document or _contains_schema_type(jsonld, {"article", "newsarticle", "blogposting", "blog"})
     links: list[dict[str, str]] = []
     for anchor in soup.select("a[href]"):
         href = urllib.parse.urljoin(final_url, str(anchor.get("href") or ""))
@@ -294,6 +318,8 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
                       datetime.now(timezone.utc), title, description, text, identity_text, identity_blocks, headings, links,
                       structured if isinstance(structured, dict) else {}, schemas, canonical, directives, soft_error)
     page.footer_blocks = footer_blocks
+    page.operator_identity_blocks = operator_identity_blocks
+    page.article_document = article_document
     return page
 
 
@@ -457,6 +483,205 @@ def _negative_subject_context(text: str, org: str, legal_names: list[str] | None
     return False
 
 
+def _typed_schema_nodes(value: Any, wanted: set[str]) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    if isinstance(value, dict):
+        kind = value.get("@type")
+        kinds = kind if isinstance(kind, list) else [kind]
+        if any(isinstance(item, str) and item.casefold().rsplit("/", 1)[-1] in wanted for item in kinds):
+            found.append(value)
+        for child in value.values():
+            found.extend(_typed_schema_nodes(child, wanted))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_typed_schema_nodes(child, wanted))
+    return found
+
+
+def _schema_entity_matches(profile: dict[str, Any], node: dict[str, Any]) -> bool:
+    org = str(profile.get("organisation_number") or "")
+    names = [str(profile.get("name") or ""), *[
+        str(item.get("name") or "") for item in profile.get("historical_names", []) if isinstance(item, dict)]]
+    ids = _identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID"))
+    name = _as_text(node.get("legalName") or node.get("name"))
+    return org in ids and bool(name) and any(_same_legal_name(expected, name) for expected in names if expected)
+
+
+def _schema_entity_has_conflicting_ids(profile: dict[str, Any], node: dict[str, Any]) -> bool:
+    org = str(profile.get("organisation_number") or "")
+    related = {str(value) for value in profile.get("related_organisation_numbers", []) if str(value).isdigit()}
+    ids = set(_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID")))
+    return any(identifier != org and identifier not in related for identifier in ids)
+
+
+def _schema_entity_is_site_root(node: dict[str, Any], page: PageRecord) -> bool:
+    values = node.get("url") or node.get("@id")
+    values = values if isinstance(values, list) else [values]
+    page_parts = urllib.parse.urlsplit(page.final_url)
+    page_host = (page_parts.hostname or "").casefold().removeprefix("www.")
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        parsed = urllib.parse.urlsplit(urllib.parse.urljoin(page.final_url, value))
+        if ((parsed.hostname or "").casefold().removeprefix("www.") == page_host
+                and parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == ""):
+            return True
+    return False
+
+
+def _operator_blocks(page: PageRecord) -> list[str]:
+    """Identity-bearing contact/legal blocks, excluding article, about, and footer content."""
+    if page.operator_identity_blocks:
+        return page.operator_identity_blocks
+    soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
+    blocks: list[str] = []
+    selectors = "address, [itemprop='legalName'], [itemprop='address'], [itemprop='identifier'], .legal, #legal, .contact, #contact"
+    excluded_classes = re.compile(r"(?i)(?:^|[-_ ])(?:about|article|story|case-study|blog-post)(?:$|[-_ ])")
+    for node in soup.select(selectors):
+        if (node.find_parent(["article", "footer"]) or node.find_parent(class_=excluded_classes)
+                or node.find_parent(id=re.compile(r"(?i)^(?:about|article|story|case-study|blog-post)$"))):
+            continue
+        text = " ".join(node.get_text(" ", strip=True).split())[:3000]
+        if text and text not in blocks:
+            blocks.append(text)
+    return blocks
+
+
+def _is_article_document(page: PageRecord) -> bool:
+    if page.article_document is not None:
+        return page.article_document
+    soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
+    if soup.select_one("article, [itemprop='articleBody'], [itemtype*='Article'], .article, .news-article, .blog-post"):
+        return True
+    jsonld = page.structured.get("json-ld", []) if isinstance(page.structured, dict) else []
+    return _contains_schema_type(jsonld, {"article", "newsarticle", "blogposting", "blog"})
+
+
+def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candidate_source: str,
+                             shared_domain: bool) -> dict[str, Any] | None:
+    """Resolve who operates the site and who a page represents as separate subjects."""
+    if page.soft_error:
+        return None
+    jsonld = page.structured.get("json-ld", []) if isinstance(page.structured, dict) else []
+    article_document = _is_article_document(page)
+    org = str(profile.get("organisation_number") or "")
+    legal_names = [str(profile.get("name") or ""), *[
+        str(item.get("name") or "") for item in profile.get("historical_names", []) if isinstance(item, dict)]]
+    non_owner_mention = _negative_subject_context(
+        "\n".join([page.title, *page.headings, page.identity_text, page.visible_text]), org, legal_names)
+    related = {str(value) for value in profile.get("related_organisation_numbers", []) if str(value).isdigit()}
+    org_nodes = _walk_schema_subjects(jsonld)
+    website_nodes = _typed_schema_nodes(jsonld, {"website"})
+    article_nodes = _typed_schema_nodes(jsonld, {"article", "newsarticle", "blogposting"})
+    webpage_nodes = _typed_schema_nodes(jsonld, {"webpage"})
+
+    website_publishers = [node for website in website_nodes
+        for node, _path in _walk_schema_subjects(website.get("publisher"))]
+    article_publishers = [node for article in article_nodes
+        for node, _path in _walk_schema_subjects(article.get("publisher"))]
+    webpage_publishers = [node for webpage in webpage_nodes
+        for node, _path in _walk_schema_subjects(webpage.get("publisher"))]
+    all_publishers = website_publishers + article_publishers + webpage_publishers
+    target_site_publisher = next((node for node in website_publishers if _schema_entity_matches(profile, node)
+        and not _schema_entity_has_conflicting_ids(profile, node)), None)
+    target_page_publisher = next((node for node in webpage_publishers if _schema_entity_matches(profile, node)
+        and not _schema_entity_has_conflicting_ids(profile, node)), None)
+    foreign_publisher = next((node for node in all_publishers
+        if _as_text(node.get("legalName") or node.get("name"))
+        and not _schema_entity_matches(profile, node)
+        and not any(identifier in related for identifier in
+            (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID"))))), None)
+
+    if article_document and article_publishers:
+        if any(not _schema_entity_matches(profile, node) for node in article_publishers):
+            # A target organization elsewhere in the same graph is the article subject,
+            # not the article's publisher or the site's operator.
+            return None
+    if foreign_publisher and not (shared_domain and not article_document):
+        return None
+
+    non_operator_schema_paths = {"about", "mentions", "mainentity", "subjectof", "citation", "itemreviewed",
+        "customer", "client", "supplier", "partner", "author", "publisher", "employee", "member", "memberof",
+        "sponsor", "designer", "provider", "founder", "parentorganization", "suborganization", "department",
+        "affiliate", "employer", "hiringorganization", "worksfor", "ispartof", "reviewed"}
+    root_org_nodes = [node for node, path in org_nodes
+        if not any(part in non_operator_schema_paths for part in path)]
+    target_root = next((node for node in root_org_nodes if _schema_entity_matches(profile, node)
+        and not _schema_entity_has_conflicting_ids(profile, node)), None)
+    conflicting_root = next((node for node in root_org_nodes
+        if _as_text(node.get("legalName") or node.get("name")) and not _schema_entity_matches(profile, node)
+        and not any(identifier in related for identifier in
+            (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID"))))), None)
+    if conflicting_root and not (shared_domain and not article_document):
+        return None
+
+    # An explicit WebSite.publisher binds the organization to site operation;
+    # a WebPage.publisher only identifies that one page.
+    if target_site_publisher and not foreign_publisher and not conflicting_root:
+        return {"method": "website_publisher_organization", "subject_scope": "site_operator",
+                "operator_name": _as_text(target_site_publisher.get("legalName") or target_site_publisher.get("name")),
+                "operator_organisation_number": org}
+
+    page_parts = urllib.parse.urlsplit(page.final_url)
+    is_homepage = page_parts.path in {"", "/"} and not page_parts.query
+    if target_root and not article_document and not conflicting_root:
+        # A page-bound Organization URL is not a site-operator assertion. A
+        # root Organization is usable only on the home page or when it names
+        # the site's root URL from a legal/contact page.
+        if is_homepage or _schema_entity_is_site_root(target_root, page):
+            return {"method": "site_operator_organization", "subject_scope": "site_operator",
+                    "operator_name": _as_text(target_root.get("legalName") or target_root.get("name")),
+                    "operator_organisation_number": org}
+
+    # A WebPage can assert which subsidiary the specific path represents. This
+    # stays page scoped and never establishes ownership of a shared host.
+    if shared_domain and not is_homepage and not article_document and not non_owner_mention:
+        for webpage in webpage_nodes:
+            if not _schema_entity_url_binds_page(webpage, page, shared_domain=True):
+                continue
+            if target_page_publisher:
+                return {"method": "shared_page_publisher", "subject_scope": "shared_page_representation",
+                        "operator_name": _as_text(target_page_publisher.get("legalName") or target_page_publisher.get("name")),
+                        "operator_organisation_number": org, "page_only": True}
+            for entity, _path in _walk_schema_subjects(webpage.get("mainEntity")):
+                if (_schema_entity_matches(profile, entity)
+                        and not _schema_entity_has_conflicting_ids(profile, entity)):
+                    return {"method": "shared_page_main_entity", "subject_scope": "shared_page_representation",
+                            "operator_name": _as_text(entity.get("legalName") or entity.get("name")),
+                            "operator_organisation_number": org, "page_only": True}
+
+    blocks = [] if non_owner_mention else _operator_blocks(page)
+    registered_roles = [str(value) for value in profile.get("registered_roles", []) if value]
+    has_contact_endpoint = bool(re.search(rb"(?i)(?:mailto:|tel:)", page.body))
+    for block in blocks:
+        compatible_name = _exact_name(legal_names, block)
+        if not compatible_name:
+            continue
+        exact_org = bool(org and re.search(r"(?<!\d)" + re.escape(org) + r"(?!\d)", block))
+        address = _address_match(profile, block)
+        role = next((item for item in registered_roles if normalize_name(item) and normalize_name(item) in normalize_name(block)), None)
+        if shared_domain and not is_homepage and not article_document and candidate_source in {"registry_live", "registry_frozen"} and (exact_org or address):
+            return {"method": "shared_page_operator_identity", "subject_scope": "shared_page_representation",
+                    "operator_name": compatible_name, "operator_organisation_number": org,
+                    "address_match": address, "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest(),
+                    "page_only": True}
+        if candidate_source in {"registry_live", "registry_frozen"} and address:
+            return {"method": "registry_candidate_contact_identity", "subject_scope": "site_operator",
+                    "operator_name": compatible_name, "operator_organisation_number": org,
+                    "address_match": address, "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest()}
+        if candidate_source == "keyless_no" and address and (role or has_contact_endpoint):
+            return {"method": "keyless_contact_identity", "subject_scope": "site_operator",
+                    "operator_name": compatible_name, "operator_organisation_number": org,
+                    "address_match": address, "registered_role": role,
+                    "contact_endpoint_present": has_contact_endpoint,
+                    "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest()}
+        if candidate_source in {"registry_live", "registry_frozen"} and exact_org:
+            return {"method": "site_operator_contact_org_number", "subject_scope": "site_operator",
+                    "operator_name": compatible_name, "operator_organisation_number": org,
+                    "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest()}
+    return None
+
+
 def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, shared_domain: bool = False,
                       candidate_source: str = "registry_live") -> dict[str, Any]:
     """Apply the audited exact-site table; name-only and self-derived brand never pass."""
@@ -467,7 +692,9 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
     related = {str(item) for item in profile.get("related_organisation_numbers", []) if str(item).isdigit()}
     identity_pages: list[dict[str, Any]] = []
     for page in pages:
-        if page.soft_error:
+        ownership = _site_ownership_evidence(profile, page, candidate_source=candidate_source,
+            shared_domain=shared_domain)
+        if ownership is None:
             continue
         subject_names: list[str] = []
         subject_ids: list[str] = []
@@ -576,6 +803,12 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             identity_pages.append(proof_row)
         if conflict_schema and not target_context and not any(item["page"] is page for item in identity_pages):
             continue
+        # Replace mention-level identity assessment with the independently
+        # classified site-operator or shared-page ownership evidence.
+        identity_pages = [item for item in identity_pages if item["page"] is not page]
+        identity_pages.append({"page": page, "method": ownership["method"],
+            "name": ownership["operator_name"], "address": ownership.get("address_match"),
+            "subject_ids": sorted(set(subject_ids)), "ownership": ownership})
     if not identity_pages:
         # Distinguish a conflicting site identity from a merely weak/no-name candidate.
         for page in pages:
@@ -592,19 +825,21 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             if text and any(re.search(r"\b" + re.escape(name) + r"\b", text, re.I) for name in legal_names if len(name) > 4):
                 return {"decision": "ambiguous", "reason": "name_only_or_missing_address_and_subject_scoped_id", "proof": None, "target_page": None}
         return {"decision": "ambiguous", "reason": "insufficient_exact_company_identity_evidence", "proof": None, "target_page": None}
-    selected = sorted(identity_pages, key=lambda row: (0 if row["method"].startswith("subject_scoped") else 1, row["page"].requested_url))[0]
+    selected = sorted(identity_pages, key=lambda row: (
+        0 if row["ownership"]["subject_scope"] == "site_operator" else 1,
+        row["page"].requested_url))[0]
     page = selected["page"]
     parsed_target = urllib.parse.urlsplit(page.final_url)
     is_homepage = parsed_target.path in {"", "/"} and not parsed_target.query
     if shared_domain and is_homepage:
         # A group homepage never becomes a subsidiary homepage solely from a brand or name mention.
-        if selected["method"] not in {"subject_scoped_structured_org_number", "subject_scoped_legal_org_number"}:
+        if selected["ownership"]["subject_scope"] != "site_operator":
             return {"decision": "ambiguous", "reason": "shared_group_homepage_without_target_subject_proof", "proof": None, "target_page": None}
     proof = {
         "rule_id": "audited_exact_site_identity_v1", "method": selected["method"],
         "organisation_number": org, "compatible_legal_name": selected["name"],
         "page_url": page.final_url, "page_sha256": page.digest,
-        "json_ld_subject_match": selected["method"] == "subject_scoped_structured_org_number",
+        "json_ld_subject_match": selected["method"] in {"site_operator_organization", "website_publisher_organization", "shared_page_main_entity"},
         "registered_address_match": selected.get("address"), "shared_domain": shared_domain,
         "conflicting_subject_ids": sorted(identifier for identifier in selected.get("subject_ids", []) if identifier != org and identifier not in related),
     }
@@ -1123,8 +1358,10 @@ def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidat
                       *, shared_domain: bool) -> dict[str, Any]:
     assessment = verify_site_pages(profile, pages, shared_domain=shared_domain,
                                    candidate_source=str(candidate.get("source") or "registry_live"))
-    if candidate.get("source") == "search_provider" and assessment.get("decision") == "accepted":
-        proof_page = assessment["proof_page"]
+    if candidate.get("source") == "search_provider":
+        proof_page = assessment.get("proof_page") or (pages[0] if pages else None)
+        if proof_page is None:
+            return assessment
         parsed = urllib.parse.urlsplit(proof_page.final_url)
         host = registered_domain(parsed.hostname or "") or (parsed.hostname or "")
         path_segments = {part.casefold() for part in parsed.path.split("/") if part}
@@ -1136,7 +1373,8 @@ def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidat
         )
         if directory_page:
             return {"decision": "ambiguous", "reason": "search_candidate_is_directory_or_third_party_profile"}
-        if assessment.get("proof", {}).get("method") != "subject_scoped_structured_org_number":
+        if assessment.get("decision") != "accepted" or assessment.get("proof", {}).get("method") not in {
+                "website_publisher_organization", "site_operator_organization"}:
             return {"decision": "ambiguous", "reason": "search_candidate_requires_subject_scoped_org_proof"}
     return assessment
 
@@ -1462,14 +1700,22 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 "evidence_source_snapshot_ids": candidate_snapshot_ids}
             output.claims.append(_make_claim(org, "verified_website_url", proof_page.final_url, proof_page,
                 all_eids[0], **claim_provenance))
-            output.claims.append(_make_claim(org, "verified_website_domain", domain, proof_page,
-                all_eids[0], **claim_provenance))
+            page_only = proof.get("method", "").startswith("shared_page_")
+            if not page_only:
+                output.claims.append(_make_claim(org, "verified_website_domain", domain, proof_page,
+                    all_eids[0], **claim_provenance))
             candidate_row["proof_record_id"] = proof_digest
             candidate_row["proof_evidence_id"] = proof_evidence
             candidate_row["source_candidate_evidence_id"] = source_candidate_id
-            output.audit["accepted_domains"].append({"domain": domain, "url": proof_page.final_url, "source": candidate["source"],
-                "proof_record_id": proof_digest, "proof_method": proof["method"], "organisation_number": org})
-            output.audit["website_claim_families"].extend(["verified_website_url", "verified_website_domain"])
+            if page_only:
+                output.audit.setdefault("accepted_pages", []).append({"url": proof_page.final_url,
+                    "host": urllib.parse.urlsplit(proof_page.final_url).hostname, "source": candidate["source"],
+                    "proof_record_id": proof_digest, "proof_method": proof["method"], "organisation_number": org})
+                output.audit["website_claim_families"].append("verified_website_url")
+            else:
+                output.audit["accepted_domains"].append({"domain": domain, "url": proof_page.final_url, "source": candidate["source"],
+                    "proof_record_id": proof_digest, "proof_method": proof["method"], "organisation_number": org})
+                output.audit["website_claim_families"].extend(["verified_website_url", "verified_website_domain"])
             # Brand is derived only after exact-site acceptance; the site cannot verify itself with this value.
             brand = next((_as_text(node.get("name")) for node in proof_page.schema_organizations
                           if org in (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID")))

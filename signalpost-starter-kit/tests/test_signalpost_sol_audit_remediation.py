@@ -43,6 +43,173 @@ def valid_financial_envelope():
 
 
 class SolAuditRemediationTests(unittest.TestCase):
+    def test_final_sol_about_block_and_repeated_address_do_not_prove_rival_site_operator(self):
+        """Reproduces Sol finding: target identity is confined to an article about block."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        url = "https://rival.no/stories/acme"
+        html = ("<html><head><title>Operations in focus</title></head><body><article>"
+            "<h1>Company profile</h1><div class='about'>"
+            f"<h2>{name}</h2><address>{name}, 0150 Oslo</address>"
+            "</div></article><footer>Rival Group AS</footer></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "registered_address": {"postnummer": "0150", "poststed": "Oslo"},
+            "website_candidates": [{"raw": url, "source": "registry_live"}]},
+            FakeGateway({url: (200, {"Content-Type": "text/html"}, html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_final_sol_group_article_does_not_prove_subsidiary_page_representation(self):
+        """Reproduces Sol finding: a group-hosted article is not its target subject's page."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Nordlys Teknologi AS", "912345678"
+        url = "https://group.no/news/nordlys"
+        html = (f"<html><head><title>{name} company profile</title></head><body><article>"
+            f"<h1>{name}</h1><div class='about'><address>{name}, 5003 Bergen</address></div>"
+            "<p>Group company announces a project.</p></article></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "registered_address": {"postnummer": "5003", "poststed": "Bergen"},
+            "website_candidates": [{"raw": url, "source": "registry_live"}]},
+            FakeGateway({url: (200, {"Content-Type": "text/html"}, html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF, shared_domains={"group.no"}))
+        self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_final_sol_article_target_schema_url_cannot_override_rival_publisher(self):
+        """Reproduces Sol finding: target Organization URL equals article URL, publisher is rival."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        url = "https://rival.no/customers/acme"
+        graph = [
+            {"@type": "NewsArticle", "headline": "Acme update", "url": url, "publisher": {"@type": "Organization",
+                "legalName": "Rival Group AS", "identifier": "987654321", "url": "https://rival.no/"}},
+            {"@type": "Organization", "legalName": name, "identifier": org, "url": url},
+        ]
+        html = ("<html><head><title>Acme update</title><script type='application/ld+json'>"
+            f"{json.dumps(graph)}</script></head><body><article><h1>Acme update</h1>"
+            "<p>Rival Group is the supplier.</p></article></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": url, "source": "registry_live"}]},
+            FakeGateway({url: (200, {"Content-Type": "text/html"}, html)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_website_ownership_rejects_article_subjects_across_relationship_contexts(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        scenarios = [
+            ("customer", "Fjellvind Energi AS", "913456782", "0160 Oslo", "Our customer profile"),
+            ("supplier", "Blå Fjord Logistikk ASA", "912345674", "5003 Bergen", "Supplier information"),
+            ("partner", "Sunnmøre Data NUF", "923456789", "6002 Ålesund", "Partner announcement"),
+            ("auditor", "Nordhavn Industri DA", "917065104", "7010 Trondheim", "Auditor appointment"),
+            ("press", "Vestfold Marine ENK", "918065102", "3101 Tønsberg", "Press coverage"),
+            ("case-study", "Arktis Ventilasjon AS", "919065100", "8001 Bodø", "Case study"),
+        ]
+        for context, name, org, address, title in scenarios:
+            postcode, municipality = address.split(" ", 1)
+            url = f"https://rival.no/stories/{org}"
+            html = (f"<html><head><title>{title}</title></head><body><article>"
+                f"<h1>{name}</h1><div class='about'><address>{name}, {address}</address></div>"
+                f"<p>Published by Rival Group AS: {context} record.</p></article></body></html>").encode()
+            with self.subTest(context=context, name=name):
+                result = asyncio.run(research_company({"organisation_number": org, "name": name,
+                    "registered_address": {"postnummer": postcode, "poststed": municipality},
+                    "website_candidates": [{"raw": url, "source": "registry_live"}]},
+                    FakeGateway({url: (200, {"Content-Type": "text/html"}, html)}),
+                    enable_keyless=False, evidence_cutoff=CUTOFF))
+                self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_target_identity_in_article_footer_or_incidental_number_is_not_operator_proof(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        cases = [
+            ("footer", "<article><h1>Operations update</h1><footer>Acme AS, 0150 Oslo</footer></article>"),
+            ("number", "<article><h1>Reference 923609016</h1><p>Company information.</p></article>"),
+            ("about", "<div class='about'><h1>Acme AS</h1><address>Acme AS, 0150 Oslo</address></div>"),
+        ]
+        for label, content in cases:
+            url = f"https://rival.no/press/{label}"
+            html = f"<html><head><title>Rival Group update</title></head><body><article>{content}</article></body></html>".encode()
+            result = asyncio.run(research_company({"organisation_number": "923609016", "name": "Acme AS",
+                "registered_address": {"postnummer": "0150", "poststed": "Oslo"},
+                "website_candidates": [{"raw": url, "source": "registry_live"}]},
+                FakeGateway({url: (200, {"Content-Type": "text/html"}, html)}),
+                enable_keyless=False, evidence_cutoff=CUTOFF))
+            with self.subTest(label=label):
+                self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_competing_site_publisher_and_target_article_identity_remain_unverified(self):
+        name, org = "Acme AS", "923609016"
+        url = "https://rival.no/news/acme"
+        graph = [
+            {"@type": "WebSite", "url": "https://rival.no/", "publisher": {
+                "@type": "Organization", "legalName": "Rival Group AS", "identifier": "987654321"}},
+            {"@type": "NewsArticle", "url": url, "about": {
+                "@type": "Organization", "legalName": name, "identifier": org}},
+            {"@type": "Organization", "legalName": name, "identifier": org, "url": url},
+        ]
+        page = _parse_page(url, 200, {"Content-Type": "text/html"},
+            ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+                + "</script></head><body><article><h1>Company update</h1></article></body></html>").encode(), url)
+        result = verify_site_pages({"organisation_number": org, "name": name}, [page])
+        self.assertNotEqual(result["decision"], "accepted")
+
+        root_url = "https://rival.no/"
+        root_graph = {"@type": "WebSite", "url": root_url, "publisher": {
+            "@type": "Organization", "legalName": "Rival Group AS", "identifier": "987654321"}}
+        root_page = _parse_page(root_url, 200, {"Content-Type": "text/html"},
+            ("<html><head><script type='application/ld+json'>" + json.dumps(root_graph)
+                + "</script></head><body><h1>Rival Group AS</h1></body></html>").encode(), root_url)
+        article_graph = {"@type": "NewsArticle", "url": url, "about": {
+            "@type": "Organization", "legalName": name, "identifier": org}}
+        target_article = _parse_page(url, 200, {"Content-Type": "text/html"},
+            ("<html><head><script type='application/ld+json'>" + json.dumps(article_graph)
+                + "</script></head><body><article><h1>Acme profile</h1></article></body></html>").encode(), url)
+        result = verify_site_pages({"organisation_number": org, "name": name}, [root_page, target_article])
+        self.assertNotEqual(result["decision"], "accepted")
+
+        competing = {"@type": "WebSite", "url": "https://rival.no/", "publisher": {
+            "@type": "Organization", "legalName": name, "identifier": org}}
+        competing_graph = [competing, {"@type": "Organization", "legalName": "Rival Group AS",
+            "identifier": "987654321"}]
+        competing_page = _parse_page("https://rival.no/", 200, {"Content-Type": "text/html"},
+            ("<html><head><script type='application/ld+json'>" + json.dumps(competing_graph)
+                + "</script></head><body><h1>Rival Group AS</h1></body></html>").encode(), "https://rival.no/")
+        self.assertNotEqual(verify_site_pages({"organisation_number": org, "name": name},
+            [competing_page])["decision"], "accepted")
+
+    def test_site_operator_proof_accepts_registry_address_without_jsonld_and_own_customer_articles(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "ÆØÅ Industri AS", "123456789"
+        address = {"adresse": ["Storgata 4"], "postnummer": "0123", "poststed": "Oslo"}
+        cases = [
+            ("https://aeoa.no/", f"<html><head><title>{name}</title></head><body><address>{name}, Storgata 4, 0123 Oslo</address></body></html>", set(), True),
+            ("https://aeoa.no/contact", f"<html><head><title>Contact</title></head><body><div class='contact'><address>{name}, Storgata 4, 0123 Oslo</address><a href='mailto:post@aeoa.no'>Contact</a></div></body></html>", set(), True),
+            ("https://group.no/aeoa", f"<html><head><script type='application/ld+json'>{json.dumps({'@type':'WebPage','url':'https://group.no/aeoa','mainEntity':{'@type':'Organization','legalName':name,'identifier':org}})}</script></head><body><address>{name}, Storgata 4, 0123 Oslo</address></body></html>", {"group.no"}, False),
+        ]
+        for url, html, shared, domain_expected in cases:
+            result = asyncio.run(research_company({"organisation_number": org, "name": name,
+                "registered_address": address,
+                "website_candidates": [{"raw": url, "source": "registry_live"}]},
+                FakeGateway({url: (200, {"Content-Type": "text/html"}, html.encode())}),
+                enable_keyless=False, evidence_cutoff=CUTOFF, shared_domains=shared))
+            with self.subTest(url=url):
+                self.assertTrue(any(claim.field == "verified_website_url" for claim in result.claims))
+                self.assertEqual(any(claim.field == "verified_website_domain" for claim in result.claims), domain_expected)
+
+        home = ("<html><head><script type='application/ld+json'>" + json.dumps({
+            "@type": "WebSite", "url": "https://aeoa.no/", "publisher": {
+                "@type": "Organization", "legalName": name, "identifier": org}})
+            + "</script></head><body><article><h1>Customer case</h1><p>We publish customer stories.</p></article></body></html>")
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": "https://aeoa.no/", "source": "registry_live"}]},
+            FakeGateway({"https://aeoa.no/": (200, {"Content-Type": "text/html"}, home.encode())}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertTrue(any(claim.field == "verified_website_domain" for claim in result.claims))
+
     def test_final_sol_customer_case_with_incidental_target_footer_is_not_owned_site(self):
         """Reproduction of the final Sol audit's no-target-org-number fixture."""
         import asyncio
@@ -120,7 +287,7 @@ class SolAuditRemediationTests(unittest.TestCase):
         org, name = "923609016", "Acme AS"
         pages = [
             ("https://acme.no/", f'<script type="application/ld+json">{json.dumps({"@type":"Organization","legalName":name,"identifier":org,"url":"https://acme.no/"})}</script><h1>{name}</h1><p>Our customers use our products.</p>'),
-            ("https://group.no/acme", f'<script type="application/ld+json">{json.dumps({"@type":"Organization","legalName":name,"identifier":org,"url":"https://group.no/acme"})}</script><h1>{name}</h1><p>Target-specific subsidiary information.</p>'),
+            ("https://group.no/acme", f'<script type="application/ld+json">{json.dumps({"@type":"WebPage","url":"https://group.no/acme","mainEntity":{"@type":"Organization","legalName":name,"identifier":org}})}</script><h1>{name}</h1><p>Target-specific subsidiary information.</p>'),
         ]
         for url, body in pages:
             with self.subTest(url=url):
@@ -129,7 +296,11 @@ class SolAuditRemediationTests(unittest.TestCase):
                     FakeGateway({url: (200, {"Content-Type": "text/html"}, body.encode())}),
                     enable_keyless=False, evidence_cutoff=CUTOFF,
                     shared_domains={"group.no"} if "group.no" in url else set()))
-                self.assertTrue(any(claim.field == "verified_website_domain" for claim in result.claims))
+                self.assertTrue(any(claim.field == "verified_website_url" for claim in result.claims))
+                if "group.no" in url:
+                    self.assertFalse(any(claim.field == "verified_website_domain" for claim in result.claims))
+                else:
+                    self.assertTrue(any(claim.field == "verified_website_domain" for claim in result.claims))
 
     def test_final_adapter_omits_unbound_recognized_synthesis_observations(self):
         from signalpost.synthesis import synthesize
@@ -267,14 +438,15 @@ class SolAuditRemediationTests(unittest.TestCase):
         self.assertNotEqual(result.audit["candidates"][0]["decision"], "accepted")
 
         owned_html = (f'<html><head><title>{name}</title><script type="application/ld+json">'
-            + json.dumps({"@type": "Organization", "name": name, "legalName": name, "identifier": org,
-                "url": "https://group.no/acme"})
+            + json.dumps({"@type": "WebPage", "url": "https://group.no/acme",
+                "mainEntity": {"@type": "Organization", "name": name, "legalName": name, "identifier": org}})
             + '</script></head><body><h1>Acme AS</h1><p>Acme products and services for customers.</p></body></html>').encode()
         owned = asyncio.run(research_company({"organisation_number": org, "name": name,
             "website_candidates": [{"raw": "https://group.no/acme", "source": "registry_live"}]},
             FakeGateway({"https://group.no/acme": (200, {"Content-Type": "text/html"}, owned_html)}),
             enable_keyless=False, evidence_cutoff=CUTOFF, shared_domains={"group.no"}))
-        self.assertTrue(any(claim.field == "verified_website_domain" for claim in owned.claims))
+        self.assertTrue(any(claim.field == "verified_website_url" for claim in owned.claims))
+        self.assertFalse(any(claim.field == "verified_website_domain" for claim in owned.claims))
 
     def test_production_job_status_reconciles_explicit_status_and_dates(self):
         import asyncio
@@ -351,12 +523,13 @@ class SolAuditRemediationTests(unittest.TestCase):
         page = PageRecord(requested_url="https://group.no/acme", final_url="https://group.no/acme", status=200,
             content_type="text/html", body=b"fixture", digest="e" * 64, retrieved_at=NOW,
             title="Acme AS", identity_text="Acme AS 923609016", identity_blocks=["Acme AS 923609016"],
-            headings=["Acme AS"])
+            headings=["Acme AS"], operator_identity_blocks=["Acme AS 923609016, registered subsidiary contact"])
         profile = {"organisation_number": "923609016", "name": "Acme AS", "related_organisation_numbers": ["917065101"]}
-        self.assertEqual(verify_site_pages(profile, [page], shared_domain=True)["decision"], "accepted")
-        page.identity_blocks = ["Acme AS"]
-        page.identity_text = "Acme AS"
+        page.operator_identity_blocks = ["Acme AS"]
         self.assertNotEqual(verify_site_pages(profile, [page], shared_domain=True)["decision"], "accepted")
+        page.operator_identity_blocks = ["Acme AS 923609016, registered subsidiary contact"]
+        self.assertEqual(verify_site_pages(profile, [page], shared_domain=True)["decision"], "accepted")
+        self.assertTrue(verify_site_pages(profile, [page], shared_domain=True)["proof"]["method"].startswith("shared_page_"))
 
     def test_website_evidence_identity_is_subject_bound_content_snapshot_is_shareable(self):
         page = PageRecord(requested_url="https://group.no/", final_url="https://group.no/", status=200,
