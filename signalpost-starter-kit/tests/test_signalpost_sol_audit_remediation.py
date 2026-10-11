@@ -43,6 +43,142 @@ def valid_financial_envelope():
 
 
 class SolAuditRemediationTests(unittest.TestCase):
+    def test_host_binding_mismatched_website_url_cannot_verify_candidate_host(self):
+        """Reproduces Sol host-binding finding through the production research path."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        candidate = "https://rival.no/profiles/acme"
+        graph = {"@type": "WebSite", "url": "https://acme.no/", "publisher": {
+            "@type": "Organization", "legalName": name, "name": name, "identifier": org}}
+        body = ("<html><head><title>Rival Group AS</title><script type='application/ld+json'>"
+            + json.dumps(graph) + "</script></head><body><header>Rival Group AS</header>"
+            "<main><h1>Rival profiles</h1><p>Company information</p></main></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": candidate, "source": "registry_live"}]},
+            FakeGateway({candidate: (200, {"Content-Type": "text/html"}, body)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+            for claim in result.claims))
+
+    def test_host_binding_article_contact_card_is_not_operator_identity(self):
+        """Reproduces a third-party article's target contact card as non-ownership data."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Nordlys Teknologi AS", "912345678"
+        candidate = "https://rival.no/profiles/nordlys"
+        article = {"@type": "NewsArticle", "headline": "Rival's customer profile",
+            "url": candidate}
+        body = ("<html><head><title>Rival Journal</title><script type='application/ld+json'>"
+            + json.dumps(article) + "</script></head><body><header>Rival Journal</header>"
+            "<main class='content-column'><h1>Company profile</h1><div class='contact'>"
+            f"<strong>{name}</strong><address>Storgata 4, 5003 Bergen</address>"
+            "</div></main></body></html>").encode()
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "registered_address": {"adresse": ["Storgata 4"], "postnummer": "5003", "poststed": "Bergen"},
+            "website_candidates": [{"raw": candidate, "source": "registry_live"}]},
+            FakeGateway({candidate: (200, {"Content-Type": "text/html"}, body)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+            for claim in result.claims))
+
+    def test_host_binding_safe_cross_host_redirect_cannot_rebind_registry_candidate(self):
+        """A redirect is fetched safely but does not transfer candidate ownership."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        candidate, destination = "https://rival.no/redirect", "https://acme.no/"
+        name, org = "Acme AS", "923609016"
+        body = (f'<html><head><title>{name}</title><script type="application/ld+json">'
+            + json.dumps({"@type": "Organization", "legalName": name, "identifier": org})
+            + '</script></head><body><h1>Acme AS</h1></body></html>').encode()
+        class RedirectGateway(FakeGateway):
+            async def fetch(self, url, *, purpose, user_agent, max_bytes, allowed_hosts):
+                self.requested.append(url)
+                self.ledger.logical_requests += 1
+                self.ledger.physical_requests += 1
+                return 200, {"Content-Type": "text/html"}, body[:max_bytes], destination, "received"
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": candidate, "source": "registry_live"}]},
+            RedirectGateway({}), enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+            for claim in result.claims))
+        self.assertEqual(result.audit["candidates"][0]["review_reason"], "candidate_host_mismatch")
+
+    def test_host_binding_off_host_deep_redirect_cannot_supply_site_facts(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        root = "https://acme.no/"
+        about = "https://acme.no/about"
+        home = ("<html><head><title>Acme AS</title><script type='application/ld+json'>"
+            + json.dumps({"@type": "WebSite", "url": root, "publisher": {
+                "@type": "Organization", "legalName": name, "identifier": org}})
+            + "</script></head><body><header>Acme AS</header><h1>Acme AS</h1>"
+            "<a href='/about'>About</a></body></html>").encode()
+        off_host_page = ("<html><head><title>Rival Group AS</title><meta name='description' content="
+            "'A long rival-only description that must not be attributed to Acme AS.'></head>"
+            "<body><header>Rival Group AS</header><h1>Rival services</h1></body></html>").encode()
+        class RedirectingGateway(FakeGateway):
+            async def fetch(self, url, *, purpose, user_agent, max_bytes, allowed_hosts):
+                status, headers, body, _final_url, outcome = await super().fetch(url, purpose=purpose,
+                    user_agent=user_agent, max_bytes=max_bytes, allowed_hosts=allowed_hosts)
+                final_url = "https://rival.no/about" if url == about else url
+                return status, headers, body, final_url, outcome
+        result = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": root, "source": "registry_live"}]},
+            RedirectingGateway({root: (200, {"Content-Type": "text/html"}, home),
+                about: (200, {"Content-Type": "text/html"}, off_host_page)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertTrue(any(claim.field == "verified_website_domain" for claim in result.claims))
+        self.assertFalse(any(claim.field == "website_description" and "rival-only" in str(claim.value).casefold()
+            for claim in result.claims))
+        self.assertFalse(any(item.source_url == "https://rival.no/about" for item in result.snapshots))
+
+    def test_host_binding_unrelated_jsonld_and_record_order_cannot_upgrade_unverified_host(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        candidate = "https://rival.no/profiles/acme"
+        unrelated = {"@type": "Organization", "legalName": "Other Company AS", "identifier": "987654321"}
+        detached_site = {"@type": "WebSite", "url": "https://acme.no/", "publisher": {
+            "@type": "Organization", "legalName": name, "name": name, "identifier": org}}
+        for graph in ([detached_site], [unrelated, detached_site], [detached_site, unrelated]):
+            body = ("<html><head><title>Rival Group AS</title><script type='application/ld+json'>"
+                + json.dumps(graph) + "</script></head><body><header>Rival Group AS</header>"
+                "<main><h1>Rival profiles</h1><p>Company information</p></main></body></html>").encode()
+            result = asyncio.run(research_company({"organisation_number": org, "name": name,
+                "website_candidates": [{"raw": candidate, "source": "registry_live"}]},
+                FakeGateway({candidate: (200, {"Content-Type": "text/html"}, body)}),
+                enable_keyless=False, evidence_cutoff=CUTOFF))
+            self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+                for claim in result.claims))
+
+    def test_host_binding_site_brand_conflict_rejects_and_host_bound_publisher_accepts(self):
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        name, org = "Acme AS", "923609016"
+        candidate = "https://acme.no/"
+        website = {"@type": "WebSite", "url": candidate, "publisher": {
+            "@type": "Organization", "legalName": name, "name": name, "identifier": org}}
+        rival_body = ("<html><head><title>Acme</title><script type='application/ld+json'>"
+            + json.dumps(website) + "</script></head><body><header><strong>Rival Group AS</strong></header>"
+            "<main><h1>Welcome</h1></main></body></html>").encode()
+        rival = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": candidate, "source": "registry_live"}]},
+            FakeGateway({candidate: (200, {"Content-Type": "text/html"}, rival_body)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+            for claim in rival.claims))
+
+        owned_body = ("<html><head><title>Acme</title><script type='application/ld+json'>"
+            + json.dumps(website) + "</script></head><body><header><strong>Acme AS</strong></header>"
+            "<main><h1>Welcome</h1></main></body></html>").encode()
+        owned = asyncio.run(research_company({"organisation_number": org, "name": name,
+            "website_candidates": [{"raw": candidate, "source": "registry_live"}]},
+            FakeGateway({candidate: (200, {"Content-Type": "text/html"}, owned_body)}),
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertTrue(any(claim.field == "verified_website_domain" for claim in owned.claims))
+
     def test_final_sol_about_block_and_repeated_address_do_not_prove_rival_site_operator(self):
         """Reproduces Sol finding: target identity is confined to an article about block."""
         import asyncio

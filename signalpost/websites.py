@@ -239,6 +239,7 @@ class PageRecord:
     rights_status: str = "unknown_not_reviewed"
     footer_blocks: list[str] = field(default_factory=list)
     operator_identity_blocks: list[str] = field(default_factory=list)
+    site_brand_blocks: list[str] = field(default_factory=list)
     article_document: bool | None = None
 
 
@@ -291,6 +292,18 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
         text_block = " ".join(node.get_text(" ", strip=True).split())[:3000]
         if text_block and text_block not in operator_identity_blocks:
             operator_identity_blocks.append(text_block)
+    site_brand_blocks: list[str] = []
+    brand_nodes = list(soup.find_all(["header", "nav"])) + list(soup.select(
+        'meta[property="og:site_name"][content], [class~="logo"], [id*="logo" i]'))
+    for node in brand_nodes:
+        if node.find_parent(["article", "footer"]):
+            continue
+        text_block = str(node.get("content") or node.get("alt") or "").strip()
+        if not text_block:
+            text_block = " ".join(node.get_text(" ", strip=True).split())
+        text_block = text_block[:1000]
+        if text_block and text_block not in site_brand_blocks:
+            site_brand_blocks.append(text_block)
     article_document = bool(soup.select_one("article, [itemprop='articleBody'], [itemtype*='Article'], .article, .news-article, .blog-post"))
     article_document = article_document or _contains_schema_type(jsonld, {"article", "newsarticle", "blogposting", "blog"})
     links: list[dict[str, str]] = []
@@ -319,6 +332,7 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
                       structured if isinstance(structured, dict) else {}, schemas, canonical, directives, soft_error)
     page.footer_blocks = footer_blocks
     page.operator_identity_blocks = operator_identity_blocks
+    page.site_brand_blocks = site_brand_blocks
     page.article_document = article_document
     return page
 
@@ -529,6 +543,27 @@ def _schema_entity_is_site_root(node: dict[str, Any], page: PageRecord) -> bool:
     return False
 
 
+def _normalized_site_host(url: str) -> str:
+    """Normalize only the common www alias; other subdomains remain distinct."""
+    return (urllib.parse.urlsplit(url).hostname or "").casefold().rstrip(".").removeprefix("www.")
+
+
+def _website_record_binds_response_host(node: dict[str, Any], page: PageRecord) -> bool:
+    """A WebSite object is relevant only when its canonical root is this response host."""
+    value = node.get("url") or node.get("@id")
+    values = value if isinstance(value, list) else [value]
+    response_host = _normalized_site_host(page.final_url)
+    for raw in values:
+        if not isinstance(raw, str):
+            continue
+        parsed = urllib.parse.urlsplit(urllib.parse.urljoin(page.final_url, raw))
+        if (parsed.scheme not in {"http", "https"} or _normalized_site_host(parsed.geturl()) != response_host
+                or parsed.query or (parsed.path or "/").rstrip("/") not in {"", "/"}):
+            continue
+        return True
+    return False
+
+
 def _operator_blocks(page: PageRecord) -> list[str]:
     """Identity-bearing contact/legal blocks, excluding article, about, and footer content."""
     if page.operator_identity_blocks:
@@ -545,6 +580,24 @@ def _operator_blocks(page: PageRecord) -> list[str]:
         if text and text not in blocks:
             blocks.append(text)
     return blocks
+
+
+def _site_brand_blocks(page: PageRecord) -> list[str]:
+    if page.site_brand_blocks:
+        return page.site_brand_blocks
+    soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
+    nodes = list(soup.find_all(["header", "nav"])) + list(soup.select(
+        'meta[property="og:site_name"][content], [class~="logo"], [id*="logo" i]'))
+    result: list[str] = []
+    for node in nodes:
+        if node.find_parent(["article", "footer"]):
+            continue
+        text = str(node.get("content") or node.get("alt") or "").strip()
+        if not text:
+            text = " ".join(node.get_text(" ", strip=True).split())
+        if text and text not in result:
+            result.append(text[:1000])
+    return result
 
 
 def _is_article_document(page: PageRecord) -> bool:
@@ -575,7 +628,8 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
     article_nodes = _typed_schema_nodes(jsonld, {"article", "newsarticle", "blogposting"})
     webpage_nodes = _typed_schema_nodes(jsonld, {"webpage"})
 
-    website_publishers = [node for website in website_nodes
+    bound_website_nodes = [website for website in website_nodes if _website_record_binds_response_host(website, page)]
+    website_publishers = [node for website in bound_website_nodes
         for node, _path in _walk_schema_subjects(website.get("publisher"))]
     article_publishers = [node for article in article_nodes
         for node, _path in _walk_schema_subjects(article.get("publisher"))]
@@ -650,7 +704,10 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
                             "operator_name": _as_text(entity.get("legalName") or entity.get("name")),
                             "operator_organisation_number": org, "page_only": True}
 
-    blocks = [] if non_owner_mention else _operator_blocks(page)
+    # A contact card in an Article is evidence about the article subject, not
+    # the operator of the host. Article pages need independent site-level
+    # publisher/operator evidence; visible article content cannot supply it.
+    blocks = [] if non_owner_mention or article_document else _operator_blocks(page)
     registered_roles = [str(value) for value in profile.get("registered_roles", []) if value]
     has_contact_endpoint = bool(re.search(rb"(?i)(?:mailto:|tel:)", page.body))
     for block in blocks:
@@ -683,7 +740,7 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
 
 
 def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, shared_domain: bool = False,
-                      candidate_source: str = "registry_live") -> dict[str, Any]:
+                      candidate_source: str = "registry_live", candidate_url: str | None = None) -> dict[str, Any]:
     """Apply the audited exact-site table; name-only and self-derived brand never pass."""
     org = str(profile.get("organisation_number") or "")
     legal_names = [str(profile.get("name") or ""), *[str(item.get("name") or "") for item in profile.get("historical_names", []) if isinstance(item, dict)]]
@@ -691,7 +748,10 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
     registered = {org}
     related = {str(item) for item in profile.get("related_organisation_numbers", []) if str(item).isdigit()}
     identity_pages: list[dict[str, Any]] = []
+    candidate_host = _normalized_site_host(candidate_url) if candidate_url else None
     for page in pages:
+        if candidate_host and _normalized_site_host(page.final_url) != candidate_host:
+            continue
         ownership = _site_ownership_evidence(profile, page, candidate_source=candidate_source,
             shared_domain=shared_domain)
         if ownership is None:
@@ -772,7 +832,7 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             and not any(_same_legal_name(expected, _as_text(node.get("legalName") or node.get("name"))) for expected in legal_names)
             and org not in (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID")) + _identifier_values(node.get("vatID")))]
         legal_form_marker = re.compile(r"(?i)\b(?:AS|ASA|NUF|ENK|DA|ANS|BA)\b")
-        visible_identity_blocks = [page.title, *page.headings, *page.identity_blocks]
+        visible_identity_blocks = [page.title, *page.headings, *page.identity_blocks, *_site_brand_blocks(page)]
         conflicting_visible_identity = any(legal_form_marker.search(block)
             and not _exact_name(legal_names, block) for block in visible_identity_blocks if block)
         if target_context and conflicting_visible_identity:
@@ -810,6 +870,8 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
             "name": ownership["operator_name"], "address": ownership.get("address_match"),
             "subject_ids": sorted(set(subject_ids)), "ownership": ownership})
     if not identity_pages:
+        if candidate_host and any(_normalized_site_host(page.final_url) != candidate_host for page in pages):
+            return {"decision": "ambiguous", "reason": "candidate_host_mismatch", "proof": None, "target_page": None}
         # Distinguish a conflicting site identity from a merely weak/no-name candidate.
         for page in pages:
             if page.soft_error:
@@ -1357,7 +1419,8 @@ def _additional_evidence_snapshot_ids(evidence: list[Evidence], evidence_ids: li
 def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidate: dict[str, Any],
                       *, shared_domain: bool) -> dict[str, Any]:
     assessment = verify_site_pages(profile, pages, shared_domain=shared_domain,
-                                   candidate_source=str(candidate.get("source") or "registry_live"))
+                                   candidate_source=str(candidate.get("source") or "registry_live"),
+                                   candidate_url=str(candidate.get("url") or "") or None)
     if candidate.get("source") == "search_provider":
         proof_page = assessment.get("proof_page") or (pages[0] if pages else None)
         if proof_page is None:
@@ -1441,6 +1504,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             url = candidate["url"]
             parsed = urllib.parse.urlsplit(url)
             host = parsed.hostname or ""
+            candidate_host_key = _normalized_site_host(url)
             root_domain = registered_domain(host) or host
             configured_values = [(rights_decisions or {}).get(host), (rights_decisions or {}).get(root_domain)]
             configured_rights = next((value for value in configured_values if value is not None), None)
@@ -1566,6 +1630,13 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 if page.soft_error:
                     candidate_row["decision"] = "rejected_" + page.soft_error
                     break
+                if _normalized_site_host(page.final_url) != candidate_host_key:
+                    candidate_row.setdefault("host_mismatch_pages", []).append({
+                        "requested_url": normalized, "final_url": page.final_url, "content_sha256": page.digest})
+                    candidate_row["final_url"] = page.final_url
+                    candidate_row["content_sha256"] = page.digest
+                    candidate_row["http_status"] = status
+                    continue
                 if page.digest in seen_hashes:
                     candidate_row["decision"] = "duplicate_page"
                     continue
@@ -1596,6 +1667,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 if len(pages) >= MAX_INITIAL_PAGES or website_page_requests >= MAX_DEFAULT_PAGES or page_limit >= MAX_ABSOLUTE_PAGES:
                     break
             assessment = _assess_candidate(profile, pages, candidate, shared_domain=shared)
+            if not pages and candidate_row.get("host_mismatch_pages"):
+                assessment = {"decision": "ambiguous", "reason": "candidate_host_mismatch",
+                    "proof": None, "proof_page": None, "target_page": None}
             candidate_row["decision"] = assessment["decision"] if candidate_row["decision"] == "candidate" else candidate_row["decision"]
             if assessment["decision"] == "accepted":
                 candidate_row["proof"] = assessment["proof"]
@@ -1805,6 +1879,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 page_total_bytes += len(body)
                 page_limit += 1
                 output.audit["page_requests"] += 1
+                if _normalized_site_host(final_url) != _normalized_site_host(candidate["url"]):
+                    output.audit["request_outcomes"]["off_host_sitemap_redirect"] = output.audit["request_outcomes"].get("off_host_sitemap_redirect", 0) + 1
+                    continue
                 if status != 200 or len(body) > 256 * 1024:
                     continue
                 urls, indexes = _parse_sitemap(body)
@@ -1829,6 +1906,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 page_total_bytes += len(body)
                 page_limit += 1
                 output.audit["page_requests"] += 1
+                if _normalized_site_host(final_url) != _normalized_site_host(candidate["url"]):
+                    output.audit["request_outcomes"]["off_host_feed_redirect"] = output.audit["request_outcomes"].get("off_host_feed_redirect", 0) + 1
+                    continue
                 if status == 200 and len(body) <= 256 * 1024:
                     parsed_entries = _parse_feed(body)
                     feed_page = PageRecord(requested_url=feed_url, final_url=final_url, status=status,
@@ -1863,6 +1943,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     continue
                 page_total_bytes += len(body)
                 page = _parse_page(page_url, status, headers, body, final_url)
+                if page and _normalized_site_host(page.final_url) != _normalized_site_host(candidate["url"]):
+                    output.audit["request_outcomes"]["off_host_website_page_redirect"] = output.audit["request_outcomes"].get("off_host_website_page_redirect", 0) + 1
+                    continue
                 if page and not page.soft_error and page.digest not in {existing.digest for existing in pages}:
                     pages.append(page)
                     output.audit["page_count"] += 1
@@ -1872,7 +1955,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     proof_evidence = f"website-proof-evidence:{proof_digest[:16]}"
                     proof_source = f"website-proof:{proof_digest[:16]}"
                     deep_page_verified = (not assessment["proof"].get("shared_domain") or
-                        verify_site_pages(profile, [page], shared_domain=True, candidate_source=candidate["source"])["decision"] == "accepted")
+                        verify_site_pages(profile, [page], shared_domain=True, candidate_source=candidate["source"],
+                            candidate_url=candidate["url"])["decision"] == "accepted")
                     if deep_page_verified and page.description and len(page.description.strip()) >= 30 and not re.search(
                         r"(?i)\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|(?<!\d)(?:\+47\s?)?\d{8}(?!\d)|(?<!\d)\d{11}(?!\d)", page.description):
                         eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=page.description, locator="/html/head/meta[name=description]/@content")
@@ -1916,6 +2000,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     page_limit += 1
                     output.audit["page_requests"] += 1
                     observed_feed_urls.add(feed_url)
+                    if _normalized_site_host(final_url) != _normalized_site_host(candidate["url"]):
+                        output.audit["request_outcomes"]["off_host_feed_redirect"] = output.audit["request_outcomes"].get("off_host_feed_redirect", 0) + 1
+                        continue
                     if status == 200 and len(body) <= 256 * 1024:
                         feed_page = PageRecord(requested_url=feed_url, final_url=final_url, status=status,
                             content_type=next((v for k, v in headers.items() if k.casefold() == "content-type"), "application/xml"),

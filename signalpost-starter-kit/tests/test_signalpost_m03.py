@@ -280,6 +280,43 @@ class WebsiteIdentityTests(unittest.TestCase):
             self.assertFalse(any(snapshot["rights_status"] == "NLOD-2.0" and snapshot["source_url"] == "https://registry.example/snapshot"
                 for snapshot in envelope["source_snapshots"]))
 
+    def test_cli_final_evaluator_withholds_host_mismatch_and_article_contact_card(self):
+        cases = [
+            ("923609016", "Acme AS", "https://rival.no/profiles/acme",
+             {"@type": "WebSite", "url": "https://acme.no/", "publisher": {
+                 "@type": "Organization", "legalName": "Acme AS", "identifier": "923609016"}},
+             "<header>Rival Group AS</header><h1>Rival profiles</h1>"),
+            ("912345678", "Nordlys Teknologi AS", "https://rival.no/profiles/nordlys",
+             {"@type": "NewsArticle", "headline": "Rival profile", "url": "https://rival.no/profiles/nordlys"},
+             "<header>Rival Journal</header><main class='content-column'><h1>Company profile</h1>"
+             "<div class='contact'><strong>Nordlys Teknologi AS</strong>"
+             "<address>Storgata 4, 5003 Bergen</address></div></main>"),
+        ]
+        for org, name, website, schema, body_content in cases:
+            with self.subTest(website=website):
+                html = ("<html><head><title>Rival Journal</title><script type='application/ld+json'>"
+                    + json.dumps(schema) + "</script></head><body>" + body_content + "</body></html>").encode()
+                gateway = FakeGateway({website: (200, {"Content-Type": "text/html"}, html)})
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    input_path, snapshot_path = root / "input.jsonl", root / "registry.jsonl"
+                    output_path, state_path = root / "output.jsonl", root / "state.sqlite"
+                    input_path.write_text(json.dumps({"organisation_number": org}) + "\n", encoding="utf-8")
+                    snapshot_path.write_text(json.dumps({"organisation_number": org, "name": name,
+                        "website": website, "registered_address": {"adresse": ["Storgata 4"],
+                        "postnummer": "5003", "poststed": "Bergen"},
+                        "source_url": "https://registry.example/snapshot"}) + "\n", encoding="utf-8")
+                    with patch.object(run_module, "NetworkGateway", return_value=gateway):
+                        code = run_module.main(["--input", str(input_path), "--registry-snapshot", str(snapshot_path),
+                            "--live-websites", "--output", str(output_path), "--state-output", str(state_path),
+                            "--batch-id", "host-binding-fixture"])
+                    envelope = json.loads(output_path.read_text(encoding="utf-8").splitlines()[0])
+                    self.assertEqual(code, 0)
+                    self.assertEqual(envelope["organisation_number"], org)
+                    self.assertFalse(any(claim["field"] in {"verified_website_url", "verified_website_domain"}
+                        for claim in envelope["claims"]))
+                    self.assertEqual(set(envelope["synthesis"]), {"schema_version", "summary"})
+
     def test_wrong_company_integration_emits_no_publication(self):
         html = b'<html><head><title>Other Company AS</title><script type="application/ld+json">{"@type":"Organization","name":"Other Company AS","identifier":"987654321"}</script></head></html>'
         gateway = FakeGateway({"https://example.no/": (200, {"Content-Type": "text/html"}, html)})
