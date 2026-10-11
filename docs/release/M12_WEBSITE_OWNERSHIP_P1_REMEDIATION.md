@@ -138,3 +138,62 @@ scale/provenance, clean-CWD launcher, and UX smoke steps all passed.
 This report update is documentation-only and will be included in the final
 push/CI checkpoint. The source implementation SHA above remains the tested
 code revision.
+
+## Final proof-contract correction
+
+The follow-up began at `6541eb26234a579c7f3eb56cc7c5083c9bf00148`. The
+concise proof contract is recorded separately in
+`M12_WEBSITE_OWNERSHIP_PROOF_CONTRACT.md`, grounded in audited plan sections
+8.3–8.6. The existing acceptance and publication path was traced through
+`_site_ownership_evidence`, `verify_site_pages`, `_assess_candidate`, and the
+single accepted-candidate writer in `research_company`, followed by
+`validate_publication_graph`/`to_evaluator`.
+
+At the follow-up starting SHA, all three new negative cases reproduced as
+verified URL/domain publications in the final evaluator payload:
+
+1. A response on `rival.no` used a host-bound `WebSite` record whose target
+   publisher Organization URL pointed to `acme.no`, while the visible site
+   brand identified Rival Group AS.
+2. A `/profiles/acme` response used Acme's exact legal name and registered
+   address in a contact card inside ordinary `<main>` content.
+3. A shared-domain `WebPage` for `/brands/other` borrowed Acme's publisher
+   from a different `WebPage` record for `/brands/acme`.
+
+The correction keeps each structured record's publisher bound to that record
+and its fetched resource; an explicit publisher Organization URL on a
+different host is contradictory; legal site-shell identity conflicts are
+considered on every page type; and main-body identity on a profile route is
+page-subject evidence. For article documents, a legal/contact identity in the
+site header or navigation remains usable as operator evidence, while article
+body contact cards stay excluded. Shared-domain proof remains page-only.
+
+The header-only, non-JSON-LD customer-story positive fixture was replayed
+against both historical source trees: `ac2f6fa874191c2d2b36a32dce2808ff5682f65f`
+published verified URL and domain claims, while
+`6541eb26234a579c7f3eb56cc7c5083c9bf00148` published neither. The current
+implementation again publishes both claims from the independent legal
+operator header. Existing non-JSON-LD legal/contact, owned customer-story,
+shared subsidiary-page, and final-adapter fixtures remain covered.
+
+The new and existing production-path tests exercise both URL and domain
+claims through final evaluator validation. Record-order and equivalent DOM
+layout variants preserve the negative outcomes when unrelated or contradictory
+records are added. The complete suite passed: 420 tests and 130 subtests.
+Focused ownership/M03–M05 tests passed: 133 tests and 84 subtests. The M09
+live-shape tests passed within the full suite. M07 replay passed on 12 rows
+(6 true positives, 0 false positives, 0 false negatives; complete provenance
+and idempotent event IDs); M08 gold passed on 4 companies (find/compare/verify
+1.0, unsupported assertions 0, citation completeness 1.0). M06 scale and
+provenance verification passed. M09 crash/resume passed at 25/50/90 durable
+envelopes, each restoring 100 ordered rows with semantic match. Clean-CWD
+launch passed with 4 rows and 0 HTTP requests; local M08 UX/XSS smoke passed.
+No live cohort or external source acquisition occurred.
+
+The remediation changes only website ownership resolution and its
+regressions. Financial safeguards, roles/workplaces, job/activity boundaries,
+the closed synthesis schema, and release-bundle portability were not changed.
+Historical live evidence remains unchanged; competition submission remains
+HOLD. Exact implementation commit and GitHub Actions evidence will be
+recorded after the source commit's exact-SHA CI result is known; the final
+documentation commit will then receive its own exact-SHA CI verification.

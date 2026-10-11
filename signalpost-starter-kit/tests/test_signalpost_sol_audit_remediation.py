@@ -43,6 +43,127 @@ def valid_financial_envelope():
 
 
 class SolAuditRemediationTests(unittest.TestCase):
+    def _research_and_serialize_website_case(self, profile, url, html, *, shared_domains=None):
+        """Run website research and the real final evaluator graph validator."""
+        import asyncio
+        from test_signalpost_m05 import FakeGateway, CUTOFF
+        from signalpost.models import validate_publication_graph
+        result = asyncio.run(research_company(profile, FakeGateway({url: (
+            200, {"Content-Type": "text/html"}, html.encode("utf-8"))}),
+            shared_domains=shared_domains or set(), enable_keyless=False, evidence_cutoff=CUTOFF))
+        base = valid_envelope()
+        sections = {key: value.model_copy(deep=True) for key, value in base.sections.items()}
+        sections["website_owned_profiles"].claims.extend(result.claims)
+        sections["claims_evidence_states"].claims.extend(result.claims)
+        envelope = base.model_copy(update={"sections": sections,
+            "claims": [*base.claims, *result.claims],
+            "evidence": [*base.evidence, *result.evidence],
+            "source_snapshots": [*base.source_snapshots, *result.snapshots]})
+        payload = to_evaluator(validate_publication_graph(envelope))
+        return result, payload
+
+    def test_final_sol_three_host_subject_and_record_binding_reproductions(self):
+        """The serialized result must not treat target metadata as rival-site ownership."""
+        name, org = "Acme AS", "923609016"
+        address = {"postnummer": "0150", "poststed": "Oslo"}
+        cases = [
+            ("site publisher has unrelated Organization URL", "https://rival.no/news/acme", set(),
+             '<header>Rival Group AS</header><main><h1>Acme customer story</h1><p>Acme AS is a customer.</p></main>',
+             [{"@type": "WebSite", "url": "https://rival.no/", "publisher": {"@type": "Organization",
+               "legalName": name, "identifier": org, "url": "https://acme.no/"}}]),
+            ("ordinary profile contact card", "https://rival.no/profiles/acme", set(),
+             '<header>Rival Journal</header><main><h1>Acme AS company profile</h1><div class="contact">'
+             '<strong>Acme AS</strong><address>0150 Oslo</address></div></main>', []),
+            ("unrelated WebPage publisher", "https://group.no/brands/other", {"group.no"},
+             '<header>Group AS</header><main><h1>Other brand</h1></main>', [
+                 {"@type": "WebPage", "url": "https://group.no/brands/other", "publisher": {
+                   "@type": "Organization", "legalName": "Group AS", "identifier": "987654321"}},
+                 {"@type": "WebPage", "url": "https://group.no/brands/acme", "publisher": {
+                   "@type": "Organization", "legalName": name, "identifier": org}}]),
+            ("unrelated WebPage publisher reversed", "https://group.no/brands/other", {"group.no"},
+             '<header>Group AS</header><main><h1>Other brand</h1></main>', [
+                 {"@type": "WebPage", "url": "https://group.no/brands/acme", "publisher": {
+                   "@type": "Organization", "legalName": name, "identifier": org}},
+                 {"@type": "WebPage", "url": "https://group.no/brands/other", "publisher": {
+                   "@type": "Organization", "legalName": "Group AS", "identifier": "987654321"}}]),
+        ]
+        profile = {"organisation_number": org, "name": name, "registered_address": address}
+        for label, url, shared, visible, records in cases:
+            schema = ("<script type='application/ld+json'>" + json.dumps(records) + "</script>" if records else "")
+            html = f"<html><head>{schema}</head><body>{visible}</body></html>"
+            with self.subTest(case=label):
+                result, payload = self._research_and_serialize_website_case(
+                    {**profile, "website_candidates": [{"raw": url, "source": "registry_live"}]},
+                    url, html, shared_domains=shared)
+                claims = [claim for claim in payload["claims"] if claim["field"] in {
+                    "verified_website_url", "verified_website_domain"}]
+                self.assertEqual(claims, [], f"unsafe website claims from {label}: {claims}")
+                self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+                    for claim in result.claims))
+
+    def test_final_sol_host_bound_customer_story_with_legal_operator_remains_accepted(self):
+        """A target-operated site may publish its own customer stories."""
+        name, org = "Acme AS", "923609016"
+        url = "https://acme.no/stories/customer"
+        graph = {"@type": "WebSite", "url": "https://acme.no/", "publisher": {
+            "@type": "Organization", "legalName": name, "identifier": org, "url": "https://acme.no/"}}
+        html = ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+            + "</script></head><body><header><address>Acme AS, 0150 Oslo</address></header>"
+            "<article><h1>Customer story</h1><p>Our customer uses our products.</p></article></body></html>")
+        result, payload = self._research_and_serialize_website_case(
+            {"organisation_number": org, "name": name,
+             "website_candidates": [{"raw": url, "source": "registry_live"}]}, url, html)
+        self.assertTrue(any(claim["field"] == "verified_website_url" for claim in payload["claims"]))
+        self.assertTrue(any(claim["field"] == "verified_website_domain" for claim in payload["claims"]))
+        self.assertTrue(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_customer_story_page_accepts_separate_target_operator_header_without_jsonld(self):
+        """A site's independent legal header remains operator proof on its own article page."""
+        name, org = "Acme AS", "923609016"
+        url = "https://acme.no/stories/customer"
+        html = ("<html><head><title>Customer story</title></head><body>"
+            "<header><div class='legal'><address>Acme AS, Storgata 8, 0150 Oslo</address></div></header>"
+            "<article><h1>Customer story</h1><p>Our customer uses our products.</p></article>"
+            "</body></html>")
+        result, payload = self._research_and_serialize_website_case(
+            {"organisation_number": org, "name": name,
+             "registered_address": {"adresse": ["Storgata 8"], "postnummer": "0150", "poststed": "Oslo"},
+             "website_candidates": [{"raw": url, "source": "registry_live"}]}, url, html)
+        self.assertTrue(any(claim["field"] == "verified_website_url" for claim in payload["claims"]))
+        self.assertTrue(any(claim["field"] == "verified_website_domain" for claim in payload["claims"]))
+        self.assertTrue(any(claim.field == "verified_website_domain" for claim in result.claims))
+
+    def test_ownership_proof_is_invariant_to_unrelated_schema_order_and_profile_dom_layout(self):
+        """Unrelated metadata and equivalent profile layouts cannot manufacture ownership."""
+        name, org = "Acme AS", "923609016"
+        url = "https://rival.no/profiles/acme"
+        website = {"@type": "WebSite", "url": "https://rival.no/", "publisher": {
+            "@type": "Organization", "legalName": name, "identifier": org,
+            "url": "https://acme.no/"}}
+        unrelated = {"@type": "Organization", "legalName": name, "identifier": org,
+            "url": "https://rival.no/", "about": {"@type": "Thing", "name": "customer profile"}}
+        rival = {"@type": "Organization", "legalName": "Rival Group AS", "identifier": "987654321",
+            "url": "https://rival.no/"}
+        layouts = [
+            '<header>Rival Journal</header><main><h1>Acme AS company profile</h1><div class="contact">'
+            '<strong>Acme AS</strong><address>Storgata 8, 0150 Oslo</address></div></main>',
+            '<nav><span>Rival Journal</span></nav><main><section><h1>Acme AS company profile</h1>'
+            '<address>Acme AS, Storgata 8, 0150 Oslo</address></section></main>',
+            '<header>Rival Journal</header><main><div class="contact"><strong>Acme AS</strong>'
+            '<address>Storgata 8, 0150 Oslo</address></div></main>',
+        ]
+        profile = {"organisation_number": org, "name": name,
+            "registered_address": {"adresse": ["Storgata 8"], "postnummer": "0150", "poststed": "Oslo"},
+            "website_candidates": [{"raw": url, "source": "registry_live"}]}
+        for index, layout in enumerate(layouts):
+            for records in ([website, rival, unrelated], [unrelated, website, rival], [rival, unrelated, website]):
+                html = ("<html><head><script type='application/ld+json'>" + json.dumps(records)
+                    + "</script></head><body>" + layout + "</body></html>")
+                with self.subTest(layout=index, records=[node["@type"] for node in records]):
+                    _result, payload = self._research_and_serialize_website_case(profile, url, html)
+                    self.assertFalse(any(claim["field"] in {
+                        "verified_website_url", "verified_website_domain"} for claim in payload["claims"]))
+
     def test_host_binding_mismatched_website_url_cannot_verify_candidate_host(self):
         """Reproduces Sol host-binding finding through the production research path."""
         import asyncio

@@ -564,16 +564,49 @@ def _website_record_binds_response_host(node: dict[str, Any], page: PageRecord) 
     return False
 
 
-def _operator_blocks(page: PageRecord) -> list[str]:
+def _explicit_schema_url_host_conflicts(node: dict[str, Any], page: PageRecord) -> bool:
+    """An explicit Organization URL/ID cannot contradict its containing resource host."""
+    values = node.get("url") or node.get("@id")
+    values = values if isinstance(values, list) else [values]
+    expected = _normalized_site_host(page.final_url)
+    for raw in values:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        parsed = urllib.parse.urlsplit(urllib.parse.urljoin(page.final_url, raw))
+        if parsed.scheme in {"http", "https"} and parsed.hostname and _normalized_site_host(parsed.geturl()) != expected:
+            return True
+    return False
+
+
+def _site_brand_conflicts_with_target(profile: dict[str, Any], page: PageRecord) -> bool:
+    """Treat an explicitly different legal site brand as operator conflict on every path."""
+    names = [str(profile.get("name") or ""), *[
+        str(item.get("name") or "") for item in profile.get("historical_names", []) if isinstance(item, dict)]]
+    legal_form = re.compile(r"(?i)\b(?:AS|ASA|NUF|ENK|DA|ANS|BA)\b")
+    return any(legal_form.search(block) and not _exact_name(names, block)
+        for block in _site_brand_blocks(page) if block)
+
+
+def _target_is_profile_subject(profile: dict[str, Any], page: PageRecord) -> bool:
+    """Identify target-specific profile pages whose body identity describes the subject."""
+    path = urllib.parse.urlsplit(page.final_url).path.casefold()
+    # On a profile route the main body describes the profiled entity; it cannot
+    # identify the host operator even when the body happens to omit a heading.
+    return bool(re.search(r"(?:^|/)profiles?(?:/|$)", path))
+
+
+def _operator_blocks(page: PageRecord, *, exclude_main: bool = False, site_shell_only: bool = False) -> list[str]:
     """Identity-bearing contact/legal blocks, excluding article, about, and footer content."""
-    if page.operator_identity_blocks:
+    if page.operator_identity_blocks and not exclude_main and not site_shell_only:
         return page.operator_identity_blocks
     soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
     blocks: list[str] = []
     selectors = "address, [itemprop='legalName'], [itemprop='address'], [itemprop='identifier'], .legal, #legal, .contact, #contact"
     excluded_classes = re.compile(r"(?i)(?:^|[-_ ])(?:about|article|story|case-study|blog-post)(?:$|[-_ ])")
     for node in soup.select(selectors):
-        if (node.find_parent(["article", "footer"]) or node.find_parent(class_=excluded_classes)
+        if (node.find_parent(["article", "footer"]) or (exclude_main and node.find_parent("main"))
+                or (site_shell_only and not node.find_parent(["header", "nav"]))
+                or node.find_parent(class_=excluded_classes)
                 or node.find_parent(id=re.compile(r"(?i)^(?:about|article|story|case-study|blog-post)$"))):
             continue
         text = " ".join(node.get_text(" ", strip=True).split())[:3000]
@@ -615,6 +648,10 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
     """Resolve who operates the site and who a page represents as separate subjects."""
     if page.soft_error:
         return None
+    # Site identity conflict is independent of which page supplied the proof;
+    # a path-specific Organization record cannot overrule the visible operator.
+    if _site_brand_conflicts_with_target(profile, page):
+        return None
     jsonld = page.structured.get("json-ld", []) if isinstance(page.structured, dict) else []
     article_document = _is_article_document(page)
     org = str(profile.get("organisation_number") or "")
@@ -629,17 +666,23 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
     webpage_nodes = _typed_schema_nodes(jsonld, {"webpage"})
 
     bound_website_nodes = [website for website in website_nodes if _website_record_binds_response_host(website, page)]
-    website_publishers = [node for website in bound_website_nodes
-        for node, _path in _walk_schema_subjects(website.get("publisher"))]
+    website_publishers_by_record = [(website, [node for node, _path in
+        _walk_schema_subjects(website.get("publisher"))]) for website in bound_website_nodes]
+    website_publishers = [node for _website, publishers in website_publishers_by_record for node in publishers]
     article_publishers = [node for article in article_nodes
         for node, _path in _walk_schema_subjects(article.get("publisher"))]
-    webpage_publishers = [node for webpage in webpage_nodes
-        for node, _path in _walk_schema_subjects(webpage.get("publisher"))]
+    webpage_publishers_by_record = [(webpage, [node for node, _path in
+        _walk_schema_subjects(webpage.get("publisher"))]) for webpage in webpage_nodes]
+    webpage_publishers = [node for _webpage, publishers in webpage_publishers_by_record for node in publishers]
     all_publishers = website_publishers + article_publishers + webpage_publishers
-    target_site_publisher = next((node for node in website_publishers if _schema_entity_matches(profile, node)
-        and not _schema_entity_has_conflicting_ids(profile, node)), None)
-    target_page_publisher = next((node for node in webpage_publishers if _schema_entity_matches(profile, node)
-        and not _schema_entity_has_conflicting_ids(profile, node)), None)
+    if any(_schema_entity_matches(profile, node) and _explicit_schema_url_host_conflicts(node, page)
+            for node in website_publishers):
+        return None
+    target_site_publisher = next((node for website, publishers in website_publishers_by_record
+        if _website_record_binds_response_host(website, page)
+        for node in publishers if _schema_entity_matches(profile, node)
+        and not _schema_entity_has_conflicting_ids(profile, node)
+        and not _explicit_schema_url_host_conflicts(node, page)), None)
     foreign_publisher = next((node for node in all_publishers
         if _as_text(node.get("legalName") or node.get("name"))
         and not _schema_entity_matches(profile, node)
@@ -693,6 +736,12 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
         for webpage in webpage_nodes:
             if not _schema_entity_url_binds_page(webpage, page, shared_domain=True):
                 continue
+            # Publisher and page URL must belong to this same WebPage record.
+            record_publishers = [node for node, _path in _walk_schema_subjects(webpage.get("publisher"))]
+            target_page_publisher = next((node for node in record_publishers
+                if _schema_entity_matches(profile, node)
+                and not _schema_entity_has_conflicting_ids(profile, node)
+                and not _explicit_schema_url_host_conflicts(node, page)), None)
             if target_page_publisher:
                 return {"method": "shared_page_publisher", "subject_scope": "shared_page_representation",
                         "operator_name": _as_text(target_page_publisher.get("legalName") or target_page_publisher.get("name")),
@@ -707,7 +756,9 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
     # A contact card in an Article is evidence about the article subject, not
     # the operator of the host. Article pages need independent site-level
     # publisher/operator evidence; visible article content cannot supply it.
-    blocks = [] if non_owner_mention or article_document else _operator_blocks(page)
+    profile_subject = _target_is_profile_subject(profile, page)
+    blocks = ([] if non_owner_mention else _operator_blocks(page,
+        exclude_main=profile_subject, site_shell_only=article_document))
     registered_roles = [str(value) for value in profile.get("registered_roles", []) if value]
     has_contact_endpoint = bool(re.search(rb"(?i)(?:mailto:|tel:)", page.body))
     for block in blocks:
