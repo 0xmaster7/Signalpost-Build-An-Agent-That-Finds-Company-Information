@@ -1,9 +1,11 @@
 # M12 website ownership P1 remediation
 
-**Status:** implemented locally; exact-SHA CI pending  
-**Branch:** `codex/m12-final-sol-remediation`  
-**Starting SHA:** `a2c39a43648686dcdf687f1ab795d62b250a72b5`  
-**Implementation SHA:** `df1f26ef9d47aad00e287a91a75d0db3b81cb838`
+**Status:** host-bound implementation pushed; implementation-SHA CI passed
+**Branch:** `codex/m12-final-sol-remediation`
+**Earlier remediation start:** `a2c39a43648686dcdf687f1ab795d62b250a72b5`
+**Host-bound continuation start:** `ac2f6fa874191c2d2b36a32dce2808ff5682f65f`
+**Previous ownership implementation:** `df1f26ef9d47aad00e287a91a75d0db3b81cb838`
+**Host-bound implementation SHA:** `c2ffd33a153ac5e409cf71936c831b795eaddc6d`
 
 ## Finding and correction
 
@@ -36,6 +38,39 @@ The decision records its method, subject scope, identity block hash where
 applicable, page URL, and page content hash in the existing closed proof
 envelope. No synthesis or release-bundle code/schema was changed.
 
+### Host-bound continuation
+
+Two further independent production-path failures were reproduced against the
+continuation start SHA `ac2f6fa874191c2d2b36a32dce2808ff5682f65f`:
+
+1. A fetched `rival.no` page carried a `WebSite` object whose URL was
+   `acme.no` and whose publisher was Acme. The unbound publisher caused
+   verified URL/domain claims on `rival.no`.
+2. A Rival article with Rival site branding had a target-company contact card
+   containing the exact registered legal name and address. The contact block
+   was treated as operator evidence and produced verified website claims.
+
+Both regression tests failed against that starting SHA because the production
+path emitted those claims. The fix applies the same host/operator/subject
+distinction across candidate assessment and content extraction:
+
+- Candidate response host must match the registry/search candidate host;
+  only the ordinary `www` alias is normalized. Host-changing redirects do not
+  transfer candidate ownership.
+- A `WebSite` record is eligible only when its canonical root URL binds to the
+  fetched response host. Its publisher then identifies the operator of that
+  site record, not an unrelated host named elsewhere in the page.
+- Article content and contact cards cannot establish host operator identity.
+  Visible site-brand blocks are checked for conflicting legal identity.
+- Off-host redirected page, sitemap, and feed responses are excluded from
+  factual extraction, even when the candidate's own homepage is verified.
+- All verified website URL/domain publication still flows through the
+  accepted-candidate path; page-level shared-domain verification remains
+  URL/path scoped.
+
+The reusable positive/negative review matrix is in
+`M12_HOST_BOUND_OWNERSHIP_INVARIANTS.md`.
+
 ## Adversarial results
 
 The production-path test matrix rejects article/customer/supplier/partner/
@@ -61,21 +96,29 @@ mention into ownership.
 All checks below used local deterministic fixtures; no new live cohort or
 external source acquisition was performed.
 
-- Starting-SHA reproductions: 3 failures as expected (each was a false
-  acceptance).
-- Focused website/M03/M04/live-shape tests: 99 passed, 59 subtests passed.
-- Complete test suite: 409 passed, 115 subtests passed.
+- Earlier reproduction set: 3 false-acceptance tests reproduced and fixed.
+- Host-bound continuation repros: 2 false-acceptance tests reproduced on
+  `ac2f6fa` and rejected on the updated implementation.
+- Focused website/M03/M04/M05/M06/M07/M08/M09/live-shape tests: 244 passed,
+  84 subtests passed.
+- Complete test suite: 416 passed, 117 subtests passed.
 - M07 refresh replay: 12 profiles, 6 expected changes, TP 6 / FP 0 / FN 0;
   provenance complete and event replay idempotent.
 - M08 gold evaluation: 4-company corpus passed; find/compare/verify accuracy
   1.0, unsupported assertions 0, citation completeness 1.0.
-- M06 scale/provenance gate: passed.
+- M06 scale/provenance gate: passed with its report-file verifier.
 - M09 crash/resume: crash points 25/50/90 recovered to 100 rows with semantic
   match; network disabled.
 - Clean-CWD launcher with `PYTHONPATH` unset: passed, 4 ordered rows and 0
   physical requests.
 - M08 UX/XSS smoke: passed on local loopback.
 - `compileall` and `git diff --check`: passed.
+- Production CLI/evaluator serialization for both new failures: passed with
+  no verified website URL/domain in either final envelope.
+- Host-changing initial and deep-page redirect tests: passed; the deep
+  redirected page did not create a description claim or snapshot.
+- Positive same-host `WebSite.publisher` and non-JSON-LD legal/contact cases:
+  passed; existing target-owned customer-story and shared-page tests passed.
 
 Synthesis boundary and release-bundle portability fixes remain in the baseline
 and were not modified by this remediation. Historical live reports were not
@@ -84,6 +127,14 @@ was run. Competition submission remains HOLD pending independent verification.
 
 ## Git/CI checkpoint
 
-The implementation is committed as `df1f26ef9d47aad00e287a91a75d0db3b81cb838`.
-The remediation branch has not yet been pushed for this change, and CI for the
-final remediation SHA is pending.
+Host-bound implementation commit `c2ffd33a153ac5e409cf71936c831b795eaddc6d`
+was pushed normally to the remediation branch. Remote verification matched
+that exact SHA. GitHub Actions run
+[38120853363](https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/38120853363)
+completed successfully on that exact implementation SHA. Its starter tests,
+M07/M08, evaluator, M03/M04/M05, M01/cardinality, refresh replay, M06
+scale/provenance, clean-CWD launcher, and UX smoke steps all passed.
+
+This report update is documentation-only and will be included in the final
+push/CI checkpoint. The source implementation SHA above remains the tested
+code revision.
