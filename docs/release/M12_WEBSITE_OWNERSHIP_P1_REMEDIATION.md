@@ -194,6 +194,10 @@ The remediation changes only website ownership resolution and its
 regressions. Financial safeguards, roles/workplaces, job/activity boundaries,
 the closed synthesis schema, and release-bundle portability were not changed.
 Historical live evidence remains unchanged; competition submission remains
-HOLD. Exact implementation commit and GitHub Actions evidence will be
-recorded after the source commit's exact-SHA CI result is known; the final
-documentation commit will then receive its own exact-SHA CI verification.
+HOLD. The implementation commit `41e63e7991b66566ece4375fade7065bd648dc31`
+was pushed normally. GitHub Actions run
+[38164473055](https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/38164473055)
+completed successfully on that exact SHA. The required starter, M07, M08,
+evaluator, M03/M04/M05, M01/cardinality, refresh replay, M06 scale/provenance,
+clean-CWD launcher, and UX smoke steps passed. This final documentation-only
+update will receive its own exact-SHA CI verification.
