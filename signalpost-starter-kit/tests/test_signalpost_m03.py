@@ -164,11 +164,11 @@ class WebsiteIdentityTests(unittest.TestCase):
         doc = page(f"<title>{LEGAL}</title><address>{LEGAL}, Storgata 4, 0999 Oslo</address>")
         self.assertEqual(verify_site_pages(self.profile(), [doc])["decision"], "ambiguous")
 
-    def test_shared_group_homepage_requires_target_subject_proof(self):
+    def test_shared_group_homepage_does_not_become_subsidiary_page(self):
         html = f"<html><head><title>{LEGAL}</title></head><body><footer>{LEGAL}, Storgata 4, 0123 Oslo</footer></body></html>"
         self.assertEqual(verify_site_pages(self.profile(), [page(html)], shared_domain=True)["decision"], "ambiguous")
         with_org = page(f'''<html><head><title>Group</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body></body></html>''')
-        self.assertEqual(verify_site_pages(self.profile(), [with_org], shared_domain=True)["decision"], "accepted")
+        self.assertEqual(verify_site_pages(self.profile(), [with_org], shared_domain=True)["decision"], "ambiguous")
 
     def test_group_legal_schema_blocks_incidental_subsidiary_footer_on_homepage(self):
         html = f'''<html><head><script type="application/ld+json">{{"@type":"Organization","legalName":"Example Group AS","identifier":"987654321"}}</script></head><body><footer>{LEGAL}, Storgata 4, 0123 Oslo</footer></body></html>'''

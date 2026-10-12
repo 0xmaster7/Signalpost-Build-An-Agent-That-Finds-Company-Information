@@ -45,3 +45,22 @@ claim provenance, and remain deterministic under record ordering and
 semantically equivalent DOM rearrangement. No JSON-LD requirement is added:
 non-JSON-LD sites remain acceptable when the audited independent operator
 proof is present.
+
+## Direct relationship and resource binding
+
+- `WebSite.publisher` must directly name a typed Organization, Corporation,
+  or LocalBusiness whose legal name and organisation number match the target.
+  A nested `worksFor`, `subOrganization`, `parentOrganization`, `memberOf`, or
+  other related entity never becomes the publisher.
+- Every WebSite `url` and `@id` must bind to the actual response host. Every
+  explicit Organization `url` and `@id` must also agree with that host; an
+  off-host identity cannot verify the current resource.
+- A shared-domain page is considered only when its own WebPage record binds
+  to the exact response path. Its direct typed `mainEntity` may identify the
+  subsidiary. Publisher, mainEntity, URL, and identifiers from separate
+  WebPage records are never combined.
+- A group's verified homepage is never promoted as a subsidiary's homepage.
+  The subsidiary claim is limited to its independently supported page path.
+- Competing direct publishers or a conflict between the site brand and the
+  identified operator cause abstention. Unsupported relationship types and
+  insufficient proof remain distinct internal diagnostic reasons.

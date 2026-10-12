@@ -201,3 +201,64 @@ completed successfully on that exact SHA. The required starter, M07, M08,
 evaluator, M03/M04/M05, M01/cardinality, refresh replay, M06 scale/provenance,
 clean-CWD launcher, and UX smoke steps passed. This final documentation-only
 update will receive its own exact-SHA CI verification.
+
+## Direct ownership proof repair — failed audit SHA `290ab9126fadac2b4b577f3309b555ebf875011b`
+
+This pass began from the failed audit commit above on
+`codex/m12-final-sol-remediation`, with a clean tree and matching remote. No
+historical live report was changed and no new live cohort was run.
+
+Before changing production logic, four new production-path regressions were
+run through `research_company`, canonical publication-graph validation, and
+`to_evaluator`. The starting code serialized verified website URL/domain
+claims for all four unsafe cases: (1) a rival-branded header with a target
+`WebSite.publisher`; (2) a Person publisher whose nested `worksFor` was the
+target; (3) a group `WebPage.publisher` whose nested `subOrganization` was the
+target; and (4) a rival-hosted root target Organization with an explicit
+off-host URL. The corrected code blocks all four negative reproductions and
+accepts the positive only as a page URL, never as a target-owned domain.
+
+Ownership now follows direct typed relationships and resource scope. A
+host-level `WebSite.publisher` must directly be the exact target Organization;
+related-entity descendants are not publisher proof. Site-level records bind to
+the fetched host and explicit identity URLs must not contradict it. The
+shared-domain exception is page-only and requires a direct target
+`WebPage.mainEntity` or publisher on the same record bound to the exact page
+resource, with a coherent known group operator. Contradictory site identity
+abstains. Internal diagnostics distinguish insufficient proof, conflicting
+operator identity, and unsupported publisher relationship types. URL and
+domain claims are asserted independently by tests.
+
+The table-driven production-path suite covers direct and nested publishers,
+multiple conflicting publishers, rival/site branding conflicts, off-host and
+unrelated structured records, article/profile/contact/footer mentions,
+group and parent/subsidiary boundaries, path/host/subdomain/redirect/canonical
+bindings, non-JSON-LD legal-contact proof, same-site redirects, target-owned
+customer stories, and direct shared subsidiary pages. Metamorphic cases
+reorder unrelated records and add target mentions/related entities without
+turning a rival resource into verified ownership. Each case checks canonical
+claims, company-owned evidence, snapshot linkage, final publication graph, and
+evaluator output. Both false acceptance and false rejection cases are
+represented.
+
+Verification on the remediation tree:
+
+- Focused ownership/M03/M05 tests: 127 passed, 132 subtests.
+- Full suite: 425 passed, 178 subtests; one existing pyRdfa deprecation
+  warning.
+- M07 tests: 33 passed. M07 replay: 12 profiles, 6 true positives, 0 false
+  positives, 0 false negatives, complete provenance and idempotent event IDs.
+- M08 tests: 35 passed, 3 subtests. M08 gold: four-company corpus, find /
+  compare / verify accuracy 1.0, unsupported assertions 0, citation
+  completeness 1.0. Local M08 UI/XSS smoke passed for three companies.
+- Offline M06 scale/provenance verifier passed. Clean-CWD launcher passed
+  with four fixture rows and zero physical HTTP requests. `compileall` and
+  `git diff --check` passed.
+- No live cohort, external source acquisition, Builderr submission, paid
+  provider, or independent Sol audit was performed. Submission remains HOLD.
+
+The correction intentionally abstains from group homepage ownership for a
+subsidiary and when identity proof is only nested, unbound, conflicting, or
+incidental. This conservative result is permitted by the audited shared-domain
+contract. The previously verified synthesis publication boundary and portable
+release-evidence behavior were not changed.
