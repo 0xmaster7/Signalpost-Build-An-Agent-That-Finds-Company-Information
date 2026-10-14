@@ -81,6 +81,117 @@ class SolAuditRemediationTests(unittest.TestCase):
                     self.assertEqual(snapshots_by_id[snapshot_id].source_url, evidence.source_url)
         return result, payload
 
+    def test_final_ownership_repair_rival_operator_cannot_be_overridden_by_target_publisher(self):
+        org, name = "923609016", "Acme AS"
+        cases = [
+            ("AS", "Rival Media AS", "https://rival.no/", False, True, "customer"),
+            ("Ltd", "Rival Media Ltd", "https://rival.no/", False, True, "supplier"),
+            ("LLC", "Rival Media LLC", "https://rival.no/about", False, True, "partner"),
+            ("GmbH", "Rival Media GmbH", "https://rival.no/", True, True, "article subject"),
+            ("no suffix with number", "Rival Media", "https://rival.no/about", True, True, "customer"),
+            ("no suffix, name only", "Rival Media", "https://rival.no/about", False, False, "supplier"),
+        ]
+        for legal_form, rival_name, url, include_target_root, rival_has_identifier, relation in cases:
+            with self.subTest(case=legal_form):
+                graph = [{"@type": "WebSite", "url": "https://rival.no/", "publisher": {
+                    "@type": "Organization", "legalName": name, "identifier": org}}]
+                if include_target_root:
+                    graph.append({"@type": "Organization", "legalName": name, "identifier": org,
+                        "url": "https://rival.no/"})
+                id_markup = "<span>987654321</span>" if rival_has_identifier else ""
+                html = ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+                    + f"</script></head><body><header><strong class='logo'>{rival_name}</strong> "
+                    + id_markup + "</header><main><h1>Welcome</h1>"
+                    f"<p>Acme AS (923609016) is a Rival Media {relation}.</p>"
+                    "</main></body></html>")
+                result, payload = self._research_and_serialize_website_case(
+                    {"organisation_number": org, "name": name,
+                     "website_candidates": [{"raw": url, "source": "registry_live"}]},
+                    url, html)
+                published = [claim for claim in payload["claims"] if claim["field"] in {
+                    "verified_website_url", "verified_website_domain"}]
+                self.assertEqual(published, [], f"unsafe final evaluator claims: {published}")
+                self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+                    for claim in result.claims))
+
+    def test_target_owned_brand_can_mention_customers_and_partners_without_abstaining(self):
+        org, name, url = "923609016", "Acme AS", "https://acme.no/"
+        graph = {"@type": "WebSite", "url": url, "publisher": {"@type": "Organization",
+            "legalName": name, "identifier": org}}
+        html = ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+            + "</script></head><body><header><span class='logo'>Acme AS</span><span>923609016</span>"
+            "<nav><a href='/partners'>Rival Media Ltd 987654321</a></nav></header><main>"
+            "<p>Rival Media Ltd is our customer.</p><p>North Wind LLC is a partner.</p>"
+            "<p>Fjord GmbH supplies components.</p></main></body></html>")
+        result, payload = self._research_and_serialize_website_case(
+            {"organisation_number": org, "name": name,
+             "website_candidates": [{"raw": url, "source": "registry_live"}]}, url, html)
+        fields = {claim["field"] for claim in payload["claims"] if claim["field"].startswith("verified_website_")}
+        self.assertEqual(fields, {"verified_website_url", "verified_website_domain"})
+        self.assertEqual({claim.field for claim in result.claims if claim.field.startswith("verified_website_")}, fields)
+
+    def test_final_ownership_repair_shared_page_query_must_match_fetched_resource(self):
+        org, name = "923609016", "Acme AS"
+        url = "https://group.no/brands?company=other"
+        graph = [
+            {"@type": "WebSite", "url": "https://group.no/", "publisher": {
+                "@type": "Organization", "legalName": "Group AS", "identifier": "987654322"}},
+            {"@type": "WebPage", "url": "https://group.no/brands?company=acme", "mainEntity": {
+                "@type": "Organization", "legalName": name, "identifier": org}},
+        ]
+        html = ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+            + "</script></head><body><header>Group AS</header><main><h1>Other Subsidiary AS</h1>"
+            "<p>Information about Other Subsidiary AS.</p></main></body></html>")
+        result, payload = self._research_and_serialize_website_case(
+            {"organisation_number": org, "name": name,
+             "website_candidates": [{"raw": url, "source": "registry_live"}]},
+            url, html, shared_domains={"group.no"})
+        published = [claim for claim in payload["claims"] if claim["field"] in {
+            "verified_website_url", "verified_website_domain"}]
+        self.assertEqual(published, [], f"unsafe final evaluator claims: {published}")
+        self.assertFalse(any(claim.field in {"verified_website_url", "verified_website_domain"}
+            for claim in result.claims))
+
+    def test_shared_page_query_identity_is_semantic_and_complete(self):
+        org, name = "923609016", "Acme AS"
+        scenarios = [
+            ("same parameters reordered and percent encoded",
+             "https://group.no/brands?company=acme&lang=nb&view=full",
+             "https://group.no/brands?view=full&%63ompany=acme&lang=nb", True),
+            ("one selection parameter differs",
+             "https://group.no/brands?company=other&lang=nb&view=full",
+             "https://group.no/brands?company=acme&lang=nb&view=full", False),
+            ("one of multiple parameters differs",
+             "https://group.no/brands?company=acme&lang=nb&view=full",
+             "https://group.no/brands?company=acme&lang=en&view=full", False),
+            ("duplicate values reordered",
+             "https://group.no/brands?company=acme&tag=x&tag=y",
+             "https://group.no/brands?tag=y&company=acme&tag=x", True),
+            ("duplicate parameter count differs",
+             "https://group.no/brands?company=acme&tag=x&tag=x",
+             "https://group.no/brands?company=acme&tag=x", False),
+        ]
+        for label, fetched_url, record_url, expected in scenarios:
+            graph = [
+                {"@type": "WebSite", "url": "https://group.no/", "publisher": {
+                    "@type": "Organization", "legalName": "Group AS", "identifier": "987654322"}},
+                {"@type": "WebPage", "url": record_url, "publisher": {
+                    "@type": "Organization", "legalName": "Group AS", "identifier": "987654322"},
+                 "mainEntity": {"@type": "Organization", "legalName": name, "identifier": org}},
+            ]
+            html = ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+                + "</script></head><body><header>Group AS</header><main><h1>Acme AS</h1>"
+                "<p>Subsidiary information.</p></main></body></html>")
+            with self.subTest(case=label):
+                result, payload = self._research_and_serialize_website_case(
+                    {"organisation_number": org, "name": name,
+                     "website_candidates": [{"raw": fetched_url, "source": "registry_live"}]},
+                    fetched_url, html, shared_domains={"group.no"})
+                fields = {claim["field"] for claim in payload["claims"] if claim["field"].startswith("verified_website_")}
+                self.assertEqual("verified_website_url" in fields, expected)
+                self.assertNotIn("verified_website_domain", fields)
+                self.assertEqual(any(claim.field == "verified_website_url" for claim in result.claims), expected)
+
     def test_final_sol_three_host_subject_and_record_binding_reproductions(self):
         """The serialized result must not treat target metadata as rival-site ownership."""
         name, org = "Acme AS", "923609016"

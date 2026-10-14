@@ -262,3 +262,73 @@ subsidiary and when identity proof is only nested, unbound, conflicting, or
 incidental. This conservative result is permitted by the audited shared-domain
 contract. The previously verified synthesis publication boundary and portable
 release-evidence behavior were not changed.
+
+## Final fail-closed publication repair — starting SHA `ac20826f45a9d605f9169d2590496d1d2532c992`
+
+This follow-up preserves the starting commit and earlier live evidence. Before
+production edits, both requested failures were reproduced through
+`research_company`, canonical publication-graph validation, and
+`to_evaluator`:
+
+1. On `rival.no`, a direct Acme `WebSite.publisher` produced both verified URL
+   and domain claims despite the visible site shell identifying Rival Media
+   Ltd and its distinct organization number. The same bypass reproduced with
+   a separate top-level Acme Organization record.
+2. On `group.no/brands?company=other`, a WebPage for
+   `?company=acme` produced an Acme page URL claim because the earlier shared
+   page check compared only the path.
+
+All three unsafe variants are now blocked. The website decision flow resolves
+resource-bound root Organization conflicts, direct site publishers, explicit
+site-shell operator identifiers, and explicit logo/site-name identity before
+any proof can pass the single final acceptance gate. Domain proofs must have
+site-operator scope and cannot pass when an explicit operator conflict exists.
+The rival-brand rule uses explicit logo/site-name slots and a non-target
+organization number in the site shell; ordinary customer, supplier, partner,
+and article mentions outside those identity signals are not treated as
+operator conflicts. A no-suffix explicit logo is also covered.
+
+Shared-page records now bind to the fetched host, normalized path, and decoded
+query parameter multiset. Parameter order and percent-encoding variations
+that decode to the same name/value pairs compare as the same resource; changed
+company selectors or any other changed query value do not. Duplicate
+parameters remain significant. Only direct relationships on the matching
+WebPage record establish subsidiary representation; the result stays page
+only.
+
+The production-path table covers Rival operators with AS, Ltd, LLC, GmbH, and
+no suffix; Acme as customer/supplier/partner/article subject; false publisher
+metadata with and without a separate Acme root record; shared query mismatch;
+query ordering, percent encoding, and multiple query fields; and legitimate
+customer/partner mentions on a directly verified Acme site. Prior tests
+continue to cover unrelated/reordered Organization and WebPage records,
+canonical URLs, same-site and cross-host redirects, target-owned sites,
+non-JSON-LD contact/address proof, customer stories, and correctly bound
+shared subsidiary pages. Every added case checks URL and domain claims
+separately through the final evaluator.
+
+Verification for this follow-up:
+
+- Focused ownership/M03/M05 tests: 131 passed, 143 subtests.
+- Full suite: 429 passed, 189 subtests; one existing pyRdfa deprecation
+  warning.
+- M07 replay: 12 profiles, 6 true positives, 0 false positives, 0 false
+  negatives, complete event provenance, and idempotent event IDs.
+- M08 gold: four companies; find, compare, and verify accuracy 1.0; unsupported
+  assertions 0; citation completeness 1.0.
+- M09 crash/resume: passed at 25, 50, and 90 durable envelopes, restoring
+  100 ordered rows with semantic matches.
+- Offline M06 scale/provenance gate passed. Clean-CWD launch produced four
+  ordered fixture envelopes and zero physical requests. Local M08 UI/XSS
+  smoke passed for three companies. Compile and diff checks passed.
+- No live cohort, paid provider, source-rights change, Builderr submission,
+  release tag, or independent Sol audit occurred. Submission remains HOLD.
+
+The conservative tradeoff is limited to explicit conflicting identity: a
+target publisher claim abstains when a distinct operator is affirmatively
+identified by the site’s explicit logo/site-name slot, a non-navigation
+site-shell organization number, or a resource-bound Organization record.
+Ordinary navigation links and body mentions do not establish operator identity.
+The existing audited group exception
+continues to allow a directly supported subsidiary page without promoting
+the group domain.

@@ -293,10 +293,16 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
         if text_block and text_block not in operator_identity_blocks:
             operator_identity_blocks.append(text_block)
     site_brand_blocks: list[str] = []
-    brand_nodes = list(soup.find_all(["header", "nav"])) + list(soup.select(
+    brand_nodes: list[Any] = []
+    for header in soup.find_all("header"):
+        header_copy = BeautifulSoup(str(header), "lxml")
+        for nav in header_copy.find_all("nav"):
+            nav.decompose()
+        brand_nodes.extend(header_copy.find_all("header"))
+    brand_nodes.extend(soup.select(
         'meta[property="og:site_name"][content], [class~="logo"], [id*="logo" i]'))
     for node in brand_nodes:
-        if node.find_parent(["article", "footer"]):
+        if node.find_parent(["article", "footer", "nav"]):
             continue
         text_block = str(node.get("content") or node.get("alt") or "").strip()
         if not text_block:
@@ -435,6 +441,12 @@ def _schema_record_urls(node: dict[str, Any]) -> list[str]:
     return values
 
 
+def _canonical_resource_query(url: str) -> tuple[tuple[str, str], ...]:
+    """Compare decoded query fields independent of parameter order."""
+    parsed = urllib.parse.urlsplit(url)
+    return tuple(sorted(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)))
+
+
 def _schema_entity_url_binds_page(node: dict[str, Any], page: PageRecord, *, shared_domain: bool) -> bool:
     """Require the record's explicit URL identities to bind to this exact resource."""
     values = _schema_record_urls(node)
@@ -450,6 +462,8 @@ def _schema_entity_url_binds_page(node: dict[str, Any], page: PageRecord, *, sha
             return False
         if shared_domain and (parsed.path.rstrip("/") or "/") != page_path:
             return False
+        if shared_domain and _canonical_resource_query(parsed.geturl()) != _canonical_resource_query(page.final_url):
+            return False
         matched = True
     return matched
 
@@ -462,7 +476,8 @@ def _schema_entity_url_same_resource(node: dict[str, Any], page: PageRecord) -> 
     expected_path = expected.path.rstrip("/") or "/"
     for value in _schema_record_urls(node):
         parsed = urllib.parse.urlsplit(urllib.parse.urljoin(page.final_url, value))
-        if (parsed.query != expected.query or (parsed.path.rstrip("/") or "/") != expected_path):
+        if (_canonical_resource_query(parsed.geturl()) != _canonical_resource_query(page.final_url)
+                or (parsed.path.rstrip("/") or "/") != expected_path):
             return False
     return True
 
@@ -628,6 +643,54 @@ def _site_brand_conflicts_with_target(profile: dict[str, Any], page: PageRecord,
     return False
 
 
+def _site_shell_has_competing_identifier(profile: dict[str, Any], page: PageRecord) -> bool:
+    """A foreign number alongside explicit site branding is operator conflict, not a body mention."""
+    target = str(profile.get("organisation_number") or "")
+    related = {str(value) for value in profile.get("related_organisation_numbers", []) if str(value).isdigit()}
+    soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
+    for header in soup.find_all("header"):
+        fragment = BeautifulSoup(str(header), "lxml")
+        for nav in fragment.find_all("nav"):
+            nav.decompose()
+        if not fragment.select(".logo, [class~='site-name'], [itemprop='legalName'], [itemprop='name'], [id*='logo' i]"):
+            continue
+        identifiers = re.findall(r"(?<!\d)\d{9}(?!\d)", fragment.get_text(" ", strip=True))
+        if any(identifier != target and identifier not in related for identifier in identifiers):
+            return True
+    return False
+
+
+def _explicit_site_brand_conflicts_with_target(profile: dict[str, Any], page: PageRecord,
+                                               allowed_operator_names: set[str] | None = None) -> bool:
+    """Compare explicit logo/site-name fields, without interpreting body mentions as ownership."""
+    names = [str(profile.get("name") or ""), *[
+        str(item.get("name") or "") for item in profile.get("historical_names", []) if isinstance(item, dict)]]
+    allowed = {normalize_name(name) for name in (allowed_operator_names or set())}
+    soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
+    nodes = list(soup.select('meta[property="og:site_name"][content]'))
+    nodes.extend(soup.select("header .logo, header [class~='site-name'], header [itemprop='legalName'], header [itemprop='name']"))
+    nodes.extend(soup.select("header [id*='logo' i]"))
+    seen: set[str] = set()
+    for node in nodes:
+        text = str(node.get("content") or node.get("alt") or " ".join(node.get_text(" ", strip=True).split()))
+        text = text.strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        comparable_text = re.sub(r"(?<!\d)\d{9}(?!\d)", " ", text).strip(" ,.;:|–—-")
+        if any(_same_legal_name(target, comparable_text) for target in names if target):
+            continue
+        if normalize_name(comparable_text) in allowed:
+            continue
+        if _mentions_exact_entity(names, comparable_text) and not any(
+                normalize_name(brand) in normalize_name(comparable_text) for brand in allowed if brand):
+            return True
+        # These selectors are explicit brand/operator slots. Their identity
+        # conflicts with the target even when the rival has no legal suffix.
+        return True
+    return False
+
+
 def _target_is_profile_subject(profile: dict[str, Any], page: PageRecord) -> bool:
     """Identify target-specific profile pages whose body identity describes the subject."""
     path = urllib.parse.urlsplit(page.final_url).path.casefold()
@@ -660,11 +723,16 @@ def _site_brand_blocks(page: PageRecord) -> list[str]:
     if page.site_brand_blocks:
         return page.site_brand_blocks
     soup = BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml")
-    nodes = list(soup.find_all(["header", "nav"])) + list(soup.select(
-        'meta[property="og:site_name"][content], [class~="logo"], [id*="logo" i]'))
     result: list[str] = []
-    for node in nodes:
-        if node.find_parent(["article", "footer"]):
+    for header in soup.find_all("header"):
+        fragment = BeautifulSoup(str(header), "lxml")
+        for nav in fragment.find_all("nav"):
+            nav.decompose()
+        text = " ".join(fragment.get_text(" ", strip=True).split())
+        if text and text not in result:
+            result.append(text[:1000])
+    for node in soup.select('meta[property="og:site_name"][content], [class~="logo"], [id*="logo" i]'):
+        if node.find_parent(["article", "footer", "nav"]):
             continue
         text = str(node.get("content") or node.get("alt") or "").strip()
         if not text:
@@ -757,7 +825,7 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
 
     page_parts = urllib.parse.urlsplit(page.final_url)
     is_homepage = page_parts.path in {"", "/"} and not page_parts.query
-    bound_webpages = [node for node in webpage_nodes if _schema_entity_url_binds_page(node, page, shared_domain=True)]
+    bound_webpages = [node for node in webpage_nodes if _schema_entity_url_same_resource(node, page)]
     page_records_at_resource = [node for node in webpage_nodes
         if _schema_record_urls(node) and _schema_entity_url_same_resource(node, page)]
 
@@ -813,9 +881,11 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
         if _schema_entity_url_same_resource(webpage, page)
         and _as_text(node.get("legalName") or node.get("name"))}
     allowed_brand_names = (site_operator_names | shared_page_brand_names) if shared_domain else set()
-    if _site_brand_conflicts_with_target(profile, page, allowed_operator_names=allowed_brand_names):
-        abstain("conflicting_site_operator_identity")
-        return None
+    visible_operator_conflict = _site_brand_conflicts_with_target(
+        profile, page, allowed_operator_names=allowed_brand_names)
+    visible_operator_conflict = visible_operator_conflict or _explicit_site_brand_conflicts_with_target(
+        profile, page, allowed_operator_names=allowed_brand_names)
+    shell_identifier_conflict = _site_shell_has_competing_identifier(profile, page)
 
     if conflicting_site_publishers and not shared_domain:
         abstain("conflicting_site_operator_identity")
@@ -829,6 +899,82 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
                and not _schema_entity_matches(profile, node) for node in page_publishers_all):
             abstain("conflicting_page_publisher_identity")
             return None
+
+    # Resolve all explicit operator conflicts before considering any proof
+    # route. In particular, a target publisher must not return before a
+    # resource-bound rival operator record or site-shell identifier is read.
+    root_operator_conflict = False
+    target_root_url_conflict = False
+    malformed_target_root = False
+    target_name_wrong_identifier = False
+    for node in organization_nodes:
+        root_name = _as_text(node.get("legalName") or node.get("name"))
+        root_ids = set(_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID"))
+                       + _identifier_values(node.get("vatID")))
+        urls = _schema_record_urls(node)
+        root_bound = (_schema_entity_is_site_root(node, page)
+                      or (is_homepage and not urls))
+        if _schema_entity_name_matches(profile, node):
+            if org in root_ids and any(identifier not in related and identifier != org for identifier in root_ids):
+                malformed_target_root = True
+            if org in root_ids and _explicit_schema_url_host_conflicts(node, page):
+                target_root_url_conflict = True
+            if org not in root_ids and any(identifier not in related for identifier in root_ids) and root_bound:
+                malformed_target_root = True
+                target_name_wrong_identifier = True
+        elif root_name and root_bound:
+            if not (shared_domain and root_ids and root_ids <= related):
+                root_operator_conflict = True
+    if malformed_target_root:
+        abstain("target_name_with_conflicting_org_number" if target_name_wrong_identifier
+                else "conflicting_structured_company_identity")
+        return None
+    if target_root_url_conflict:
+        abstain("conflicting_site_operator_identity")
+    site_operator_conflict = (
+        visible_operator_conflict or (shell_identifier_conflict and not shared_domain)
+        or root_operator_conflict or target_root_url_conflict
+        or (bool(conflicting_site_publishers) and not shared_domain)
+    )
+    if shared_domain:
+        site_signatures = {
+            (normalize_name(_as_text(node.get("legalName") or node.get("name"))),
+             tuple(sorted(set(_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID"))
+                              + _identifier_values(node.get("vatID"))))))
+            for node in site_publishers
+        }
+        if len(site_signatures) > 1:
+            site_operator_conflict = True
+
+    def final_acceptance_gate(proof: dict[str, Any] | None) -> dict[str, Any] | None:
+        """The only path from a candidate proof to an accepted ownership result."""
+        if proof is None:
+            return None
+        scope = proof.get("subject_scope")
+        if page.soft_error:
+            abstain("insufficient_direct_ownership_proof")
+            return None
+        resource_url = str(proof.get("resource_url") or "")
+        proof_resource, fetched_resource = (urllib.parse.urlsplit(resource_url),
+                                            urllib.parse.urlsplit(page.final_url))
+        if (not resource_url or _normalized_site_host(resource_url) != _normalized_site_host(page.final_url)
+                or (proof_resource.path.rstrip("/") or "/") != (fetched_resource.path.rstrip("/") or "/")
+                or _canonical_resource_query(resource_url) != _canonical_resource_query(page.final_url)):
+            abstain("insufficient_direct_ownership_proof")
+            return None
+        if scope == "site_operator":
+            if shared_domain or site_operator_conflict:
+                abstain("conflicting_site_operator_identity" if site_operator_conflict
+                        else "insufficient_direct_ownership_proof")
+                return None
+        elif scope == "shared_page_representation":
+            if not shared_domain or not proof.get("page_only"):
+                abstain("insufficient_direct_ownership_proof")
+                return None
+        else:
+            abstain("insufficient_direct_ownership_proof")
+            return None
+        return proof
 
     conflicting_root_identity = False
     for node in organization_nodes:
@@ -861,9 +1007,9 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
         if conflicting_site_publishers:
             abstain("conflicting_site_operator_identity")
             return None
-        return {"method": "website_publisher_organization", "subject_scope": "site_operator",
+        return final_acceptance_gate({"method": "website_publisher_organization", "subject_scope": "site_operator",
                 "operator_name": _as_text(target_site_publishers[0].get("legalName") or target_site_publishers[0].get("name")),
-                "operator_organisation_number": org}
+                "operator_organisation_number": org, "resource_url": page.final_url})
 
     # A standalone Organization is operator proof only when it is a direct
     # resource record and its explicit URL (when present) binds to this host.
@@ -898,9 +1044,9 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
         if target_site_publishers and conflicting_site_publishers:
             abstain("conflicting_site_operator_identity")
             return None
-        return {"method": "site_operator_organization", "subject_scope": "site_operator",
+        return final_acceptance_gate({"method": "site_operator_organization", "subject_scope": "site_operator",
                 "operator_name": _as_text(target_root.get("legalName") or target_root.get("name")),
-                "operator_organisation_number": org}
+                "operator_organisation_number": org, "resource_url": page.final_url})
 
     if shared_page_proof:
         # Multiple records bound to this same path cannot contradict the
@@ -911,7 +1057,8 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
             if len(target_records) > 1:
                 abstain("conflicting_page_publisher_identity")
                 return None
-        return shared_page_proof
+        shared_page_proof["resource_url"] = page.final_url
+        return final_acceptance_gate(shared_page_proof)
 
     # HTML operator evidence remains available for sites without JSON-LD.
     # Article pages can use only site-shell identity; page body identity is
@@ -931,24 +1078,27 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
         address = _address_match(profile, block)
         role = next((item for item in registered_roles if normalize_name(item) and normalize_name(item) in normalize_name(block)), None)
         if shared_domain and not is_homepage and not article_document and candidate_source in {"registry_live", "registry_frozen"} and (exact_org or address):
-            return {"method": "shared_page_operator_identity", "subject_scope": "shared_page_representation",
+            return final_acceptance_gate({"method": "shared_page_operator_identity", "subject_scope": "shared_page_representation",
                     "operator_name": compatible_name, "operator_organisation_number": org,
                     "address_match": address, "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest(),
-                    "page_only": True}
+                    "page_only": True, "resource_url": page.final_url})
         if candidate_source in {"registry_live", "registry_frozen"} and address:
-            return {"method": "registry_candidate_contact_identity", "subject_scope": "site_operator",
+            return final_acceptance_gate({"method": "registry_candidate_contact_identity", "subject_scope": "site_operator",
                     "operator_name": compatible_name, "operator_organisation_number": org,
-                    "address_match": address, "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest()}
+                    "address_match": address, "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest(),
+                    "resource_url": page.final_url})
         if candidate_source == "keyless_no" and address and (role or has_contact_endpoint):
-            return {"method": "keyless_contact_identity", "subject_scope": "site_operator",
+            return final_acceptance_gate({"method": "keyless_contact_identity", "subject_scope": "site_operator",
                     "operator_name": compatible_name, "operator_organisation_number": org,
                     "address_match": address, "registered_role": role,
                     "contact_endpoint_present": has_contact_endpoint,
-                    "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest()}
+                    "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest(),
+                    "resource_url": page.final_url})
         if candidate_source in {"registry_live", "registry_frozen"} and exact_org:
-            return {"method": "site_operator_contact_org_number", "subject_scope": "site_operator",
+            return final_acceptance_gate({"method": "site_operator_contact_org_number", "subject_scope": "site_operator",
                     "operator_name": compatible_name, "operator_organisation_number": org,
-                    "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest()}
+                    "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest(),
+                    "resource_url": page.final_url})
     abstain("insufficient_direct_ownership_proof")
     return None
 
