@@ -332,3 +332,73 @@ Ordinary navigation links and body mentions do not establish operator identity.
 The existing audited group exception
 continues to allow a directly supported subsidiary page without promoting
 the group domain.
+
+## Shared-page final gate and trading-name correction — start `8850abeb`
+
+On the clean starting SHA `8850abeb54e51016fe8bf99aa3e18bcd6920fb37`, two
+new cases were reproduced through `research_company`, final publication-graph
+validation, and `to_evaluator` before production changes:
+
+1. On the configured `group.no` shared domain, both a directly bound
+   `WebPage.mainEntity=Acme` proof and an HTML legal-contact proof emitted an
+   Acme verified page URL, although the page's explicit logo/operator block
+   identified Rival Media Ltd and organization number `987654321` while the
+   site publisher identified Group AS.
+2. An Acme homepage with direct `WebSite.publisher=Acme AS`, its matching
+   legal contact identity, and the exact logo `Acme` abstained. The parser had
+   treated the whole header, including the separate legal contact block, as a
+   single brand string (`Acme Acme AS ...`), creating a false brand conflict.
+
+The correction is limited to `signalpost/websites.py` and its production-path
+regressions. Header parsing now prefers explicit logo/site-name/legal-name
+slots when they exist, rather than merging their text with the complete
+header. The existing exact legal-name normalization recognizes `Acme` as the
+legal-name stem of `Acme AS`; the final proof still requires the independently
+verified direct publisher or legal-contact identity. Longer similar names
+such as `Acme Services` remain contradictory. When there is no explicit brand
+slot, the prior header fallback remains in effect.
+
+The one final acceptance gate now applies the already-computed material
+`site_operator_conflict` to page-only shared-domain proofs as well as
+site-operator/domain proofs. Thus a target's valid, resource-bound
+`WebPage.mainEntity` cannot override a conflicting visible site operator.
+Group-operated subsidiary pages remain page-only and pass when the Group
+operator is coherent and no material conflict is present. Both structured and
+HTML proof methods use this same gate.
+
+The added cases verify separate URL and domain publication through the final
+evaluator, including Rival's different organization number, a compatible
+short Acme brand, a longer similar logo, and customer/partner mentions that
+cannot substitute for publisher identity. Existing ownership fixtures cover
+the prior Sol reproductions, the positive group-operated subsidiary page,
+target-owned customer stories, redirects, resource binding, evidence, and
+snapshot integrity.
+
+Verification on this correction:
+
+- Before-fix production-path reproductions: both shared-page proof methods
+  emitted the unsafe URL; compatible Acme logo case abstained.
+- Focused ownership remediation suite: 66 passed, 121 subtests passed.
+- Complete suite: 432 passed, 194 subtests passed; one existing pyRdfa
+  deprecation warning.
+- M03 website identity tests: 44 passed, 17 subtests. M05 jobs/activity tests:
+  24 passed, 10 subtests. M07/M08 contract tests: 68 passed, 3 subtests.
+- M07 replay: 12/12 envelopes; 6 expected changes, TP 6 / FP 0 / FN 0;
+  provenance complete and event IDs idempotent.
+- M08 gold: four-company corpus passed; find/compare/verify accuracy 1.0,
+  unsupported assertions 0, citation completeness 1.0.
+- M09 live-shape deterministic integration: 4 passed. M09 crash/resume:
+  25/50/90 crash points restored 100 ordered envelopes with semantic match;
+  network disabled.
+- M06 offline scale/provenance report passed its independent verifier.
+  Clean-CWD evaluator produced four ordered envelopes and zero HTTP requests;
+  the local M08 UX/XSS smoke passed. Frozen RC1 evidence validation passed.
+- `compileall`, `git diff --check`, and final evaluator/publication graph checks
+  passed. No live cohort or external source acquisition was performed.
+
+The conservative trade-off is unchanged for ambiguous brand/operator evidence:
+the verifier abstains unless an accepted direct proof exists, and an explicit
+competing brand blocks publication. This correction does not alter financial,
+job/activity, synthesis, release-bundle, or source-policy behavior. Competition
+submission remains HOLD. Exact-SHA push and CI status will be recorded after
+the remediation commit is pushed.

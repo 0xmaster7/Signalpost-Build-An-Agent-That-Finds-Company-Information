@@ -81,6 +81,78 @@ class SolAuditRemediationTests(unittest.TestCase):
                     self.assertEqual(snapshots_by_id[snapshot_id].source_url, evidence.source_url)
         return result, payload
 
+    def test_shared_page_visible_operator_conflict_blocks_structured_and_html_proofs(self):
+        """A target representation cannot override an independently identified rival site operator."""
+        url = "https://group.no/brands/acme"
+        target = {"@type": "Organization", "legalName": "Acme AS", "identifier": "923609016"}
+        group = {"@type": "Organization", "legalName": "Group AS", "identifier": "987654322"}
+        cases = [
+            ("structured shared-page proof",
+             [{"@type": "WebSite", "url": "https://group.no/", "publisher": group},
+              {"@type": "WebPage", "url": url, "publisher": group, "mainEntity": target}],
+             '<header><span class="logo">Rival Media Ltd 987654321</span>'
+             '<div class="contact"><address>Rival Media Ltd 987654321</address></div></header>'),
+            ("HTML shared-page operator identity", [],
+             '<header><span class="logo">Rival Media Ltd 987654321</span>'
+             '<div class="contact"><address>Acme AS 923609016, Storgata 8, 0150 Oslo</address>'
+             '<p>Rival Media Ltd 987654321</p></div></header>'),
+        ]
+        for label, graph, body in cases:
+            schema = ("<script type='application/ld+json'>" + json.dumps(graph) + "</script>" if graph else "")
+            html = f"<html><head>{schema}</head><body>{body}</body></html>"
+            with self.subTest(case=label):
+                _result, payload = self._research_and_serialize_website_case(
+                    {"organisation_number": "923609016", "name": "Acme AS",
+                     "registered_address": {"adresse": ["Storgata 8"], "postnummer": "0150", "poststed": "Oslo"},
+                     "website_candidates": [{"raw": url, "source": "registry_live"}]},
+                    url, html, shared_domains={"group.no"})
+                claims = [claim for claim in payload["claims"] if claim["field"] in {
+                    "verified_website_url", "verified_website_domain"}]
+                self.assertEqual(claims, [], f"unsafe publication via {label}: {claims}")
+
+    def test_supported_short_trading_name_with_direct_target_identity_is_accepted(self):
+        """A logo may use the exact legal-name stem when direct legal identity corroborates it."""
+        url = "https://acme.no/"
+        graph = {"@type": "WebSite", "url": "https://acme.no/", "publisher": {
+            "@type": "Organization", "legalName": "Acme AS", "identifier": "923609016"}}
+        html = ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+            + "</script></head><body><header><span class='logo'>Acme</span>"
+            "<address>Acme AS 923609016, Storgata 8, 0150 Oslo</address></header>"
+            "<main><h1>Acme</h1><p>Our company website.</p></main></body></html>")
+        _result, payload = self._research_and_serialize_website_case(
+            {"organisation_number": "923609016", "name": "Acme AS",
+             "registered_address": {"adresse": ["Storgata 8"], "postnummer": "0150", "poststed": "Oslo"},
+             "website_candidates": [{"raw": url, "source": "registry_live"}]}, url, html)
+        fields = {claim["field"] for claim in payload["claims"] if claim["field"].startswith("verified_website_")}
+        self.assertIn("verified_website_url", fields)
+        self.assertIn("verified_website_domain", fields)
+
+    def test_similar_brand_and_relationship_mentions_do_not_become_trading_name_proof(self):
+        url = "https://acme.no/"
+        target = {"@type": "Organization", "legalName": "Acme AS", "identifier": "923609016"}
+        rival = {"@type": "Organization", "legalName": "Rival Media Ltd", "identifier": "987654321"}
+        cases = [
+            ("longer similar logo", "<span class='logo'>Acme Services</span>", target),
+            ("target only customer of rival", "<span class='logo'>Rival Media Ltd</span>", rival),
+            ("target only partner of rival", "<span class='logo'>Rival Media Ltd</span>", rival),
+        ]
+        for label, logo, publisher in cases:
+            graph = {"@type": "WebSite", "url": url, "publisher": publisher}
+            html = ("<html><head><script type='application/ld+json'>" + json.dumps(graph)
+                + "</script></head><body><header>" + logo
+                + "<address>Acme AS 923609016, Storgata 8, 0150 Oslo</address></header>"
+                + ("<main>Acme AS is our " + ("customer" if "customer" in label else "partner")
+                   + "</main>" if "only " in label else "<main>Acme company</main>")
+                + "</body></html>")
+            with self.subTest(case=label):
+                _result, payload = self._research_and_serialize_website_case(
+                    {"organisation_number": "923609016", "name": "Acme AS",
+                     "registered_address": {"adresse": ["Storgata 8"], "postnummer": "0150", "poststed": "Oslo"},
+                     "website_candidates": [{"raw": url, "source": "registry_live"}]}, url, html)
+                claims = [claim for claim in payload["claims"] if claim["field"] in {
+                    "verified_website_url", "verified_website_domain"}]
+                self.assertEqual(claims, [], label)
+
     def test_final_ownership_repair_rival_operator_cannot_be_overridden_by_target_publisher(self):
         org, name = "923609016", "Acme AS"
         cases = [

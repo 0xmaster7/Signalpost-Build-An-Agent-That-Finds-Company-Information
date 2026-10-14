@@ -298,7 +298,12 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
         header_copy = BeautifulSoup(str(header), "lxml")
         for nav in header_copy.find_all("nav"):
             nav.decompose()
-        brand_nodes.extend(header_copy.find_all("header"))
+        explicit_brands = header_copy.select(
+            ".logo, [class~='site-name'], [itemprop='legalName'], [itemprop='name'], [id*='logo' i]")
+        # Prefer the explicit logo/site-name slot. Treating the whole header as
+        # a brand conflates a short trading name with its separate legal contact
+        # block (for example, "Acme" + "Acme AS, registered address").
+        brand_nodes.extend(explicit_brands or header_copy.find_all("header"))
     brand_nodes.extend(soup.select(
         'meta[property="og:site_name"][content], [class~="logo"], [id*="logo" i]'))
     for node in brand_nodes:
@@ -970,6 +975,13 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
         elif scope == "shared_page_representation":
             if not shared_domain or not proof.get("page_only"):
                 abstain("insufficient_direct_ownership_proof")
+                return None
+            # Page representation is independent of domain ownership, but it
+            # cannot override affirmative evidence that a different entity
+            # operates the shared host. The same conflict gate applies to the
+            # structured and HTML page-proof routes.
+            if site_operator_conflict:
+                abstain("conflicting_site_operator_identity")
                 return None
         else:
             abstain("insufficient_direct_ownership_proof")
