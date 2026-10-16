@@ -1,0 +1,358 @@
+{
+  "starting_sha": "d8f13f3d8aa4fccd96f9024956a237aa0a0e782e",
+  "authority": "Confirmed public semantics, not an authoritative wire schema.",
+  "full_suite": {
+    "tests": 445,
+    "subtests": 206
+  },
+  "independent_cases": {
+    "single": {
+      "status": "PASS",
+      "rows": 1,
+      "exit_code": 0,
+      "terminal_states": [
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "dd8a0cf858bc33b8664974269789207ba34eeaa1aec889c6c99e5bad6f75516f"
+    },
+    "array": {
+      "status": "PASS",
+      "rows": 3,
+      "exit_code": 0,
+      "terminal_states": [
+        "available",
+        "available",
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "a6d17b1f7d4cd04664587f640fea83b103ddbe802c88348026d85eb3597d0076"
+    },
+    "starter_wrapper": {
+      "status": "PASS",
+      "rows": 2,
+      "exit_code": 0,
+      "terminal_states": [
+        "available",
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "73fa0ebe7697c6a5f9dc171b951194a416f85cac1ccb22d3d7ee164ade06e353"
+    },
+    "csv": {
+      "status": "PASS",
+      "rows": 2,
+      "exit_code": 0,
+      "terminal_states": [
+        "available",
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "d15c2860b573f23c249e7d0527ca53092d4334ca384253b9678926eaf4b89ca5"
+    },
+    "malformed": {
+      "status": "PASS",
+      "rows": 4,
+      "exit_code": 0,
+      "terminal_states": [
+        "available",
+        "failed",
+        "failed",
+        "failed"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "d9f28ec4cd9ba640473d159730dce71062c0b9d665fe4876808a068b85df60aa"
+    },
+    "resume": {
+      "status": "PASS",
+      "rows": 1,
+      "exit_code": 0,
+      "terminal_states": [
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "81ae1d505ab26700efece622ef79e04e2d4401686ff4179f1639c00b7eb877b1"
+    },
+    "baseline": {
+      "status": "PASS",
+      "rows": 1,
+      "exit_code": 0,
+      "terminal_states": [
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "46790ce011e02c843cd5dcbed8e12ea8b9feba9c96759388e0367844d83070b6"
+    },
+    "changed": {
+      "status": "PASS",
+      "rows": 1,
+      "exit_code": 0,
+      "terminal_states": [
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "cf85db5fed3b0d4087ba5a76a019d99cf8a1019f7959308bfd1adeac83068667"
+    },
+    "repeated": {
+      "status": "PASS",
+      "rows": 1,
+      "exit_code": 0,
+      "terminal_states": [
+        "available"
+      ],
+      "stderr_bytes": 0,
+      "physical_requests": 0,
+      "output_sha256": "8f038ce357bd842467d6aa3187989ef4f46166c6b76af46ad2c0a1698b54d107"
+    },
+    "missing_input": {
+      "status": "PASS",
+      "exit_code": 2
+    },
+    "http_real_records": {
+      "status": "PASS",
+      "number_search": "PASS",
+      "verify_supported_contradicted": "PASS",
+      "source_url_and_hash": "PASS",
+      "unknown_history": "PASS"
+    },
+    "mixed_invalid_input_dashboard": {
+      "status": "PASS",
+      "invalid_rows_visible": 2
+    },
+    "controlled_source_failures": {
+      "not_found": {
+        "status": "PASS",
+        "terminal_state": "not_available",
+        "exit_code": 0,
+        "actual_http_requests": 0,
+        "controlled_transport": true,
+        "claims": 0
+      },
+      "refused": {
+        "status": "PASS",
+        "terminal_state": "blocked",
+        "exit_code": 0,
+        "actual_http_requests": 0,
+        "controlled_transport": true,
+        "claims": 0
+      },
+      "timeout": {
+        "status": "PASS",
+        "terminal_state": "failed",
+        "exit_code": 0,
+        "actual_http_requests": 0,
+        "controlled_transport": true,
+        "claims": 0
+      },
+      "partial": {
+        "status": "PASS",
+        "terminal_state": "available",
+        "exit_code": 0,
+        "actual_http_requests": 0,
+        "controlled_transport": true,
+        "claims": 278
+      }
+    }
+  },
+  "independent_original_source_sha": "d8f13f3d8aa4fccd96f9024956a237aa0a0e782e",
+  "source_note": "Acceptance ran on the dirty candidate subsequently frozen; final exact-SHA clone/CI evidence is in the freeze receipt.",
+  "company_data_requests": {
+    "previous": 59,
+    "generic_profile_robots_only": 2,
+    "structured_recheck": 6,
+    "remaining_source_checks": 11,
+    "total": 78,
+    "authorized_maximum": 80,
+    "distinct_companies": 4,
+    "new_cohort": false,
+    "paid_api_cost": "0"
+  },
+  "direct_source_checks": [
+    {
+      "organisation_number": "923609016",
+      "purpose": "roles",
+      "status": 200,
+      "claims_checked": 121,
+      "hash": "f735e0a2f201baad64c9c52976b59043ef281d00034e0f1f07715fd4e9c38fb4",
+      "matching_original_hash_claims": 121
+    },
+    {
+      "organisation_number": "976390512",
+      "purpose": "entity",
+      "status": 200,
+      "claims_checked": 16,
+      "hash": "e43d56243f1177af21f538600474aa97ab512a1d7d76c090012d9502082ed350",
+      "matching_original_hash_claims": 16
+    },
+    {
+      "organisation_number": "976390512",
+      "purpose": "roles",
+      "status": 200,
+      "claims_checked": 185,
+      "hash": "48e4b6a7aa140b37153a2c4d796cbb146878db7bd894375b5a5ee90d001d3b8d",
+      "matching_original_hash_claims": 185
+    },
+    {
+      "organisation_number": "976390512",
+      "purpose": "subunits",
+      "status": 200,
+      "claims_checked": 0,
+      "hash": "29adeeaf456fa31f6c35ce644d2cbdcee6ebbfa9414d81b77d6e0ea4593e7c7d",
+      "matching_original_hash_claims": 0
+    },
+    {
+      "organisation_number": "995854600",
+      "purpose": "roles",
+      "status": 200,
+      "claims_checked": 33,
+      "hash": "02641c99ab82a2bc5b1054e669167e6d7789517933a6e9232062b89aa412374a",
+      "matching_original_hash_claims": 33
+    },
+    {
+      "organisation_number": "995854600",
+      "purpose": "subunits",
+      "status": 200,
+      "claims_checked": 0,
+      "hash": "7f504d2b856d7c1169fe985730709d884dd84fcaf7377a1c8e03d8b05ef487bb",
+      "matching_original_hash_claims": 0
+    },
+    {
+      "organisation_number": "926627708",
+      "purpose": "entity",
+      "status": 200,
+      "claims_checked": 14,
+      "hash": "601e091f4e64f88e175dc5c0cfbc817745639132f32872a2acef1d39f6e926ce",
+      "matching_original_hash_claims": 14
+    },
+    {
+      "organisation_number": "926627708",
+      "purpose": "roles",
+      "status": 200,
+      "claims_checked": 16,
+      "hash": "6b4020141747b42f2b644a6514107607dd660deac20f4489ea5dbe9149dc3d87",
+      "matching_original_hash_claims": 16
+    },
+    {
+      "organisation_number": "926627708",
+      "purpose": "subunits",
+      "status": 200,
+      "claims_checked": 0,
+      "hash": "16a21534d32615b4228270496b607b8f60dcf5369bef4d2fa955e421f503c7bd",
+      "matching_original_hash_claims": 0
+    }
+  ],
+  "role_locator_pre_fix": {
+    "role_claims_with_unchanged_original_source_hash": 355,
+    "literal_values_matched": 223,
+    "name_join_projections": 41,
+    "unresolved_pointers_repaired": 91,
+    "note": "88 trailing-slash record locators and three organisation-holder name locators; controlled source-locator regression passes after correction. Raw role documents were inspected in memory, not retained."
+  },
+  "browser": [
+    {
+      "width": 1366,
+      "page": "find",
+      "title": "Find companies \u00b7 Signalpost",
+      "document_width": 1366,
+      "viewport_width": 1366
+    },
+    {
+      "width": 1366,
+      "page": "profile",
+      "title": "Company profile \u00b7 Signalpost",
+      "document_width": 1366,
+      "viewport_width": 1366
+    },
+    {
+      "width": 1366,
+      "page": "evidence",
+      "title": "Evidence detail \u00b7 Signalpost",
+      "document_width": 1366,
+      "viewport_width": 1366
+    },
+    {
+      "width": 375,
+      "page": "find",
+      "title": "Find companies \u00b7 Signalpost",
+      "document_width": 375,
+      "viewport_width": 375
+    },
+    {
+      "width": 375,
+      "page": "profile",
+      "title": "Company profile \u00b7 Signalpost",
+      "document_width": 375,
+      "viewport_width": 375
+    },
+    {
+      "width": 375,
+      "page": "evidence",
+      "title": "Evidence detail \u00b7 Signalpost",
+      "document_width": 375,
+      "viewport_width": 375
+    }
+  ],
+  "variable_batch_refresh": {
+    "default-baseline": {
+      "rows": 1,
+      "refresh_modes": [
+        "baseline_no_prior_state"
+      ],
+      "error_codes": []
+    },
+    "default-expanded": {
+      "rows": 2,
+      "refresh_modes": [
+        "incompatible_prior_state",
+        "incompatible_prior_state"
+      ],
+      "error_codes": [
+        "REFRESH_PRIOR_STATE_INCOMPATIBLE"
+      ]
+    },
+    "pinned-baseline": {
+      "rows": 1,
+      "refresh_modes": [
+        "baseline_no_prior_state"
+      ],
+      "error_codes": []
+    },
+    "pinned-expanded": {
+      "rows": 2,
+      "refresh_modes": [
+        "compared",
+        "baseline_no_prior_state"
+      ],
+      "error_codes": []
+    }
+  },
+  "official_schema": "NOT_FOUND",
+  "organizer_execution_injection": "UNPUBLISHED",
+  "repository_visibility": "PRIVATE",
+  "submission": "NOT_SUBMITTED",
+  "code_files_sha256": {
+    "signalpost/__init__.py": "b5a8b95ade910d93341bd62c315dd04d390d1037602ae2fd7dfb1a33326a26ad",
+    "signalpost/adapter.py": "b405475c1e1f77041ee7efdda7daee8fd304cca4e82610206159b0a8dd133e0f",
+    "signalpost/brreg.py": "03d3422f890c9cf17705910d9de7935b44f73da2777381d4acc5ac12f7b74c4b",
+    "signalpost/discovery.py": "15e8fdec1e30c18363218b9d34ea84bcacec0874b05718edf7b6ea2fd4572ef1",
+    "signalpost/history.py": "9903c65e793dc014bfd15ab78649bdc43fdebc7803e76e23ddd9843c00db1253",
+    "signalpost/identifiers.py": "95424c027d1ede9c8f43bd2bd420f8bd9af753781fceed2b6297294a24fc93fd",
+    "signalpost/inputs.py": "7159a46592a88065a756ce61554de8c75831fd609703a58fe7db3131dab90f02",
+    "signalpost/models.py": "dc416f06f14527fdb34b4d0fe311eb0a4124b0b9a042387ca2b65fc44f9a53b8",
+    "signalpost/network.py": "d8441f4f6a6906d9c45a85ea70ee5d96b83201f7cd7b737b02296c167093416b",
+    "signalpost/operations.py": "1ebe2e88ba4be01228de448d038f9f57b342c2af48195f3bb2fdd2604af96918",
+    "signalpost/query.py": "5168dba7a6f5465a0fc4161b598411ba3d8d060dfdfbe301dfc3e74ae0f66e7b",
+    "signalpost/run.py": "ef1bf746bcb80d81b0442dfad7d01e1751d792dfb5b0f4fb3c88ae9883d2e852",
+    "signalpost/synthesis.py": "aaf3922c0b8ae4d0c4eaa71e896d65c744415e951b364d165f01401ac0f2153a",
+    "signalpost/web.py": "05b3f2eb5682a2008d9147616b98fcf83e3ee60b5982f7eb663837639f5d4a3e",
+    "signalpost/websites.py": "368c4a9566acdaba1a09457fa49cde351f2db46b2fa9f9f9c733e80045861f10"
+  }
+}

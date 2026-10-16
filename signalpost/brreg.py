@@ -53,6 +53,8 @@ def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
     """Keep public legal identity fields and exclude personal identifiers."""
     legal_form = _get(body, "organisasjonsform", "kode")
     address = body.get("forretningsadresse") or {}
+    if not isinstance(address, dict):
+        address = {}
     postal = body.get("postadresse") or {}
     def address_value(value: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(value, dict) or not value:
@@ -70,7 +72,8 @@ def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
         "business_address": None if legal_form == "ENK" else address_value(address),
         "postal_address": None if legal_form == "ENK" else address_value(postal),
         "industry_codes": [body.get(f"naeringskode{i}") for i in range(1, 4) if body.get(f"naeringskode{i}")],
-        "municipality_number": body.get("kommunenummer"), "municipality": body.get("kommune"),
+        "municipality_number": body.get("kommunenummer") or address.get("kommunenummer"),
+        "municipality": body.get("kommune") or address.get("kommune"),
         "website": body.get("hjemmeside"), "employees": body.get("antallAnsatte"),
         "latest_submitted_accounts": body.get("sisteInnsendteAarsregnskap"),
         "parent_organisation_number": body.get("overordnetEnhet"),
@@ -322,7 +325,8 @@ def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnaps
                              source_snapshot_ids=[source_id]))
     if not any(item.source_id == source_id for item in snapshots):
         snapshots.append(SourceSnapshot(source_id=source_id, source_url=url, retrieved_at=retrieved_at,
-            content_sha256=digest, http_status=status, cache_mode="transient", rights_status=rights))
+            content_sha256=digest, http_status=status if 100 <= status <= 599 else None,
+            cache_mode="transient", rights_status=rights))
     return evidence_id
 
 
@@ -418,7 +422,8 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             "organisation_number": "/organisasjonsnummer", "name": "/navn", "legal_form": "/organisasjonsform/kode",
             "legal_form_description": "/organisasjonsform/beskrivelse", "website": "/hjemmeside", "employees": "/antallAnsatte",
             "latest_submitted_accounts": "/sisteInnsendteAarsregnskap", "parent_organisation_number": "/overordnetEnhet",
-            "municipality_number": "/kommunenummer", "municipality": "/kommune",
+            "municipality_number": "/kommunenummer" if entity.get("kommunenummer") else "/forretningsadresse/kommunenummer",
+            "municipality": "/kommune" if entity.get("kommune") else "/forretningsadresse/kommune",
             "business_address": "/forretningsadresse", "postal_address": "/postadresse", "status": "/",
             "status_dates": "/", "industry_codes": "/",
         }
@@ -585,13 +590,15 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             role["holder_organisation_number"] = normalized
         for key, value in role.items():
             if value is None or key in {"_source_path", "_source_group_path"}: continue
-            role_source_paths = {"name": "/person/navn", "holder_organisation_number": "/enhet/organisasjonsnummer",
+            role_source_paths = {"name": "/enhet/navn" if role.get("holder_kind") == "organisation" else "/person/navn", "holder_organisation_number": "/enhet/organisasjonsnummer",
                                  "role_code": "/type/kode", "role_description": "/type/beskrivelse",
                                  "role_group_code": "/type/kode", "role_group": "/type/beskrivelse",
                                  "from_date": "/fraDato", "to_date": "/tilDato", "last_changed": "/sistEndret",
                                  "inactive": "/", "holder_kind": "/"}
-            role_path = role["_source_group_path"] + role_source_paths.get(key, "/" + key) if key.startswith("role_group") or key == "last_changed" else role["_source_path"] + role_source_paths.get(key, "/" + key)
-            method = "brreg_role_name_join_v1" if key == "name" else "brreg_role_status_normalization_v1" if key in {"inactive", "holder_kind"} else "brreg_json_pointer_v1"
+            source_root = role["_source_group_path"] if key.startswith("role_group") or key == "last_changed" else role["_source_path"]
+            relative_pointer = role_source_paths.get(key, "/" + key)
+            role_path = source_root + (relative_pointer if relative_pointer != "/" else "")
+            method = "brreg_role_name_join_v1" if key == "name" and role.get("holder_kind") == "person" else "brreg_role_status_normalization_v1" if key in {"inactive", "holder_kind"} else "brreg_json_pointer_v1"
             add_claim(f"role.{key}", value, "leadership_workplaces", "role", org, "person_role",
                       roles_final or roles_url, roles_time, roles_body, role_path, "roles", source_hash=roles_hash,
                       as_of=role.get("last_changed"),

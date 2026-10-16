@@ -20,7 +20,7 @@ from .synthesis import synthesize
 
 
 CSS = """
-:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f5f7f8}body{margin:0}header,main{max-width:1120px;margin:auto;padding:1rem}header{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}header a{font-weight:700}.card,section,form{background:white;border:1px solid #d7dfe4;border-radius:.65rem;padding:1rem;margin:.75rem 0}a{color:#075b82}a:focus,button:focus,input:focus,select:focus{outline:3px solid #146c94;outline-offset:2px}.muted{color:#4e5b64}.state{display:inline-block;border:1px solid #73828c;border-radius:1rem;padding:.1rem .55rem;font-size:.86rem}label{display:inline-block;margin:.35rem .4rem .35rem 0}input,select,button{font:inherit;padding:.45rem}table{border-collapse:collapse;width:100%;background:white}th,td{text-align:left;vertical-align:top;border:1px solid #ccd5db;padding:.55rem;overflow-wrap:anywhere}ul{padding-left:1.3rem}.domains{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}@media(max-width:650px){header,main{padding:.7rem}.domains{grid-template-columns:1fr}table{display:block;overflow-x:auto}input{max-width:100%}}
+:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f5f7f8}body{margin:0}header,main{max-width:1120px;margin:auto;padding:1rem}header{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}main{overflow-wrap:anywhere}header a{font-weight:700}.card,section,form{background:white;border:1px solid #d7dfe4;border-radius:.65rem;padding:1rem;margin:.75rem 0}a{color:#075b82}a:focus,button:focus,input:focus,select:focus{outline:3px solid #146c94;outline-offset:2px}.muted{color:#4e5b64}.state{display:inline-block;border:1px solid #73828c;border-radius:1rem;padding:.1rem .55rem;font-size:.86rem}label{display:inline-block;margin:.35rem .4rem .35rem 0}input,select,button{font:inherit;padding:.45rem}table{border-collapse:collapse;width:100%;background:white}th,td{text-align:left;vertical-align:top;border:1px solid #ccd5db;padding:.55rem;overflow-wrap:anywhere}ul{padding-left:1.3rem}.domains{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}@media(max-width:650px){header,main{padding:.7rem}.domains{grid-template-columns:1fr}table{display:block;overflow-x:auto}input{max-width:100%}}
 """
 
 
@@ -103,7 +103,8 @@ def _parse_filters(field: str, operator: str, value: str, currency: str, period_
 
 
 def create_app(data_path: str | Path) -> FastAPI:
-    profiles = load_profiles(data_path)
+    rejected_inputs = []
+    profiles = load_profiles(data_path, rejected_inputs=rejected_inputs)
     index = build_index(profiles)
     app = FastAPI(title="Signalpost research", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.profiles = profiles
@@ -133,7 +134,7 @@ def create_app(data_path: str | Path) -> FastAPI:
         field_options = (("organisation_number","Exact organisation number"),("legal_form","Legal form"),("municipality","Municipality"),
                 ("industry","Industry code"),("employees","Employees"),("revenue","Revenue"),("annual_result","Annual result"),
                 ("website","Verified website"))
-        form = ('<form method="get" action="/"><label>Company name or brand <input name="q" maxlength="300" value="' + _esc(q) + '"></label>'
+        form = ('<form method="get" action="/"><label>Company name, brand or organisation number <input name="q" maxlength="300" value="' + _esc(q) + '"></label>'
             '<label>Optional field <select name="field"><option value="">No primary filter</option>'
             + "".join(f'<option value="{name}"{" selected" if field==name else ""}>{label}</option>' for name,label in field_options) + '</select></label><label>Operator <select name="op">'
             + "".join(f'<option value="{name}"{" selected" if op==name else ""}>{name}</option>' for name in ("eq","contains","gt","gte","lt","lte","range"))
@@ -157,7 +158,12 @@ def create_app(data_path: str | Path) -> FastAPI:
         unknown = "" if not result["unknown"] else '<section><h2>Unknown for these records</h2><ul>' + "".join(
             f'<li>{_esc(item["name"])} ({_esc(item["organisation_number"])}): {_esc("; ".join(item["reasons"]))}</li>' for item in result["unknown"]) + '</ul></section>'
         note = '<p class="muted">Structured filters use AND. Unknown and unavailable source states are kept separate from matches.</p>'
-        return _page("Find companies", form + note + f'<p>{result["result_count"]} match(es)</p>' + "".join(entries) + unknown)
+        rejected = ("<section><h2>Inputs that could not be researched</h2><ul>" + "".join(
+            "<li>" + _esc(item["input_ref"]) + " (" + _esc(item["organisation_number"]) + "): "
+            + _esc("; ".join(str(error.get("message") or error.get("code") or "Input failed")
+                             for error in item["errors"] if isinstance(error, dict))) + "</li>"
+            for item in rejected_inputs) + "</ul></section>") if rejected_inputs else ""
+        return _page("Find companies", form + note + f'<p>{result["result_count"]} match(es)</p>' + "".join(entries) + unknown + rejected)
 
     @app.get("/companies/{organisation_number}", response_class=HTMLResponse)
     def company(organisation_number: str):
@@ -246,7 +252,7 @@ def create_app(data_path: str | Path) -> FastAPI:
 
     @app.get("/changes", response_class=HTMLResponse)
     def changes(org: str = ""):
-        chosen = [profiles[org]] if org in profiles else list(profiles.values())
+        chosen = ([profiles[org]] if org in profiles else []) if org else list(profiles.values())
         events = [(profile.organisation_number, event) for profile in chosen for event in profile.changes]
         events.sort(key=lambda pair: (pair[0], str(pair[1].get("observed_at", "")), str(pair[1].get("event_id", ""))))
         rows = ""

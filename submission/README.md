@@ -72,6 +72,8 @@ A supplied frozen registry is optional: add `--registry-snapshot PATH`, `--regis
 
 ## Budget, cutoff, refresh, resume
 
+For changing batch sizes, use the same explicit budget configuration for the baseline and refresh. The fallback request allowance depends on row count and currently changes the strict state fingerprint; the prior state is rejected rather than compared when that allowance changes. A fixed-budget one-to-two-company refresh was independently verified. See the [functional report](../docs/functional-acceptance-20261017/REPORT.md) for this limitation and the actual organizer-contract unknowns.
+
 Fallbacks are 1,800 seconds hard / 1,350 soft / 300 completion reserve; `12*N+1000` physical requests; paid cost limit zero. Actual organizer resource inputs take precedence. A runtime JSON config can set `budget.physical_request_limit`, durations and cost; use `--config PATH`. Corresponding `SIGNALPOST_*` variables are supported. The launcher prints a machine-readable `batch_complete` report to stdout; capture it separately from the JSONL output.
 
 Without `--evidence-cutoff`, the cutoff is run start. Undated facts retrieved later may be withheld; this explains the historical workplace coverage gap. Supply `--evidence-cutoff ISO_TIMESTAMP` only when that cutoff is actually authorized. The bounded final validation used the audited `2026-10-17T23:59:00+05:30` cutoff and published 57 exact-parent workplaces. Do not set a future cutoff merely to improve coverage; use the organizer's actual cutoff for evaluation.

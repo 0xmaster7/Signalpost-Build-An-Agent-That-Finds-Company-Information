@@ -1,0 +1,73 @@
+[
+  {
+    "file": "challenge.html",
+    "url": "https://builderr.ai/challenges/signalpost",
+    "status": 200,
+    "content_type": "text/html; charset=utf-8",
+    "sha256": "21f894136548b5201ece004d665b7e47bfe4f9261592b67b36ada563b271e303",
+    "retrieved_at_utc": "2026-10-16T19:46:17.848085+00:00",
+    "capture_note": "Raw capture retained on pancakes outside the source checkout; URL and hash are portable."
+  },
+  {
+    "file": "evaluation.md",
+    "url": "https://builderr.ai/docs/signalpost-evaluation-harness.md",
+    "status": 200,
+    "content_type": "text/markdown; charset=utf-8",
+    "sha256": "e9f994e2fa34750411487e9fab82dbffd55dc1bb16efe9021906b92896229d45",
+    "retrieved_at_utc": "2026-10-16T19:46:18.047390+00:00",
+    "capture_note": "Raw capture retained on pancakes outside the source checkout; URL and hash are portable."
+  },
+  {
+    "file": "brief.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost.md",
+    "status": 200,
+    "content_type": "text/markdown; charset=utf-8",
+    "sha256": "924ff60e1dab437c63806846aa19eaa29d84d8e87132983c4e5d9f7336214c32",
+    "retrieved_at_utc": "2026-10-16T19:46:18.159131+00:00",
+    "capture_note": "Raw capture retained on pancakes outside the source checkout; URL and hash are portable."
+  },
+  {
+    "file": "sources.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost-sources.md",
+    "status": 200,
+    "content_type": "text/markdown; charset=utf-8",
+    "sha256": "f080470ab29d5c6da243d812e35d0ae0aa3d35f5871d62dfef90422df1b8f630",
+    "retrieved_at_utc": "2026-10-16T19:46:18.222170+00:00",
+    "capture_note": "Raw capture retained on pancakes outside the source checkout; URL and hash are portable."
+  },
+  {
+    "file": "playbook.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost-agent-playbook.md",
+    "status": 200,
+    "content_type": "text/markdown; charset=utf-8",
+    "sha256": "0b165301576e1ad09c210bba48dd61bb2669752a07abaeb1188df4099bd4844e",
+    "retrieved_at_utc": "2026-10-16T19:46:18.324884+00:00",
+    "capture_note": "Raw capture retained on pancakes outside the source checkout; URL and hash are portable."
+  },
+  {
+    "file": "learning.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost-learning-harness.md",
+    "status": 200,
+    "content_type": "text/markdown; charset=utf-8",
+    "sha256": "3a3915e312010cb6ab6cf613135aa52acad6245b0db0d1dda3374dc27c2fed9a",
+    "retrieved_at_utc": "2026-10-16T19:46:18.615611+00:00",
+    "capture_note": "Raw capture retained on pancakes outside the source checkout; URL and hash are portable."
+  },
+  {
+    "file": "guidelines.html",
+    "url": "https://builderr.ai/guidelines",
+    "status": 200,
+    "sha256": "1d8095f47efb0610df6678782f4c1465f5c562cf46dac290932c90e58acdc94a",
+    "retrieved_at_utc": "2026-10-16T20:33:53.219355+00:00"
+  },
+  {
+    "file": "official-starter.tar.gz",
+    "url": "https://builderr.ai/signalpost-starter-kit.tar.gz",
+    "sha256": "d48da9910ea7de07d2bf51ab265539a35fe07002a6c1ca5787df81316dfabbf6",
+    "inspected_entries": {
+      "OUTPUT_CONTRACT.md": "59a93f8c0b29f7a8ed4df5bd700be2c85e83748e6d5da7b89db479169e6eaf6b",
+      "src/norway_company_agent/batch.py": "645e4df1e079102c526322a33eb4549b1febf9855e601c2ab7a640077bfe9654"
+    },
+    "machine_readable_json_schema_found": false
+  }
+]

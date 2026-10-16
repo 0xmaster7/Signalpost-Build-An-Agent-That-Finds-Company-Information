@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from .adapter import to_evaluator
-from .inputs import load_input, normalize_org_number, registry_fixture, stream_registry_matches
+from .inputs import load_input, normalize_org_number, stream_registry_matches
 from .models import (Claim, Envelope, Evidence, PublicState, RefreshState, RunError, Section, SourceSnapshot,
                      empty_section, validate_batch_publication_graph)
 from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
@@ -79,7 +79,8 @@ def _find_default_input() -> Path | None:
     return None
 
 
-def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutoff: datetime, previous: dict[str, Any]) -> Envelope:
+def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutoff: datetime, previous: dict[str, Any],
+              *, registry_as_of: str | None = None, registry_source_url: str | None = None) -> Envelope:
     sections = {name: empty_section() for name in (
         "identity_brand", "accounts_history", "leadership_workplaces", "website_owned_profiles",
         "hiring_activity", "claims_evidence_states", "refresh_changes")}
@@ -94,13 +95,13 @@ def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutof
     if not row.organisation_number or len(normalized) != 9 or not normalized.isdigit() or (not checksum_ok and row.organisation_number not in fixture):
         errors.append(RunError(code="INPUT_INVALID", message="A nine-digit organisation number with a valid mod-11 checksum is required."))
     elif row.organisation_number not in fixture:
-        errors.append(RunError(code="REGISTRY_SNAPSHOT_MISS", message="No matching frozen registry row; live registry integration is scheduled for M02."))
+        errors.append(RunError(code="REGISTRY_SNAPSHOT_MISS", message="No matching frozen registry row. Use an authoritative snapshot containing this company or enable the approved live BRREG fallback."))
     else:
         record = fixture[row.organisation_number]
         encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         digest = hashlib.sha256(encoded).hexdigest()
         fetched = datetime.now(timezone.utc)
-        source_url = str(record.get("source_url") or "urn:signalpost:registry-fixture")
+        source_url = str(record.get("source_url") or registry_source_url or "urn:signalpost:registry-fixture")
         snapshot_id = f"registry_fixture:{row.organisation_number}:{digest[:16]}"
         evidence.append(Evidence(evidence_id=f"{row.input_ref}:registry", source_url=source_url,
                                  retrieved_at=fetched, content_sha256=digest,
@@ -109,11 +110,17 @@ def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutof
                                  source_snapshot_ids=[snapshot_id]))
         snapshots.append(SourceSnapshot(source_id=snapshot_id, source_url=source_url,
                                         retrieved_at=fetched, content_sha256=digest, rights_status="fixture"))
-        name = str(record.get("name") or record.get("legal_name") or "")
-        if name:
+        name = str(record.get("name") or record.get("legal_name") or record.get("navn") or record.get("Navn") or "")
+        snapshot_date_raw = record.get("as_of") or record.get("snapshot_as_of") or registry_as_of
+        snapshot_date = _cutoff_datetime(snapshot_date_raw) if snapshot_date_raw else None
+        if snapshot_date_raw and (snapshot_date is None or snapshot_date > cutoff):
+            state = PublicState.NOT_AVAILABLE
+            errors.append(RunError(code="REGISTRY_SNAPSHOT_DATE_EXCLUDED",
+                message="Frozen identity was withheld because the supplied snapshot date is invalid or after the evidence cutoff."))
+        elif name:
             claim = Claim(claim_id=f"{row.input_ref}:legal_name", organisation_number=row.organisation_number,
                           section="identity_brand", field_family="identity", subject_id=row.organisation_number,
-                          field="legal_name", value=name, state=PublicState.AVAILABLE, scope="legal_entity",
+                          field="legal_name", value=name, state=PublicState.AVAILABLE, scope="legal_entity", as_of=snapshot_date,
                           verification_rule_id="frozen_registry_row_exact_org_v1", verification_score="1.0",
                           evidence_ids=[evidence[0].evidence_id], source_snapshot_ids=[snapshot_id])
             claims.append(claim)
@@ -349,7 +356,7 @@ def run(args: argparse.Namespace) -> int:
             previous_state_error = str(exc)
     live_brreg = bool(args.live_brreg or not args.registry_snapshot)
     live_websites = bool(args.live_websites)
-    fixture = registry_fixture(args.registry_snapshot) if not (live_brreg or live_websites) else {}
+    fixture = {}
     registry_hash = None
     if args.registry_snapshot:
         fixture, registry_hash = stream_registry_matches(args.registry_snapshot, {r.organisation_number for r in rows})
@@ -502,7 +509,7 @@ def run(args: argparse.Namespace) -> int:
                             section_states={name: PublicState.FAILED for name in
                                 ("identity_brand", "accounts_history", "leadership_workplaces")},
                             terminal_state=PublicState.FAILED,
-                            observations={"scheduler_execution_state": "failed", "organisation_number": item.company}))
+                            observations={"execution_state": "failed", "organisation_number": item.company}))
                 async def checkpoint_completed(item: Opportunity, result: Any) -> None:
                     future = asyncio.get_running_loop().create_future()
                     await completed_queue.put((item, result, future))
@@ -644,7 +651,8 @@ def run(args: argparse.Namespace) -> int:
         envelopes = asyncio.run(enrich())
     else:
         envelopes = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized else
-                     _envelope(row, fixture, batch_id, cutoff, previous) for row in rows]
+                     _envelope(row, fixture, batch_id, cutoff, previous, registry_as_of=args.registry_snapshot_as_of,
+                               registry_source_url=args.registry_source_url) for row in rows]
     for envelope in envelopes:
         envelope.synthesis["evidence_cutoff"] = cutoff.isoformat()
         envelope.synthesis["evidence_cutoff_source"] = cutoff_source

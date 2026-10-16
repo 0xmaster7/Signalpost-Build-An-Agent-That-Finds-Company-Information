@@ -1,0 +1,44 @@
+[
+  {
+    "width": 1366,
+    "page": "find",
+    "title": "Find companies \u00b7 Signalpost",
+    "document_width": 1366,
+    "viewport_width": 1366
+  },
+  {
+    "width": 1366,
+    "page": "profile",
+    "title": "Company profile \u00b7 Signalpost",
+    "document_width": 1366,
+    "viewport_width": 1366
+  },
+  {
+    "width": 1366,
+    "page": "evidence",
+    "title": "Evidence detail \u00b7 Signalpost",
+    "document_width": 1366,
+    "viewport_width": 1366
+  },
+  {
+    "width": 375,
+    "page": "find",
+    "title": "Find companies \u00b7 Signalpost",
+    "document_width": 375,
+    "viewport_width": 375
+  },
+  {
+    "width": 375,
+    "page": "profile",
+    "title": "Company profile \u00b7 Signalpost",
+    "document_width": 375,
+    "viewport_width": 375
+  },
+  {
+    "width": 375,
+    "page": "evidence",
+    "title": "Evidence detail \u00b7 Signalpost",
+    "document_width": 375,
+    "viewport_width": 375
+  }
+]

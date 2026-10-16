@@ -103,3 +103,6 @@ jobs:
           $GITHUB_WORKSPACE/signalpost-starter-kit/.venv/bin/python
           $GITHUB_WORKSPACE/signalpost-starter-kit/scripts/smoke_m08_web.py
           --data /tmp/signalpost-clean-cwd.jsonl
+      - name: Independent public-contract process and failure acceptance
+        working-directory: signalpost-starter-kit
+        run: .venv/bin/python scripts/validate_signalpost_functionality.py --output-dir /tmp/signalpost-independent-acceptance

@@ -91,6 +91,13 @@ class FindContractTests(unittest.TestCase):
     def setUp(self):
         self.profiles = profiles_fixture()
 
+    def test_text_search_finds_exact_organisation_number_without_name_match(self):
+        for org in ("001234567", "123456789", "923609016"):
+            with self.subTest(org=org):
+                found = find_companies(self.profiles, text=org)
+                self.assertEqual([row["organisation_number"] for row in found["matches"]], [org])
+        self.assertEqual(find_companies(self.profiles, text="00123456")["matches"], [])
+
     def test_exact_org_leading_zero_and_name_similarity_stays_separate(self):
         exact = find_companies(self.profiles.values(), filters=[FindFilter("organisation_number", "eq", "001234567")])
         self.assertEqual([row["organisation_number"] for row in exact["matches"]], ["001234567"])
@@ -122,6 +129,19 @@ class FindContractTests(unittest.TestCase):
         self.assertEqual([r["organisation_number"] for r in run("eq", Decimal("-5"))["matches"]], ["001234567"])
         self.assertEqual([r["organisation_number"] for r in run("gte", Decimal("0"))["matches"]], [])
         self.assertEqual([r["organisation_number"] for r in run("range", (Decimal("-5"), Decimal("-5")))["matches"]], ["001234567"])
+
+    def test_industry_code_filters_and_verification_use_the_official_code(self):
+        envelope=make_envelope("001234567","Acme AS",[{"field":"industry_codes.0",
+            "value":{"kode":"62.010","beskrivelse":"Computer programming"}}])
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"industry.jsonl";path.write_text(json.dumps(to_evaluator(envelope))+"\n")
+            profiles=load_profiles(path)
+        for op,value in [("eq","62.010"),("contains","62.")]:
+            found=find_companies(profiles,filters=[FindFilter("industry",op,value)])
+            self.assertEqual([r["organisation_number"] for r in found["matches"]],["001234567"])
+            self.assertTrue(found["matches"][0]["citations"])
+        self.assertEqual(verify_proposition(profiles,organisation_number="001234567",
+            field="industry",value="62.010")["status"],"supported")
 
     def test_filter_rejects_currency_or_period_guessing(self):
         with self.assertRaises(QueryError):
@@ -507,6 +527,29 @@ class ServerRenderedUXTests(unittest.TestCase):
         self.assertIn('rel="noopener noreferrer"', profile)
         self.assertNotIn('href="javascript:', profile)
         self.assertNotIn('href="javascript:', _link("javascript:alert(1)"))
+
+    def test_search_number_returns_the_requested_profile_and_unknown_history_stays_empty(self):
+        response = self.get("/", params={"q": "001234567"})
+        self.assertIn('href="/companies/001234567"', response.text)
+        self.assertNotIn('href="/companies/123456789"', response.text)
+
+    def test_failed_invalid_input_rows_remain_visible_without_breaking_profiles(self):
+        with self.path.open("a") as stream:
+            stream.write(json.dumps({"input_ref":"row:bad", "organisation_number":"bad", "terminal_state":"failed",
+                "claims":[], "errors":[{"code":"INPUT_INVALID", "message":"Cannot research this input <script>"}]})+"\n")
+        self.app = create_app(self.path)
+        response = self.get("/")
+        self.assertEqual(response.status_code,200)
+        self.assertIn("row:bad",response.text)
+        self.assertIn("Cannot research this input &lt;script&gt;",response.text)
+        self.assertIn('href="/companies/001234567"',response.text)
+        self.assertNotIn('href="/companies/bad"',response.text)
+
+    def test_unknown_company_history_does_not_return_other_company_events(self):
+        history = self.get("/changes", params={"org": "923609016"})
+        self.assertEqual(history.status_code, 200)
+        self.assertNotIn("m08-history-evidence", history.text)
+        self.assertIn("No material change events recorded", history.text)
 
     def test_unknown_or_malicious_route_inputs_are_rejected(self):
         self.assertEqual(self.get("/companies/attacker-name").status_code, 404)

@@ -64,7 +64,10 @@ def parse_records(text: str, fmt: str | None = None) -> list[InputRow]:
     elif mode == "json":
         try:
             data = json.loads(text)
-            values = data if isinstance(data, list) else [data]
+            if isinstance(data, dict) and isinstance(data.get("organisation_numbers"), list):
+                values = data["organisation_numbers"]
+            else:
+                values = data if isinstance(data, list) else [data]
         except json.JSONDecodeError:
             # JSONL begins with an object too; preserve each independently parseable row.
             values = []
@@ -110,6 +113,13 @@ def registry_fixture(path: str | Path | None) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _registry_org_number(row: dict[str, Any]) -> str:
+    """Read canonical or public BRREG/starter column names without numeric coercion."""
+    value = next((row[key] for key in ("organisation_number", "orgnr", "organisasjonsnummer",
+                                      "Organisasjonsnummer") if row.get(key) not in (None, "")), None)
+    return normalize_org_number(value)[0]
+
+
 def stream_registry_matches(path: str | Path | None, requested: set[str]) -> tuple[dict[str, dict[str, Any]], str | None]:
     """Filter a frozen JSONL/CSV snapshot in streaming passes, retaining only matches.
 
@@ -141,21 +151,21 @@ def stream_registry_matches(path: str | Path | None, requested: set[str]) -> tup
                 row = json.loads(line)
                 if not isinstance(row, dict):
                     continue
-                org, _ = normalize_org_number(row.get("organisation_number", row.get("orgnr")))
+                org = _registry_org_number(row)
                 if org in requested:
                     if org in matches:
                         raise ValueError(f"duplicate organisation number in registry snapshot at row {index}")
                     row["__signalpost_snapshot_row_sha256"] = hashlib.sha256(line.encode("utf-8")).hexdigest()
                     row["__signalpost_snapshot_row_number"] = index
-                    matches[org] = row
+                    matches[org] = {**row, "organisation_number": org}
         else:
             def lines():
                 yield first
                 yield from stream
             for row in csv.DictReader(lines()):
-                org, _ = normalize_org_number(row.get("organisation_number", row.get("orgnr")))
+                org = _registry_org_number(row)
                 if org in requested:
                     if org in matches:
                         raise ValueError(f"duplicate organisation number in registry snapshot: {org}")
-                    matches[org] = dict(row)
+                    matches[org] = {**row, "organisation_number": org}
     return matches, digest.hexdigest()

@@ -86,7 +86,7 @@ def build_index(profiles: dict[str, CompanyProfile] | Iterable[CompanyProfile]) 
     return CanonicalIndex(dict(keyed), by_field, names)
 
 
-def load_profiles(path: str | Path) -> dict[str, CompanyProfile]:
+def load_profiles(path: str | Path, *, rejected_inputs: list[dict[str, Any]] | None = None) -> dict[str, CompanyProfile]:
     """Load evaluator JSONL as a keyed canonical view and verify its bindings."""
     profiles: dict[str, CompanyProfile] = {}
     with Path(path).open("r", encoding="utf-8-sig") as stream:
@@ -101,6 +101,15 @@ def load_profiles(path: str | Path) -> dict[str, CompanyProfile]:
                 raise QueryError(f"invalid JSON at data row {line_number}") from exc
             org = raw.get("organisation_number")
             if not isinstance(org, str) or not re.fullmatch(r"\d{9}", org):
+                # Canonical batch output retains malformed inputs as failed rows.
+                # They are diagnostics, never company identities or claim sources.
+                if (raw.get("terminal_state") == "failed" and not raw.get("claims")
+                        and any(error.get("code") == "INPUT_INVALID" for error in raw.get("errors", [])
+                                if isinstance(error, dict))):
+                    if rejected_inputs is not None:
+                        rejected_inputs.append({"input_ref": raw.get("input_ref", f"row:{line_number}"),
+                            "organisation_number": org, "errors": raw.get("errors", [])})
+                    continue
                 raise QueryError(f"data row {line_number} has no exact nine-digit organisation_number")
             profile = profiles.setdefault(org, CompanyProfile(org))
             profile.sections.update(raw.get("sections") or {})
@@ -291,6 +300,13 @@ def _truth(profile: CompanyProfile, item: FindFilter) -> tuple[bool | None, list
     return None, [], "canonical data does not establish whether the predicate is false"
 
 
+def _text_predicate_value(claim: Claim) -> Any:
+    """Industry is a source object; the public filter asks for its exact code."""
+    if claim.field.startswith("industry_codes.") and isinstance(claim.value, dict):
+        return claim.value.get("kode")
+    return claim.value
+
+
 def find_companies(profiles: Iterable[CompanyProfile] | dict[str, CompanyProfile], *, text: str = "",
                    filters: list[FindFilter] | None = None, index: CanonicalIndex | None = None) -> dict[str, Any]:
     if len(text) > 300:
@@ -304,8 +320,11 @@ def find_companies(profiles: Iterable[CompanyProfile] | dict[str, CompanyProfile
     query = text.strip().casefold()
     candidates = set(index.profiles)
     if query:
-        candidates &= {org for org, values in index.names_by_org.items()
-                       if any(query in value.casefold() for value in values)}
+        if re.fullmatch(r"\d{9}", query):
+            candidates &= {query}
+        else:
+            candidates &= {org for org, values in index.names_by_org.items()
+                           if any(query in value.casefold() for value in values)}
     matched_citations: dict[str, dict[str, dict[str, Any]]] = {org: {} for org in candidates}
     unknown_reasons: dict[str, list[str]] = {org: [] for org in candidates}
     for item in checked:
@@ -349,9 +368,10 @@ def find_companies(profiles: Iterable[CompanyProfile] | dict[str, CompanyProfile
                                   "gte": actual >= item.value, "lt": actual < item.value,
                                   "lte": actual <= item.value}[item.operator]
                     elif item.operator == "contains":
-                        ok = isinstance(claim.value, str) and str(item.value).casefold() in claim.value.casefold()
+                        actual_text = _text_predicate_value(claim)
+                        ok = isinstance(actual_text, str) and str(item.value).casefold() in actual_text.casefold()
                     else:
-                        ok = str(claim.value).casefold() == str(item.value).casefold()
+                        ok = str(_text_predicate_value(claim)).casefold() == str(item.value).casefold()
                 except (InvalidOperation, KeyError, TypeError):
                     ok = False
                 if ok:
@@ -500,7 +520,7 @@ def verify_proposition(profiles: dict[str, CompanyProfile], *, organisation_numb
     if proposed_numeric is not None:
         exact = [claim for claim in candidates if _decimal_equal(claim.value, proposed_numeric)]
     else:
-        exact = [claim for claim in candidates if str(claim.value).casefold() == value.casefold()]
+        exact = [claim for claim in candidates if str(_text_predicate_value(claim)).casefold() == value.casefold()]
     if exact:
         selected = exact
         status, reason = "supported", "an exact canonical claim supports the proposition"
