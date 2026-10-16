@@ -834,6 +834,35 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
     page_records_at_resource = [node for node in webpage_nodes
         if _schema_record_urls(node) and _schema_entity_url_same_resource(node, page)]
 
+    # A direct representation must identify one coherent company. Selecting
+    # the matching member of a mixed mainEntity list loses contradictory
+    # subject evidence. Publisher names likewise cannot override explicit IDs.
+    if shared_domain:
+        def company_ids(node: dict[str, Any]) -> set[str]:
+            return set(_identifier_values(node.get("identifier"))
+                       + _identifier_values(node.get("taxID"))
+                       + _identifier_values(node.get("vatID")))
+
+        for webpage in bound_webpages:
+            entities = _direct_typed_entities(webpage.get("mainEntity"),
+                {"organization", "corporation", "localbusiness"})
+            if (any(_schema_entity_matches(profile, node) for node in entities)
+                    and any(not _schema_entity_matches(profile, node)
+                            or _schema_entity_has_conflicting_ids(profile, node) for node in entities)):
+                abstain("conflicting_page_publisher_identity")
+                return None
+            for publisher in _direct_typed_entities(webpage.get("publisher"),
+                    {"organization", "corporation", "localbusiness"}):
+                name = _as_text(publisher.get("legalName") or publisher.get("name"))
+                identifiers = company_ids(publisher)
+                for operator in site_publishers:
+                    operator_name = _as_text(operator.get("legalName") or operator.get("name"))
+                    operator_ids = company_ids(operator)
+                    if (name and _same_legal_name(name, operator_name)
+                            and identifiers and operator_ids and identifiers != operator_ids):
+                        abstain("conflicting_page_publisher_identity")
+                        return None
+
     # Shared-domain representation is page scoped. Only the direct typed
     # mainEntity/publisher of this exact WebPage record can establish it.
     shared_page_proof: dict[str, Any] | None = None

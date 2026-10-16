@@ -81,6 +81,36 @@ class SolAuditRemediationTests(unittest.TestCase):
                     self.assertEqual(snapshots_by_id[snapshot_id].source_url, evidence.source_url)
         return result, payload
 
+    def test_shared_page_direct_entities_and_operator_identifiers_are_consistent(self):
+        url = "https://group.no/brands/acme"
+        target = {"@type": "Organization", "legalName": "Acme AS", "identifier": "923609016"}
+        group = {"@type": "Organization", "legalName": "Group AS", "identifier": "987654322"}
+        rival = {"@type": "Organization", "legalName": "Rival AS", "identifier": "987654321"}
+        profile = {"organisation_number": "923609016", "name": "Acme AS",
+            "website_candidates": [{"raw": url, "source": "registry_live"}]}
+        cases = [
+            ("competing direct subjects", [target, rival], group, False),
+            ("reordered competing direct subjects", [rival, target], group, False),
+            ("group publisher identifier conflicts", target, {**group, "identifier": "987654321"}, False),
+            ("single coherent target representation", target, group, True),
+        ]
+        for label, main_entity, publisher, expected in cases:
+            graph = [{"@type": "WebSite", "url": "https://group.no/", "publisher": group},
+                {"@type": "WebPage", "url": url, "publisher": publisher, "mainEntity": main_entity}]
+            html = ("<html><head><script type=\"application/ld+json\">" + json.dumps(graph)
+                + "</script></head><body><h1>Acme AS</h1></body></html>")
+            with self.subTest(case=label):
+                result, payload = self._research_and_serialize_website_case(
+                    profile, url, html, shared_domains={"group.no"})
+                published = [claim for claim in payload["claims"] if claim["field"] in {
+                    "verified_website_url", "verified_website_domain"}]
+                self.assertEqual(bool(published), expected, label)
+                self.assertFalse(any(claim["field"] == "verified_website_domain" for claim in published))
+                if expected:
+                    self.assertEqual(published[0]["value"], url)
+                else:
+                    self.assertFalse(any(claim.field.startswith("verified_website_") for claim in result.claims))
+
     def test_shared_page_visible_operator_conflict_blocks_structured_and_html_proofs(self):
         """A target representation cannot override an independently identified rival site operator."""
         url = "https://group.no/brands/acme"
