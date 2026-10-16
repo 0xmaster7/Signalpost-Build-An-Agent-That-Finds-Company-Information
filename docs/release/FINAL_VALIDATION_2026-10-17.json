@@ -1,0 +1,191 @@
+{
+  "record_type": "bounded_live_and_release_validation",
+  "implementation_sha": "4e5aacbb1d9793095e6c89eb06f56b496324c814",
+  "baseline_live_source_sha": "375b7ff4f1f1998a6e04b5a58e8a276c118dbd82",
+  "baseline_live_tree_clean": true,
+  "refresh_source_note": "375b7ff4 plus the exact ownership fix and regression subsequently committed as 4e5aacbb1d9793095e6c89eb06f56b496324c814",
+  "authorization": {
+    "distinct_companies": 4,
+    "maximum_physical_requests": 80,
+    "paid_cost": "0",
+    "new_sources": false
+  },
+  "cutoff": "2026-10-17T23:59:00+05:30",
+  "cutoff_note": "Explicit audited safety cutoff; undated observations retrieved before it can qualify. Run-start default remains unchanged.",
+  "runs": {
+    "live": {
+      "rows": 4,
+      "physical_requests": 25,
+      "runtime_seconds": 21.557,
+      "source_provenance": {
+        "source_sha": "375b7ff4f1f1998a6e04b5a58e8a276c118dbd82",
+        "dirty": false,
+        "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "files": {
+        "stdout.json": "83ed498558c316cea617e401374e9906dd0c0e9895135487d8fb8aa173b0f2d5",
+        "output.jsonl.publication.json": "83ccdd35028ca6b9d3537c1789777b06f5acc573f8ae79ae64c466696e7752fc",
+        "provenance.json": "c5cd11f10ad40f794e3579798d8fbc36324696cf3e2dc787d0b97b7c8d1a8503",
+        "state.json": "8e9488482a826341999e7d1c71821b328bf73117c062a3a051b9d6495e0a31d8",
+        "config.json": "0f67e3e8f4da7d9df0443a39f7ef40e2c1fde46620240c31f21c1b79b8a118c3",
+        "input.jsonl": "e5321689935ecfb4558a1323a81237b272aa593b059c4a08e5302a8e92f542fb",
+        "ledger.json": "52182507a8be8a8ee5461ed0b2c39a3026106ff69da502d03b17d3fb35b23afb",
+        "supplemental-ledger.json": "4ada019a6a7713de87135d5e347e059b72850796d8fadd18f3e5b8162df57536",
+        "output.jsonl": "de26e7595e089bd5ab752c3e493977b3547affbee49b60c4b5ba766d18c1f3e4"
+      },
+      "refresh_prior_state_recognized": null,
+      "material_changes": 0
+    },
+    "refresh-live": {
+      "rows": 4,
+      "physical_requests": 25,
+      "runtime_seconds": 22.637,
+      "source_provenance": {
+        "source_sha": "375b7ff4f1f1998a6e04b5a58e8a276c118dbd82",
+        "dirty": true,
+        "diff_sha256": "69aec7fc0aa392c67d90463ae32188b8732e6e055f6b4ba27537272da188962e"
+      },
+      "files": {
+        "stdout.json": "7bf6a24dc66d93004f1893bb07461ab0e1c253a8651afe50fd2ed3bafbbde42a",
+        "output.jsonl.publication.json": "ab6782ee7e75143f8d5dd9a7c639e3e998e2692266b982eac2dc872f40254d41",
+        "provenance.json": "1777cadf784401dfe67f0849158214b41e4f9ffa992b6e50654cbbf79702a11b",
+        "state.json": "fcb23d02eeda6b5a2921486b7fca9548ca4a74ca08f98e5e042c904178cd329f",
+        "config.json": "0f67e3e8f4da7d9df0443a39f7ef40e2c1fde46620240c31f21c1b79b8a118c3",
+        "input.jsonl": "e5321689935ecfb4558a1323a81237b272aa593b059c4a08e5302a8e92f542fb",
+        "ledger.json": "6121429d098eb629edaa3b8f73aba3626abd7aa5e520ad7c50bf77df06141749",
+        "output.jsonl": "57469ab6f88547812aef9ce9a357221e2a6c2c8edf6dd1e95643095fa9061602"
+      },
+      "refresh_prior_state_recognized": true,
+      "material_changes": 0
+    },
+    "single": {
+      "rows": 1,
+      "physical_requests": 6,
+      "runtime_seconds": 5.083,
+      "source_provenance": {
+        "implementation_sha": "4e5aacbb1d9793095e6c89eb06f56b496324c814",
+        "note": "Only release documentation uncommitted or tree clean; production source equals implementation SHA."
+      },
+      "files": {
+        "stdout.json": "3c3d328d83a52e898d49c5bb46ecd00d658b45d08c721f0c39f36f1bf1de405a",
+        "output.jsonl.publication.json": "bda58df3c29aa70e1c6b58e303977a6053b89a163d53ee9487d0b2ab6cff0b34",
+        "state.json": "2d5f395e021324992e6b61130f0a0eb629059cf5d2c08cbc88b28fb4cd77a164",
+        "config.json": "6449764c7d41af29fe1ce21bbe368299e439daf85776e8ace4e9092bb185b557",
+        "input.txt": "877d33bbe2d6d08788f6add093783b45067b32ddb0b1a727178d5e2376a09dd6",
+        "output.jsonl": "977072674221a562755d1399ce451cdcc091e9b20c4109108f21d987415ad425"
+      },
+      "refresh_prior_state_recognized": null,
+      "material_changes": 0
+    }
+  },
+  "companies": [
+    {
+      "organisation_number": "923609016",
+      "legal_name": "EQUINOR ASA",
+      "terminal_state": "available",
+      "claims_by_family": {
+        "identity": 18,
+        "identity_history": 4,
+        "financial_record_metadata": 42,
+        "role": 121,
+        "workplace": 212
+      },
+      "financial_records": 6,
+      "roles": 15,
+      "workplaces": 35,
+      "workplaces_complete": true,
+      "website_state": "ambiguous",
+      "website_reason": [
+        "conflicting_structured_company_identity"
+      ],
+      "available_claims": 397,
+      "evidence_count": 400
+    },
+    {
+      "organisation_number": "976390512",
+      "legal_name": "NORSK RIKSKRINGKASTING AS",
+      "terminal_state": "available",
+      "claims_by_family": {
+        "identity": 16,
+        "financial_record_metadata": 42,
+        "role": 185,
+        "workplace": 139
+      },
+      "financial_records": 6,
+      "roles": 23,
+      "workplaces": 20,
+      "workplaces_complete": true,
+      "website_state": "not_attempted",
+      "website_reason": [],
+      "available_claims": 382,
+      "evidence_count": 384
+    },
+    {
+      "organisation_number": "995854600",
+      "legal_name": "PARS INVEST AS",
+      "terminal_state": "available",
+      "claims_by_family": {
+        "identity": 14,
+        "financial_record_metadata": 21,
+        "role": 33,
+        "workplace": 5
+      },
+      "financial_records": 3,
+      "roles": 4,
+      "workplaces": 1,
+      "workplaces_complete": true,
+      "website_state": "not_attempted",
+      "website_reason": [],
+      "available_claims": 73,
+      "evidence_count": 75
+    },
+    {
+      "organisation_number": "926627708",
+      "legal_name": "NORDVEST INSTALLASJON AS",
+      "terminal_state": "available",
+      "claims_by_family": {
+        "identity": 14,
+        "financial_record_metadata": 21,
+        "role": 16,
+        "workplace": 5
+      },
+      "financial_records": 3,
+      "roles": 2,
+      "workplaces": 1,
+      "workplaces_complete": true,
+      "website_state": "not_attempted",
+      "website_reason": [],
+      "available_claims": 56,
+      "evidence_count": 58
+    }
+  ],
+  "supplemental_website_inspection_requests": 3,
+  "physical_requests_total": 59,
+  "validation": {
+    "ordered_cardinality": "PASS",
+    "canonical_publication_graph": "PASS",
+    "evaluator_serialization": "PASS",
+    "paired_publication": "PASS",
+    "state_artifact": "PASS",
+    "full_suite": {
+      "tests": 433,
+      "subtests": 198,
+      "warnings": 1
+    },
+    "ownership_suite": {
+      "tests": 150,
+      "subtests": 152
+    },
+    "historical_full_bundle_available_on_vm": false,
+    "historical_receipt_gate": "PASS",
+    "official_evaluator_schema": "UNCONFIRMED",
+    "private_repository_organizer_access": "NOT_VERIFIED"
+  },
+  "limits": [
+    "Not a held-out recall or population precision benchmark.",
+    "No owned website, numeric financial metric, jobs, or activity claim published in this four-company sample.",
+    "Official role/workplace bindings checked against exact structured source; no independent human adjudication of every role.",
+    "Baseline live run used the clean prior candidate; refresh exercised the repaired source; no full 100-company run on final source.",
+    "Historical M12 raw bundle referenced on another execution host was unavailable on this VM; report and previously recorded receipts remain historical evidence."
+  ]
+}

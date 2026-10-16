@@ -1,37 +1,32 @@
 # Signalpost
 
-This repository starts from Builderr's supplied runnable reference in [`signalpost-starter-kit/`](signalpost-starter-kit/). The engineering authority is [`CODEX_SIGNALPOST_FINAL_IMPLEMENTATION_PLAN_AUDITED.md`](CODEX_SIGNALPOST_FINAL_IMPLEMENTATION_PLAN_AUDITED.md); current Builderr contract captures and the M00 reconciliation are under [`docs/`](docs/).
+Signalpost researches Norwegian companies by organisation number and produces ordered, evidence-backed JSONL output. The CLI fetches approved official BRREG data and optionally verifies registry-listed websites. The local web application explores saved results; it does not perform live research.
 
-## M00 results
+**Current release preparation:** [submission and demo guide](submission/README.md), [validation report](docs/release/FINAL_RELEASE_VALIDATION_2026-10-17.md), and [machine-readable evidence](docs/release/FINAL_VALIDATION_2026-10-17.json). Submission remains HOLD: organizer access to this private repository and the authoritative evaluator schema are unverified; website, financial-metric, jobs, and activity coverage remain limited. Nothing has been submitted.
 
-- Contract/repository audit: [`docs/contract-matrix.md`](docs/contract-matrix.md)
-- Starter keep/refactor/adapt/quarantine map: [`docs/audit/starter-component-map.md`](docs/audit/starter-component-map.md)
-- Reproducible 200-company registry website audit: [`docs/audit/m00-website-opportunity.md`](docs/audit/m00-website-opportunity.md)
-- Decisions and unresolved contract inputs: [`docs/decisions/M00.md`](docs/decisions/M00.md)
-- Builderr questions prepared for follow-up: [`docs/builderr-questions.md`](docs/builderr-questions.md)
+## Install and run
 
-The starter README contains setup, sample refresh replay and local run commands. Its historic prototype scorers and compact output example are reference material; they do not supersede the current Builderr evaluator contract or the audited implementation plan.
-## M01/M02 runtime
+Requirements: Git, Python 3.12+, outbound HTTPS for installation/live research, and `uv` 0.8.0. No API credentials or paid services are required. The [submission guide](submission/README.md) includes a tested standalone `uv` bootstrap for machines without pip/venv.
 
-From the repository root, with the locked starter environment installed:
+From `signalpost-starter-kit`:
 
 ```sh
-PYTHONPATH=. signalpost-starter-kit/.venv/bin/python -m signalpost.run \
-  --input signalpost-starter-kit/tests/fixtures/m01/offline-batch.jsonl \
-  --registry-snapshot signalpost-starter-kit/tests/fixtures/m01/registry.jsonl \
-  --output signalpost_output.jsonl
+uv sync --frozen --extra m08-test
 ```
 
-The runner accepts JSON, JSONL, CSV, TSV, and plain text inputs. `--previous-state` reads a validated canonical M07 history artifact; `--state-output` writes the next canonical JSON artifact atomically. The SQLite resume checkpoint is internal and separate (`--checkpoint`, or the default path formed by appending `.checkpoint.sqlite` to the state output path). Baseline runs without a prior artifact publish no synthetic additions. A failed or incomplete source preserves earlier facts, and only complete official role/workplace collections can confirm those removals. The provisional evaluator change names remain in `signalpost/adapter.py`. `--config`, `--evidence-cutoff`, and `--network-policy` are also available; corresponding input/output/config/cutoff/network settings can be supplied with `SIGNALPOST_*` environment variables. The frozen registry fixture demonstrates deterministic offline operation. Add `--live-brreg` to fetch exact-organisation entity, normalized accounts, roles, and paginated workplaces through the centralized M01 gateway. An optional `--registry-snapshot` is streamed and hashed; set `--registry-snapshot-as-of` and `--registry-source-url` when the supplied Builderr snapshot does not carry those fields per row.
-
-Launch the read-only server-rendered research UI over an evaluator JSONL result with `python -m signalpost.web --data signalpost_output.jsonl`. It provides deterministic find, profile, evidence, compare, verify, and M07 changes views. Search and compare consume only available canonical claims; unknown or incompatible facts remain visible as such. The UI never modifies claims or performs outbound requests.
-
-Run the fixed 100-company foundation smoke and save a report outside the checkout:
+From the repository root, run the bundled offline example (four rows, including a duplicate; fictional fixture identities):
 
 ```sh
-PYTHONPATH=. signalpost-starter-kit/.venv/bin/python \
-  signalpost-starter-kit/scripts/run_m02_foundation_smoke.py \
-  --output /tmp/signalpost-m02-foundation-smoke.json
+signalpost-starter-kit/.venv/bin/python signalpost-starter-kit/run_signalpost.py   --input signalpost-starter-kit/tests/fixtures/m01/offline-batch.jsonl   --registry-snapshot signalpost-starter-kit/tests/fixtures/m01/registry.jsonl   --output /tmp/signalpost-output.jsonl --state-output /tmp/signalpost-state.json
+signalpost-starter-kit/.venv/bin/python signalpost-starter-kit/run_signalpost_web.py   --data /tmp/signalpost-output.jsonl --host 127.0.0.1 --port 8000
 ```
 
-M02 decisions and unresolved inputs are listed in [the M02 decision record](docs/decisions/M02.md). BRREG source rights and required attribution are documented in [BRREG structured sources](docs/sources/brreg.md).
+Open http://127.0.0.1:8000 for find, profiles, citations, compare, verify, and change history. For real-company research and evaluator invocation, use the exact commands and cutoff/budget explanation in the [submission guide](submission/README.md). Live invocations make external requests; the completed validation approval is not an ongoing testing allowance.
+
+## Contracts and evidence
+
+The authority is [the audited implementation plan](CODEX_SIGNALPOST_FINAL_IMPLEMENTATION_PLAN_AUDITED.md), with [contract reconciliation](docs/contract-matrix.md), [source rights](docs/source-rights.md), and [source policy](docs/release/source-rights-manifest.json). The evaluator adapter in `signalpost/adapter.py` implements the current repository contract; official Builderr field names remain unconfirmed.
+
+Historical release reports remain under [docs/release](docs/release), including the accepted [100-company M12 smoke](docs/release/M12_POST_REPAIR_LIVE_ACCEPTANCE_2026-10-10.md). That smoke tested its recorded historical SHA, not this final source. The original raw bundle is not present on this Azure VM. Preserved reports and hash receipts must not be represented as fresh revalidation of unavailable raw bytes.
+
+[Starter component audit](docs/audit/starter-component-map.md), [website opportunity audit](docs/audit/m00-website-opportunity.md), [M00 decisions](docs/decisions/M00.md), and [open organizer questions](docs/builderr-questions.md) preserve the earlier project context. Experimental starter scripts are outside the canonical launcher and must not be used to bypass the approved source contracts.

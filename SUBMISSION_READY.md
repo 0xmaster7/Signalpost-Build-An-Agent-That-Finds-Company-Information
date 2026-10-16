@@ -1,3 +1,13 @@
+# Current final mission status — 2026-10-17
+
+**HOLD for external submission.** The repaired implementation is `4e5aacbb1d9793095e6c89eb06f56b496324c814`; the documentation package has its own final SHA and requires exact-SHA green CI, reported in the handoff. See [the current validation report](docs/release/FINAL_RELEASE_VALIDATION_2026-10-17.md), [machine-readable sample evidence](docs/release/FINAL_VALIDATION_2026-10-17.json), and [submission/demo instructions](submission/README.md).
+
+433 tests/198 subtests passed after the ownership repair. A bounded live baseline/refresh and single-company run used 59 of 80 approved requests across four distinct companies, publishing exact official identities, roles and 57 workplaces at the explicit audited cutoff. The four-company sample published no verified websites, financial metrics, jobs or activity. This does not establish materially improved held-out recall or an official score.
+
+Organizer access to the PRIVATE repository and the authoritative evaluator schema remain unverified. No external submission, email, PR, merge, visibility change, paid integration or new source was performed. All historical release records below are preserved as historical evidence; they do not supersede this current status.
+
+---
+
 # RC1 submission checklist
 
 ## M12 post-repair acceptance (2026-10-10)
