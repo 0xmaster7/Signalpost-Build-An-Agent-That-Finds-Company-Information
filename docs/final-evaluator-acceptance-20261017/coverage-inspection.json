@@ -1,0 +1,111 @@
+{
+  "financial_source": {
+    "response_sha256": "fda20c0880f7585fcf5f950813eeb83682e37f4048b607171f2b41894c46bd6b",
+    "records": 6,
+    "currencies": [
+      "USD"
+    ],
+    "numeric_candidates": 42,
+    "unit_states": {
+      "absent": 42
+    }
+  },
+  "preserved_companies": [
+    {
+      "organisation_number": "923609016",
+      "name": "EQUINOR ASA",
+      "claims": 397,
+      "families": {
+        "identity": 18,
+        "identity_history": 4,
+        "financial_record_metadata": 42,
+        "role": 121,
+        "workplace": 212
+      },
+      "website_state": {
+        "state": "ambiguous",
+        "attempt_outcome": null,
+        "claims": [],
+        "diagnostics": []
+      },
+      "hiring_state": {
+        "state": null,
+        "attempt_outcome": "not_attempted",
+        "claims": [],
+        "diagnostics": []
+      }
+    },
+    {
+      "organisation_number": "976390512",
+      "name": "NORSK RIKSKRINGKASTING AS",
+      "claims": 382,
+      "families": {
+        "identity": 16,
+        "financial_record_metadata": 42,
+        "role": 185,
+        "workplace": 139
+      },
+      "website_state": {
+        "state": null,
+        "attempt_outcome": "not_attempted",
+        "claims": [],
+        "diagnostics": []
+      },
+      "hiring_state": {
+        "state": null,
+        "attempt_outcome": "not_attempted",
+        "claims": [],
+        "diagnostics": []
+      }
+    },
+    {
+      "organisation_number": "995854600",
+      "name": "PARS INVEST AS",
+      "claims": 73,
+      "families": {
+        "identity": 14,
+        "financial_record_metadata": 21,
+        "role": 33,
+        "workplace": 5
+      },
+      "website_state": {
+        "state": null,
+        "attempt_outcome": "not_attempted",
+        "claims": [],
+        "diagnostics": []
+      },
+      "hiring_state": {
+        "state": null,
+        "attempt_outcome": "not_attempted",
+        "claims": [],
+        "diagnostics": []
+      }
+    },
+    {
+      "organisation_number": "926627708",
+      "name": "NORDVEST INSTALLASJON AS",
+      "claims": 56,
+      "families": {
+        "identity": 14,
+        "financial_record_metadata": 21,
+        "role": 16,
+        "workplace": 5
+      },
+      "website_state": {
+        "state": null,
+        "attempt_outcome": "not_attempted",
+        "claims": [],
+        "diagnostics": []
+      },
+      "hiring_state": {
+        "state": null,
+        "attempt_outcome": "not_attempted",
+        "claims": [],
+        "diagnostics": []
+      }
+    }
+  ],
+  "new_company_http_requests": 0,
+  "authorization_used": 78,
+  "authorization_maximum": 80
+}

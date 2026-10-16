@@ -134,3 +134,21 @@ class NativeFrozenRegistryTests(unittest.TestCase):
             elif claim.field=="role.inactive":
                 self.assertEqual(claim.value,bool(value.get("avregistrert") or value.get("fratraadt")))
             else:self.assertEqual(value,claim.value)
+
+    def test_native_frozen_legal_form_reaches_website_identity_gate(self):
+        from signalpost.run import _website_profile
+        for source in [{"organisasjonsform":{"kode":"ENK"}}, {"organisasjonsform.kode":"ENK"}, {"Organisasjonsform.kode":"ENK"}]:
+            with self.subTest(source=source):
+                profile=_website_profile("923609016",frozen={"organisation_number":"923609016","navn":"Controlled Sole Trader", "forretningsadresse":{"adresse":["Private address"]}, **source})
+                self.assertEqual(profile["legal_form"],"ENK")
+                self.assertIsNone(profile["business_address"])
+                self.assertIsNone(profile["postal_address"])
+
+    def test_title_case_bulk_fields_reach_website_research_without_promotion(self):
+        from signalpost.run import _website_profile
+        profile=_website_profile("923609016",frozen={"organisation_number":"923609016","Navn":"Controlled Native ASA","Organisasjonsform.kode":"ASA","Hjemmeside":"controlled.example.test"}, frozen_sha="a"*64, frozen_source_url="https://registry.example.test/bulk.csv.gz")
+        self.assertEqual(profile["name"],"Controlled Native ASA")
+        self.assertEqual(profile["legal_form"],"ASA")
+        self.assertEqual(profile["website_candidates"][0]["raw"],"controlled.example.test")
+        self.assertEqual(profile["website_candidates"][0]["source"],"registry_frozen")
+        self.assertNotIn("official_website",profile)

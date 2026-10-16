@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import uuid
+from dataclasses import fields
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,11 +42,12 @@ def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[s
         if parent:
             profile["related_organisation_numbers"] = [str(parent)]
     if frozen and normalize_org_number(frozen.get("organisation_number", frozen.get("orgnr")))[0] == org:
-        name = frozen.get("name") or frozen.get("legal_name") or frozen.get("navn")
+        name = frozen.get("name") or frozen.get("legal_name") or frozen.get("navn") or frozen.get("Navn")
         if not profile.get("name") and name:
             profile["name"] = name
         if not profile.get("legal_form"):
-            form = frozen.get("legal_form") or frozen.get("organisationsform")
+            form = (frozen.get("legal_form") or frozen.get("organisasjonsform") or frozen.get("organisationsform")
+                    or frozen.get("organisasjonsform.kode") or frozen.get("Organisasjonsform.kode"))
             profile["legal_form"] = form.get("kode") if isinstance(form, dict) else form
         profile.setdefault("historical_names", frozen.get("historical_names") or [])
         if str(profile.get("legal_form") or "").upper() == "ENK":
@@ -59,7 +61,7 @@ def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[s
             row_hash = hashlib.sha256(json.dumps({k:v for k,v in frozen.items() if not k.startswith("__signalpost_")},
                 ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         source_url = frozen.get("source_url") or frozen_source_url
-        raw_website = frozen.get("website") or frozen.get("website_url") or frozen.get("hjemmeside")
+        raw_website = frozen.get("website") or frozen.get("website_url") or frozen.get("hjemmeside") or frozen.get("Hjemmeside")
         if raw_website and source_url and frozen_sha:
             profile.setdefault("website_candidates", []).append({"raw": raw_website, "source": "registry_frozen",
                 "source_url": source_url, "content_sha256": row_hash,
@@ -395,12 +397,41 @@ def run(args: argparse.Namespace) -> int:
             "per_company_physical_limit": budget.per_company_physical_limit,
             "per_host_physical_limit": budget.per_host_physical_limit},
     }
-    config_fingerprint = sha256_json(effective_config_identity)
-    if previous_artifact and previous_artifact.configuration_fingerprint != config_fingerprint:
-        previous_artifact = None
-        previous_state_error = "prior state source/config identity is incompatible with this run"
+    # History compatibility describes evidence semantics, not the amount of work
+    # this run can attempt. The full operational identity remains in the separate
+    # checkpoint fingerprint below, so a changed batch/budget cannot resume it.
+    legacy_config_fingerprint = sha256_json(effective_config_identity)
+    history_identity = dict(effective_config_identity)
+    history_identity.pop("budget")
+    runtime_identity = dict(config_values)
+    budget_keys = {field.name for field in fields(RunBudget)}
+    for key in budget_keys:
+        runtime_identity.pop(key, None)
+    if isinstance(runtime_identity.get("budget"), dict):
+        remaining = {key: value for key, value in runtime_identity["budget"].items() if key not in budget_keys}
+        if remaining:
+            runtime_identity["budget"] = remaining
+        else:
+            runtime_identity.pop("budget")
+    history_identity["runtime_config"] = runtime_identity
+    history_identity["history_compatibility_version"] = 2
+    config_fingerprint = sha256_json(history_identity)
     previous_ref = ("sha256:" + hashlib.sha256(canonical_json(previous_artifact.model_dump(mode="json"))).hexdigest()
                     if previous_artifact else None)
+    if previous_artifact and previous_artifact.configuration_fingerprint != config_fingerprint:
+        if previous_artifact.configuration_fingerprint == legacy_config_fingerprint:
+            # Migrate only an exactly matching legacy identity; an opaque old hash
+            # cannot prove compatibility after a budget change. Keep the original
+            # artifact reference and all provenance/observation bytes intact.
+            previous_artifact = previous_artifact.model_copy(update={
+                "configuration_fingerprint": config_fingerprint,
+                "companies": {org: company.model_copy(update={"configuration_fingerprint": config_fingerprint})
+                              for org, company in previous_artifact.companies.items()},
+            })
+        else:
+            previous_artifact = None
+            previous_ref = None
+            previous_state_error = "prior state source/config identity is incompatible with this run"
     if previous_artifact:
         previous = {org: {"state_ref": previous_ref} for org in previous_artifact.companies}
     run_fingerprint = hashlib.sha256(input_path.read_bytes() + config_bytes + json.dumps({

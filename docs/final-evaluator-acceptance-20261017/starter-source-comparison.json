@@ -1,0 +1,12 @@
+{
+  "scripts/run_competition_batch.py": {
+    "official_sha256": "6a94af56290434181731ff61834cc09507a95aacb79ac655b8afb8ff60570962",
+    "repository_sha256": "6a94af56290434181731ff61834cc09507a95aacb79ac655b8afb8ff60570962",
+    "identical": true
+  },
+  "src/norway_company_agent/batch.py": {
+    "official_sha256": "645e4df1e079102c526322a33eb4549b1febf9855e601c2ab7a640077bfe9654",
+    "repository_sha256": "645e4df1e079102c526322a33eb4549b1febf9855e601c2ab7a640077bfe9654",
+    "identical": true
+  }
+}

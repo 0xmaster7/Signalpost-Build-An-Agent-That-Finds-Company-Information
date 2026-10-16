@@ -458,10 +458,8 @@ class RunnerHandoffIntegrationTests(unittest.TestCase):
             input_path.write_text(json.dumps({"organisation_number": ORG}) + "\n")
             registry.write_text(json.dumps({"orgnr": ORG, "name": "Example AS"}) + "\n")
             config_old, config_new = root / "old-config.json", root / "new-config.json"
-            config_old.write_text(json.dumps({"budget": {"hard_seconds": 30, "soft_seconds": 5,
-                "completion_reserve_seconds": 2}}))
-            config_new.write_text(json.dumps({"budget": {"hard_seconds": 31, "soft_seconds": 5,
-                "completion_reserve_seconds": 2}}))
+            config_old.write_text(json.dumps({"website_rights_decisions": {"example.test": "allowed"}}))
+            config_new.write_text(json.dumps({"website_rights_decisions": {"example.test": "blocked"}}))
             old_state = root / "old-state.json"
             self._run(root, "config-old", input_path, registry, old_state, root / "old.sqlite", config=config_old)
             rows = self._run(root, "config-changed", input_path, registry, root / "new-state.json",

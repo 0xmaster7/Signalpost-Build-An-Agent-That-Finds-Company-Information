@@ -1,0 +1,8 @@
+{
+  "signalpost/run.py": "8bf6309a43ffe937dda2868ca5c760491127b33cf58bb85e74e96b42fb8cad72",
+  "signalpost-starter-kit/scripts/validate_signalpost_functionality.py": "3ee372d7bf23819720bbb04dc31990d9e69499a9f04690bbb4cfb42d45b34ca2",
+  "signalpost-starter-kit/scripts/validate_signalpost_growing_scale.py": "57fd81d9dbdd8ce41494412e1c6df8b1e8ed78018c13e8f986a8520cda819392",
+  "signalpost-starter-kit/tests/test_signalpost_frozen_native.py": "24d8585315a5767a6d11d956fd541ec24240f09e80c5894324cdb189339024f2",
+  "signalpost-starter-kit/tests/test_signalpost_growing_batch.py": "400a5db0249d7ea402dd05810c26976a5154bf8d837260ba93c7de7fb5350859",
+  "signalpost-starter-kit/tests/test_signalpost_m07.py": "5468d309ea368ae6a8be98653076c59f842b702dfbf7fd845e8d7f5546f9ad35"
+}

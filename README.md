@@ -1,5 +1,7 @@
 # Signalpost
 
+Latest evaluator and growing-batch acceptance: [final report](docs/final-evaluator-acceptance-20261017/REPORT.md).
+
 **Latest functional validation:** [official requirements and acceptance report](docs/functional-acceptance-20261017/REPORT.md) and [31-row traceability matrix](docs/functional-acceptance-20261017/TRACEABILITY.md). These distinguish runnable software, supported coverage, internal assumptions and unpublished evaluator behavior. Repository visibility remains PRIVATE.
 
 Signalpost researches Norwegian companies by organisation number and produces ordered, evidence-backed JSONL output. The CLI fetches approved official BRREG data and optionally verifies registry-listed websites. The local web application explores saved results; it does not perform live research.

@@ -165,6 +165,14 @@ def main():
     assert changes[0]["previous_evidence"] and changes[0]["current_evidence"]
     rows,_,_=run_case("repeated","923609016\n","plain",["923609016"],prior=updated)
     assert not rows[0]["refresh"]["changes"]
+    grown,grown_state,_=run_case("growing_batch", "923609016\n012345676\n923609016\n", "plain",
+        ["923609016","012345676","923609016"],prior=updated)
+    assert [row["refresh"]["mode"] for row in grown]==["compared","baseline_no_prior_state","compared"]
+    assert not grown[0]["refresh"]["changes"]
+    _,subset_state,_=run_case("subset_batch","012345676\n","plain",["012345676"],prior=grown_state)
+    preserved=json.loads(subset_state.read_text())["companies"]
+    assert set(preserved)=={"923609016","012345676"}
+    assert preserved["923609016"]==json.loads(grown_state.read_text())["companies"]["923609016"]
     missing=subprocess.run([sys.executable,str(LAUNCHER),"--input",str(base/"does-not-exist")],cwd=base,env=env,capture_output=True,text=True)
     assert missing.returncode==2 and not missing.stdout and missing.stderr
     results["missing_input"]={"status":"PASS","exit_code":missing.returncode}

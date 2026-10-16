@@ -72,7 +72,7 @@ A supplied frozen registry is optional: add `--registry-snapshot PATH`, `--regis
 
 ## Budget, cutoff, refresh, resume
 
-For changing batch sizes, use the same explicit budget configuration for the baseline and refresh. The fallback request allowance depends on row count and currently changes the strict state fingerprint; the prior state is rejected rather than compared when that allowance changes. A fixed-budget one-to-two-company refresh was independently verified. See the [functional report](../docs/functional-acceptance-20261017/REPORT.md) for this limitation and the actual organizer-contract unknowns.
+Growing batches now preserve refresh history across operational budget changes; independent frozen runs verified 1,000 → 1,100 companies, subset retention and repeat idempotency. Source and provenance configuration remain strict, and checkpoints still require the identical run. Legacy state can migrate only with its exact original source/configuration and budget; perform that matching handoff before changing its batch size. See the [final evaluator acceptance](../docs/final-evaluator-acceptance-20261017/REPORT.md) for evidence and the remaining unpublished organizer parser/handoff details.
 
 Fallbacks are 1,800 seconds hard / 1,350 soft / 300 completion reserve; `12*N+1000` physical requests; paid cost limit zero. Actual organizer resource inputs take precedence. A runtime JSON config can set `budget.physical_request_limit`, durations and cost; use `--config PATH`. Corresponding `SIGNALPOST_*` variables are supported. The launcher prints a machine-readable `batch_complete` report to stdout; capture it separately from the JSONL output.
 
