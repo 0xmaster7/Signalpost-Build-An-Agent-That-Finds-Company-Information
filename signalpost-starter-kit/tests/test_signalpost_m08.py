@@ -498,8 +498,8 @@ class ServerRenderedUXTests(unittest.TestCase):
             ("filter_op", "eq"), ("filter_value", "Oslo")])
         self.assertIn("1 match", and_find.text)
         profile = self.get("/companies/001234567")
-        for section in ("Identity and public brand", "Accounts and history", "Leadership and workplaces",
-                        "Website and owned profiles", "Hiring and activity", "Evidence and availability", "Refresh and changes"):
+        for section in ("Company identity", "Financial records", "Leadership and roles",
+                        "Registered workplaces", "Verified websites and profiles", "Hiring and public activity", "Sources and evidence", "Changes and history"):
             self.assertIn(section, profile.text)
         evidence_id = next(iter(load_profiles(self.path)["001234567"].evidence))
         detail = self.get(f"/evidence/001234567/{evidence_id}")

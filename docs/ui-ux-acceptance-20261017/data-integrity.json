@@ -1,0 +1,158 @@
+{
+  "measurement": "actual_loopback_profile_and_evidence_acceptance",
+  "data_sha256": "57469ab6f88547812aef9ce9a357221e2a6c2c8edf6dd1e95643095fa9061602",
+  "real_companies": [
+    {
+      "organisation_number": "923609016",
+      "name": "EQUINOR ASA",
+      "available_claims": 397,
+      "displayed_claims": 397,
+      "all_claims_have_evidence": true,
+      "grouped_records": {
+        "filings": 6,
+        "roles": 15,
+        "workplaces": 35
+      },
+      "evidence_samples": [
+        {
+          "section": "identity",
+          "evidence_route": "/evidence/923609016/923609016%3Aidentity_brand%3A17%3A9f6ef1a648ec",
+          "status": 200
+        },
+        {
+          "section": "financials",
+          "evidence_route": "/evidence/923609016/923609016%3Aaccounts_history%3A63%3Afda20c0880f7",
+          "status": 200
+        },
+        {
+          "section": "leadership",
+          "evidence_route": "/evidence/923609016/923609016%3Aleadership_workplaces%3A73%3Af735e0a2f201",
+          "status": 200
+        },
+        {
+          "section": "workplaces",
+          "evidence_route": "/evidence/923609016/923609016%3Aleadership_workplaces%3A193%3A586d27e57926",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "organisation_number": "976390512",
+      "name": "NORSK RIKSKRINGKASTING AS",
+      "available_claims": 382,
+      "displayed_claims": 382,
+      "all_claims_have_evidence": true,
+      "grouped_records": {
+        "filings": 6,
+        "roles": 23,
+        "workplaces": 20
+      },
+      "evidence_samples": [
+        {
+          "section": "identity",
+          "evidence_route": "/evidence/976390512/976390512%3Aidentity_brand%3A14%3Ae43d56243f11",
+          "status": 200
+        },
+        {
+          "section": "financials",
+          "evidence_route": "/evidence/976390512/976390512%3Aaccounts_history%3A56%3A26e40067d10a",
+          "status": 200
+        },
+        {
+          "section": "leadership",
+          "evidence_route": "/evidence/976390512/976390512%3Aleadership_workplaces%3A66%3A48e4b6a7aa14",
+          "status": 200
+        },
+        {
+          "section": "workplaces",
+          "evidence_route": "/evidence/976390512/976390512%3Aleadership_workplaces%3A250%3A4543bc7bf300",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "organisation_number": "995854600",
+      "name": "PARS INVEST AS",
+      "available_claims": 73,
+      "displayed_claims": 73,
+      "all_claims_have_evidence": true,
+      "grouped_records": {
+        "filings": 3,
+        "roles": 4,
+        "workplaces": 1
+      },
+      "evidence_samples": [
+        {
+          "section": "identity",
+          "evidence_route": "/evidence/995854600/995854600%3Aidentity_brand%3A13%3Ab2aba68cbef6",
+          "status": 200
+        },
+        {
+          "section": "financials",
+          "evidence_route": "/evidence/995854600/995854600%3Aaccounts_history%3A33%3Af6e18156ea6b",
+          "status": 200
+        },
+        {
+          "section": "leadership",
+          "evidence_route": "/evidence/995854600/995854600%3Aleadership_workplaces%3A43%3A02641c99ab82",
+          "status": 200
+        },
+        {
+          "section": "workplaces",
+          "evidence_route": "/evidence/995854600/995854600%3Aleadership_workplaces%3A72%3A1d7f774ee134",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "organisation_number": "926627708",
+      "name": "NORDVEST INSTALLASJON AS",
+      "available_claims": 56,
+      "displayed_claims": 56,
+      "all_claims_have_evidence": true,
+      "grouped_records": {
+        "filings": 3,
+        "roles": 2,
+        "workplaces": 1
+      },
+      "evidence_samples": [
+        {
+          "section": "identity",
+          "evidence_route": "/evidence/926627708/926627708%3Aidentity_brand%3A13%3A601e091f4e64",
+          "status": 200
+        },
+        {
+          "section": "financials",
+          "evidence_route": "/evidence/926627708/926627708%3Aaccounts_history%3A33%3A0c5fb8e2893a",
+          "status": 200
+        },
+        {
+          "section": "leadership",
+          "evidence_route": "/evidence/926627708/926627708%3Aleadership_workplaces%3A43%3A6b4020141747",
+          "status": 200
+        },
+        {
+          "section": "workplaces",
+          "evidence_route": "/evidence/926627708/926627708%3Aleadership_workplaces%3A55%3A824ba0b04938",
+          "status": 200
+        }
+      ]
+    }
+  ],
+  "available_claims": 908,
+  "protected_files_unchanged": {
+    "signalpost/query.py": "5168dba7a6f5465a0fc4161b598411ba3d8d060dfdfbe301dfc3e74ae0f66e7b",
+    "signalpost/adapter.py": "b405475c1e1f77041ee7efdda7daee8fd304cca4e82610206159b0a8dd133e0f",
+    "signalpost/models.py": "dc416f06f14527fdb34b4d0fe311eb0a4124b0b9a042387ca2b65fc44f9a53b8",
+    "signalpost/run.py": "8bf6309a43ffe937dda2868ca5c760491127b33cf58bb85e74e96b42fb8cad72",
+    "signalpost/history.py": "9903c65e793dc014bfd15ab78649bdc43fdebc7803e76e23ddd9843c00db1253",
+    "signalpost/brreg.py": "03d3422f890c9cf17705910d9de7935b44f73da2777381d4acc5ac12f7b74c4b",
+    "signalpost/websites.py": "368c4a9566acdaba1a09457fa49cde351f2db46b2fa9f9f9c733e80045861f10",
+    "signalpost/synthesis.py": "aaf3922c0b8ae4d0c4eaa71e896d65c744415e951b364d165f01401ac0f2153a",
+    "signalpost/network.py": "d8441f4f6a6906d9c45a85ea70ee5d96b83201f7cd7b737b02296c167093416b",
+    "signalpost-starter-kit/uv.lock": "40d47bd127ba8673b19d03276d7aa9cd96d2a35bd04cfc226ef8f40d22506633",
+    "docs/source-rights.md": "59f052b835afc861ccec22edc3a5013607566a853cd8b1659b56807c93b2f1e0",
+    "docs/sources/brreg.md": "b686b98996f8867abb6de9318dc72d29b52449a7d26258ed6f913941cc2c2b08"
+  },
+  "additional_external_company_requests": 0
+}

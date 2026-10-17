@@ -1,0 +1,8 @@
+{
+  "signalpost/web.py": "0940a38af7b5382d5d2aba10f14c82ca22f1ce6ef7dad14ae86548d83b2b92a7",
+  "signalpost/web_ui.py": "fadcd7c8dda0327a4a02e60d2f7df4318dc9c10b63279632f16625a47299034a",
+  "signalpost-starter-kit/tests/test_signalpost_product_ui.py": "520ebca05e43f1612d13526c48889023e522a53f050a32544f3d9172dcb2130e",
+  "signalpost-starter-kit/tests/test_signalpost_m08.py": "af41906f5949dadbda84b59dcb4cc1b4c23e97dd07a105f097832579872c8ffb",
+  "signalpost-starter-kit/scripts/smoke_m08_web.py": "4a8ec4eced5d4d4fb8bcec08b9affa6d3ef726d9d7cfbea7544d9f96dcd20b3a",
+  "signalpost-starter-kit/scripts/validate_signalpost_functionality.py": "246101bee5d74a42565232199f25d0fe5f84f04477028a1c11801e0b95da3d16"
+}

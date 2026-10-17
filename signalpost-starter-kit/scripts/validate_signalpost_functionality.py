@@ -196,8 +196,8 @@ def main():
         legal=next(c for c in actual[0]["claims"] if c["field"] in {"name","legal_name"})
         home=get("/",{"q":org});assert 'href="/companies/'+org+'"' in home
         profile=get("/companies/"+org);assert str(legal["value"]) in profile
-        supported=get("/verify",{"org":org,"field":"legal_name","value":legal["value"]});assert 'class="state">supported' in supported
-        contradicted=get("/verify",{"org":org,"field":"legal_name","value":"Unrelated Fictional Company"});assert 'class="state">contradicted' in contradicted
+        supported=get("/verify",{"org":org,"field":"legal_name","value":legal["value"]});assert 'data-state="supported"' in supported
+        contradicted=get("/verify",{"org":org,"field":"legal_name","value":"Unrelated Fictional Company"});assert 'data-state="contradicted"' in contradicted
         ev=next(e for e in actual[0]["evidence"] if e["evidence_id"] in legal["evidence_ids"])
         detail=get("/evidence/"+org+"/"+ev["evidence_id"])
         assert ev["source_url"] in detail and ev["content_sha256"] in detail

@@ -64,8 +64,8 @@ def main() -> int:
         home = timed_get("/?" + urlencode({"q": "<script>alert(1)</script>"}))
         assert "&lt;script&gt;" in home and "<script>alert(1)</script>" not in home
         profile = timed_get("/companies/" + orgs[0])
-        assert "Identity and public brand" in profile and "Accounts and history" in profile
-        assert "Evidence and availability" in profile and "Refresh and changes" in profile
+        assert "Company identity" in profile and "Financial records" in profile
+        assert "Sources and evidence" in profile and "Changes and history" in profile
         evidence_id = next(iter(profiles[orgs[0]].evidence), None)
         if evidence_id:
             detail = timed_get("/evidence/" + orgs[0] + "/" + evidence_id)
