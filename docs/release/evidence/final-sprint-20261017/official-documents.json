@@ -1,0 +1,37 @@
+[
+  {
+    "url": "https://builderr.ai/challenges/signalpost",
+    "status": 200,
+    "outcome": "ok",
+    "bytes": 122506,
+    "sha256": "0ca208314733da21e104df0e1f1adad4f7bcffa67b4e1f7c1550290d0b80e4c3"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost.md",
+    "status": 200,
+    "outcome": "ok",
+    "bytes": 10351,
+    "sha256": "924ff60e1dab437c63806846aa19eaa29d84d8e87132983c4e5d9f7336214c32"
+  },
+  {
+    "url": "https://builderr.ai/docs/signalpost-evaluation-harness.md",
+    "status": 200,
+    "outcome": "ok",
+    "bytes": 7137,
+    "sha256": "e9f994e2fa34750411487e9fab82dbffd55dc1bb16efe9021906b92896229d45"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-sources.md",
+    "status": 200,
+    "outcome": "ok",
+    "bytes": 2567,
+    "sha256": "f080470ab29d5c6da243d812e35d0ae0aa3d35f5871d62dfef90422df1b8f630"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-agent-playbook.md",
+    "status": 200,
+    "outcome": "ok",
+    "bytes": 6886,
+    "sha256": "0b165301576e1ad09c210bba48dd61bb2669752a07abaeb1188df4099bd4844e"
+  }
+]

@@ -2047,9 +2047,12 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                                   and depth < MAX_DEPTH and _internal_url(link["url"], allowed_hosts)
                                   and _kind(link["url"], link.get("text", "")) in IDENTITY_KINDS]
                 eligible_links.sort(key=_link_rank)
+                queued_urls = {item[0] for item in page_queue}
                 for link in eligible_links:
-                    if link["url"] not in seen_urls:
-                        page_queue.append((link["url"], depth + 1, _kind(link["url"], link.get("text", ""))))
+                    normalized_link = _clean_url(link["url"])
+                    if normalized_link and normalized_link not in seen_urls and normalized_link not in queued_urls:
+                        page_queue.append((normalized_link, depth + 1, _kind(link["url"], link.get("text", ""))))
+                        queued_urls.add(normalized_link)
                 if len(page_queue) > MAX_INITIAL_PAGES - 1:
                     page_queue = page_queue[:MAX_INITIAL_PAGES - 1]
                 if len(pages) >= MAX_INITIAL_PAGES or website_page_requests >= MAX_DEFAULT_PAGES or page_limit >= MAX_ABSOLUTE_PAGES:

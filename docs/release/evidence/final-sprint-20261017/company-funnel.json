@@ -1,0 +1,168 @@
+[
+  {
+    "company": "959312869",
+    "name": "HOVDEN FJELLSTOGE AS",
+    "registry_candidate": "www.hovden.fjellstoge.no",
+    "baseline_html": [],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "robots_unreachable",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": []
+  },
+  {
+    "company": "923160388",
+    "name": "NBN FLORØ AS",
+    "registry_candidate": "www.nbnelektro.no",
+    "baseline_html": [
+      "https://www.nbnelektro.no/",
+      "https://www.nbnelektro.no/kontakt/"
+    ],
+    "website_state": {
+      "state": "not_available",
+      "attempt_outcome": null,
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": [
+      "https://www.nbnelektro.no/",
+      "https://www.nbnelektro.no/kontakt/"
+    ]
+  },
+  {
+    "company": "947942638",
+    "name": "TINE SA",
+    "registry_candidate": "www.tine.no",
+    "baseline_html": [
+      "https://www.tine.no/",
+      "https://www.tine.no/kontakt",
+      "https://www.tine.no/kontakt/sporsmal-og-svar"
+    ],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "budget_skipped",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": [
+      "https://www.tine.no/",
+      "https://www.tine.no/kontakt",
+      "https://www.tine.no/kontakt/sporsmal-og-svar"
+    ]
+  },
+  {
+    "company": "997356624",
+    "name": "NORDMOHØGDA BORETTSLAG",
+    "registry_candidate": "www.helgelandbbl.no",
+    "baseline_html": [],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "budget_skipped",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": [
+      "https://helgelandbbl.no/"
+    ]
+  },
+  {
+    "company": "918652493",
+    "name": "AURA TRENING OG HELSE AS",
+    "registry_candidate": "www.auratrening.no",
+    "baseline_html": [
+      "https://www.auratrening.no/",
+      "https://www.auratrening.no/om/kontakt-oss.html"
+    ],
+    "website_state": {
+      "state": "ambiguous",
+      "attempt_outcome": null,
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": [
+      "https://www.auratrening.no/",
+      "https://www.auratrening.no/om/kontakt-oss.html"
+    ]
+  },
+  {
+    "company": "987974249",
+    "name": "FOLK OG FE AS",
+    "registry_candidate": "www.folkogfe.no",
+    "baseline_html": [],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "budget_skipped",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": [
+      "https://folkogfe.no/"
+    ]
+  },
+  {
+    "company": "979679971",
+    "name": "NG MENY VEST AS",
+    "registry_candidate": "www.meny.no",
+    "baseline_html": [],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "budget_skipped",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": [
+      "https://meny.no/"
+    ]
+  },
+  {
+    "company": "918711759",
+    "name": "KLART DU KAN TRAFIKKSKOLE AS",
+    "registry_candidate": null,
+    "baseline_html": [],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "robots_unreachable",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": []
+  },
+  {
+    "company": "928208729",
+    "name": "S&P SERVICES AS",
+    "registry_candidate": null,
+    "baseline_html": [],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "not_attempted",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": []
+  },
+  {
+    "company": "976519094",
+    "name": "B.YOUNG RETAIL NORWAY AS",
+    "registry_candidate": null,
+    "baseline_html": [],
+    "website_state": {
+      "state": null,
+      "attempt_outcome": "robots_unreachable",
+      "diagnostics": []
+    },
+    "missing_locations": "Undated subunit retrieval is after default run-start evidence cutoff; retrieved does not mean published",
+    "missing_financials": "No explicit authoritative unit/scale in current BRREG response; separate directory investigation below",
+    "retest_html": []
+  }
+]

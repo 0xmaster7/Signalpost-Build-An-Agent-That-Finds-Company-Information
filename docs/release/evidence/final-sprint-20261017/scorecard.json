@@ -1,0 +1,238 @@
+{
+  "starting_sha": "5525f4727ff18dcfe7fbdf65b11bcbdd0920f06d",
+  "scope": "new frozen 10-company live baseline and same-company live retest; separate fresh two-company holdout. No cached research substituted.",
+  "results": {
+    "baseline": {
+      "coverage": {
+        "verified_websites": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "business_descriptions": {
+          "companies": 10,
+          "denominator": 10,
+          "canonical_claim_atoms": 20
+        },
+        "people_roles": {
+          "companies": 10,
+          "denominator": 10,
+          "canonical_claim_atoms": 561
+        },
+        "locations": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "numeric_financials": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "jobs": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "dated_activity": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "public_profiles": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        }
+      },
+      "rows": 10,
+      "available_terminal_rows": 10,
+      "physical_HTTP": 64,
+      "logical_gateway_calls": 64,
+      "wall_seconds": 31.537289436004357,
+      "peak_RSS_KiB": 152548,
+      "cpu_seconds": 6.25263,
+      "official_worker_p50_seconds": 6.853257055998256,
+      "official_worker_nearest_rank_p95_seconds": 8.584233247005614,
+      "latency_scope": "worker-active official foundation, not complete per-company response latency",
+      "downloaded_website_HTML_responses": 7,
+      "companies_with_downloaded_HTML": 3,
+      "canonical_available_atoms": 1002,
+      "named_role_records": 10,
+      "registered_description_companies": 10,
+      "web_description_companies": 0
+    },
+    "retest": {
+      "coverage": {
+        "verified_websites": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "business_descriptions": {
+          "companies": 10,
+          "denominator": 10,
+          "canonical_claim_atoms": 20
+        },
+        "people_roles": {
+          "companies": 10,
+          "denominator": 10,
+          "canonical_claim_atoms": 561
+        },
+        "locations": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "numeric_financials": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "jobs": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "dated_activity": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        },
+        "public_profiles": {
+          "companies": 0,
+          "denominator": 10,
+          "canonical_claim_atoms": 0
+        }
+      },
+      "rows": 10,
+      "available_terminal_rows": 10,
+      "physical_HTTP": 64,
+      "logical_gateway_calls": 64,
+      "wall_seconds": 29.33637763700972,
+      "peak_RSS_KiB": 160500,
+      "cpu_seconds": 7.9563999999999995,
+      "official_worker_p50_seconds": 6.925738234502205,
+      "official_worker_nearest_rank_p95_seconds": 8.715118025997072,
+      "latency_scope": "worker-active official foundation, not complete per-company response latency",
+      "downloaded_website_HTML_responses": 10,
+      "companies_with_downloaded_HTML": 6,
+      "canonical_available_atoms": 1002,
+      "named_role_records": 10,
+      "registered_description_companies": 10,
+      "web_description_companies": 0
+    },
+    "holdout": {
+      "coverage": {
+        "verified_websites": {
+          "companies": 0,
+          "denominator": 2,
+          "canonical_claim_atoms": 0
+        },
+        "business_descriptions": {
+          "companies": 2,
+          "denominator": 2,
+          "canonical_claim_atoms": 4
+        },
+        "people_roles": {
+          "companies": 2,
+          "denominator": 2,
+          "canonical_claim_atoms": 92
+        },
+        "locations": {
+          "companies": 0,
+          "denominator": 2,
+          "canonical_claim_atoms": 0
+        },
+        "numeric_financials": {
+          "companies": 0,
+          "denominator": 2,
+          "canonical_claim_atoms": 0
+        },
+        "jobs": {
+          "companies": 0,
+          "denominator": 2,
+          "canonical_claim_atoms": 0
+        },
+        "dated_activity": {
+          "companies": 0,
+          "denominator": 2,
+          "canonical_claim_atoms": 0
+        },
+        "public_profiles": {
+          "companies": 0,
+          "denominator": 2,
+          "canonical_claim_atoms": 0
+        }
+      },
+      "rows": 2,
+      "available_terminal_rows": 2,
+      "physical_HTTP": 10,
+      "logical_gateway_calls": 11,
+      "wall_seconds": 5.890544322988717,
+      "peak_RSS_KiB": 85452,
+      "cpu_seconds": 1.163819,
+      "official_worker_p50_seconds": 4.336463264495251,
+      "official_worker_nearest_rank_p95_seconds": 4.48903009899368,
+      "latency_scope": "worker-active official foundation, not complete per-company response latency",
+      "downloaded_website_HTML_responses": 0,
+      "companies_with_downloaded_HTML": 0,
+      "canonical_available_atoms": 175,
+      "named_role_records": 2,
+      "registered_description_companies": 2,
+      "web_description_companies": 0
+    }
+  },
+  "total_physical_HTTP": 172,
+  "hard_cap": 200,
+  "network_closed": true,
+  "requests_by_phase": {
+    "baseline": 64,
+    "independent": 6,
+    "sites": 9,
+    "retest": 64,
+    "finance": 4,
+    "directories": 4,
+    "lookup": 2,
+    "financial-detail": 4,
+    "finance-contract": 3,
+    "holdout": 10,
+    "report": 2
+  },
+  "outcomes": {
+    "None:RemoteDisconnected:Remote end closed connection without response": 3,
+    "None:OSError:[Errno 101] Network is unreachable": 3,
+    "200:received": 144,
+    "404:received": 5,
+    "301:received": 8,
+    "307:received": 4,
+    "403:received": 3,
+    "302:received": 1,
+    "None:CancelledError:": 1
+  },
+  "source_value_review": {
+    "scope": "all baseline published registry claim atoms, separately interpreted pointers/source-key semantics; no extraction functions used",
+    "exact_identity_companies": 10,
+    "breakdown": {
+      "exact_pointer_value": 765,
+      "address_subset": 17,
+      "explicit_scope_label": 33,
+      "person_name_components": 51,
+      "explicit_inactive_flag": 68,
+      "typed_holder_relation": 68
+    },
+    "unresolved": [],
+    "confirmed_wrong_company": 0,
+    "precision_recall": "NOT_ESTABLISHED as population statistics"
+  },
+  "iteration1": "Exact redirected robots resource reuse and pending navigation URL deduplication; no ownership/source-rights relaxation",
+  "iteration2": "Evidence-based financial source investigation; no provider/financial parser promoted because units/rights/acquisition proof remained insufficient",
+  "coverage_gain": "NONE in verified company-family coverage; final HTML acquisition companies improved 3 to 6 on same 64 physical attempts",
+  "caveats": [
+    "Per-company live cap was 8 physical attempts including foundation/robots/redirects; global cap75; this is a tight controlled budget, not unlimited recall.",
+    "Registered business activity/purpose are useful business statements, not dated news or independent website descriptions.",
+    "Atom counts are not independent decision-useful facts or competition recall.",
+    "No fresh 100-company cohort; historical smoke retains original SHA/conditions.",
+    "PDF review timeout supplied no financial evidence; raw financial figures were not guessed."
+  ]
+}

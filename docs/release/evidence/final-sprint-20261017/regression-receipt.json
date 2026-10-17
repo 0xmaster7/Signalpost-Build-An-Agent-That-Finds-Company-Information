@@ -1,0 +1,26 @@
+{
+  "full_suite": {
+    "tests": 487,
+    "subtests": 237,
+    "seconds": 216.01,
+    "log_sha256": "b70e574da1b09bcd0b37cc93123b183b6b1365c81f13097c1c4fbba562486921",
+    "warning": "pre-existing pyRdfa UTC deprecation"
+  },
+  "focused_sprint_tests": 3,
+  "changed_files": [
+    "signalpost/network.py",
+    "signalpost/websites.py"
+  ],
+  "unchanged": [
+    "ownership gate",
+    "financial publication",
+    "evaluator schema",
+    "UI",
+    "dependencies"
+  ],
+  "new_source_adapters": 0,
+  "live_physical_attempts": 172,
+  "cap": 200,
+  "network_closed": true,
+  "fresh_exact_SHA_install_CI": "final owner handoff after commit"
+}

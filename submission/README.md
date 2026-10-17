@@ -4,6 +4,8 @@ Status: prepared for owner review; external submission HOLD. No email, Builderr 
 
 Latest verification: [final coverage and submission acceptance](../docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md). A separately approved three-company / 60-attempt discovery experiment consumed 15 attempts and produced no additional external coverage; its robots-blocked adapter was rejected. Security lock updates are pypdf 6.19.0 and urllib3 2.8.0. The accepted UI and production Python remain unchanged.
 
+Latest bounded live sprint: [measured final result](../docs/release/FINAL_COMPETITIVE_SPRINT_2026-10-17.md). Source acquisition improved from 3 to 6 companies with HTML at the same 64-request budget; verified family coverage did not improve. Total sprint HTTP attempts: 172/200, source network sealed. No financial/provider integration was promoted.
+
 ## Version and access
 
 Repository: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information

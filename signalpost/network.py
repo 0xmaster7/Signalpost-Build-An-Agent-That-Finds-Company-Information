@@ -573,6 +573,16 @@ class NetworkGateway:
             request_path = (parsed.path or "/") + (("?" + parsed.query) if parsed.query else "")
             state = "disallowed" if _robots_disallows(rules, request_path, user_agent) else "allowed"
             self._robots[origin] = (rules, delay, "allowed")
+            # A redirected /robots.txt response is also an observation of the
+            # destination origin's exact robots resource. Reuse those bytes
+            # when a later page redirects there, rather than spending another
+            # request. Never infer permission for an alias not actually fetched.
+            final_parts = urllib.parse.urlsplit(final_url)
+            final_origin = f"{final_parts.scheme}://{final_parts.netloc}"
+            if (200 <= status < 300 and outcome == "ok"
+                    and final_parts.path == "/robots.txt" and not final_parts.query
+                    and not final_parts.fragment and final_origin != origin):
+                self._robots.setdefault(final_origin, (rules, delay, "allowed"))
             return state, delay
 
     async def _pace(self, url: str, minimum: float = 0.0) -> None:
