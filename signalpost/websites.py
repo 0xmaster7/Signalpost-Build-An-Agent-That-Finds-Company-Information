@@ -1918,6 +1918,10 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     break
                 page_total_bytes += len(body)
                 if status < 200 or status >= 300:
+                    if outcome == "budget_exhausted":
+                        candidate_row["decision"] = "budget_skipped"
+                        saw_budget_skip = True
+                        break
                     if outcome == "robots_unreachable":
                         candidate_row["decision"] = "robots_unreachable"
                         output.errors.append(RunError(code="ROBOTS_UNREACHABLE", message="Website origin was skipped because robots.txt could not be retrieved."))
@@ -2198,8 +2202,11 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             for item in sitemap_urls:
                 if not _internal_url(item, allowed_hosts):
                     continue
-                kind = _kind(item)
-                if kind == "news" and item not in feed_candidates:
+                # A news article in a sitemap is an HTML page candidate, not
+                # an RSS/Atom declaration. Avoid fetching it twice under two
+                # purposes (and spending the budget before page extraction).
+                feed_path = urllib.parse.urlsplit(item).path.casefold()
+                if re.search(r"(?:^|/)(?:feed|rss|atom)(?:/|\.|$)|\.(?:rss|atom|xml)$", feed_path) and item not in feed_candidates:
                     feed_candidates.append(item)
             feed_candidates = list(dict.fromkeys(url for url in feed_candidates if _internal_url(url, allowed_hosts)))[:MAX_FEEDS]
             feed_entries: list[dict[str, str]] = []
@@ -2479,6 +2486,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
         output.hiring_attempt_outcome = output.attempt_outcome
     else:
         output.hiring_activity_state = PublicState.AMBIGUOUS
+    if output.hiring_activity_state is not None:
+        output.hiring_attempt_outcome = "completed"
     output.audit["hiring_activity_state"] = (output.hiring_activity_state.value
         if output.hiring_activity_state else output.hiring_attempt_outcome or output.attempt_outcome)
     output.audit["elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)

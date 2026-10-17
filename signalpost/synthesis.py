@@ -54,16 +54,25 @@ def validate_synthesis_schema(synthesis: dict[str, Any]) -> None:
         raise ValueError(f"unknown synthesis fields: {', '.join(sorted(unknown_root))}")
     if synthesis.get("schema_version", SYNTHESIS_SCHEMA_VERSION) != SYNTHESIS_SCHEMA_VERSION:
         raise ValueError("unsupported synthesis schema version")
-    def visit(value: Any) -> None:
+    def visit(value: Any, path: tuple[str, ...] = ()) -> None:
+        if path == ("website_research", "ats_origins", "*"):
+            # This is an operational refusal record, never a published fact.
+            # Accept it only at its exact path and only when no request was made.
+            if (not isinstance(value, dict) or set(value) != {"host", "status", "requested"}
+                    or not isinstance(value["host"], str) or not value["host"]
+                    or value["requested"] is not False
+                    or value["status"] not in {"unlisted_origin_skipped", "approved_host_but_mode_disabled"}):
+                raise ValueError("invalid unrequested ATS origin diagnostic")
+            return
         if isinstance(value, dict):
             unknown = set(value) - _SYNTHESIS_KEYS
             if unknown:
                 raise ValueError(f"unknown nested synthesis fields: {', '.join(sorted(unknown))}")
-            for child in value.values():
-                visit(child)
+            for key, child in value.items():
+                visit(child, path + (key,))
         elif isinstance(value, list):
             for child in value:
-                visit(child)
+                visit(child, path + ("*",))
     visit(synthesis)
     summary = synthesis.get("summary")
     if summary is not None:

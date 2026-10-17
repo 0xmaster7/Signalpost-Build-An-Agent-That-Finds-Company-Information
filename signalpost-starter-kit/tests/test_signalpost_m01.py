@@ -820,6 +820,52 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({claim.value for claim in mixed.claims if claim.field == "workplace.organisasjonsnummer"}, {"923609024"})
         self.assertFalse(mixed.observations["workplaces_complete"])
 
+    async def test_brreg_hal_empty_workplaces_have_source_bound_completeness(self):
+        # Real BRREG zero-result shape observed in the bounded October live run:
+        # HAL omits _embedded and explicitly reports a zero-length first page.
+        target = "923609016"
+        url = f"https://data.brreg.no/enhetsregisteret/api/underenheter?overordnetEnhet={target}&size=1000"
+        empty = {"_links": {"self": {"href": url}},
+                 "page": {"number": 0, "size": 1000, "totalElements": 0, "totalPages": 0}}
+
+        async def fetch_with(subunits):
+            class RoutingTransport:
+                async def request(self, request_url, headers, timeout):
+                    if "/regnskap/" in request_url: body = []
+                    elif request_url.endswith("/roller"): body = {"rollegrupper": []}
+                    elif "/underenheter?" in request_url: body = subunits
+                    else: body = {"organisasjonsnummer": target, "navn": "Target AS"}
+                    return 200, {"Content-Type": "application/json"}, json.dumps(body).encode(), request_url
+            gateway = NetworkGateway(RoutingTransport(), retries=0)
+            with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(gateway, "robots_decision", return_value=("allowed", None)):
+                return await fetch_company(target, gateway, datetime.now(timezone.utc) + timedelta(days=1))
+
+        result = await fetch_with(empty)
+        self.assertTrue(result.observations["workplaces_complete"])
+        self.assertEqual(result.observations["workplace_count"], 0)
+        self.assertFalse(any(c.field_family == "workplace" for c in result.claims))
+        self.assertNotIn("BRREG_SUBUNITS_MALFORMED", {e.code for e in result.errors})
+        evidence = {e.evidence_id: e for e in result.evidence}
+        for ref in result.observations["workplaces_completeness_evidence_ids"]:
+            item = evidence[ref]
+            self.assertEqual(item.json_pointer, "/page/totalElements")
+            self.assertEqual(item.content_sha256, hashlib.sha256(json.dumps(empty).encode()).hexdigest())
+            self.assertEqual(item.source_url, url)
+        self.assertNotIn("_embedded", empty)  # Do not invent bytes beneath the source hash.
+
+        invalid = [{}, {"page": {}},
+                   {**empty, "page": {**empty["page"], "totalElements": 1}},
+                   {**empty, "page": {**empty["page"], "totalElements": False}},
+                   {**empty, "page": {**empty["page"], "number": 1}},
+                   {**empty, "page": {**empty["page"], "totalPages": 1}},
+                   {**empty, "_links": {**empty["_links"], "next": {"href": url}}},
+                   {**empty, "_embedded": {"underenheter": "bad"}}]
+        for body in invalid:
+            with self.subTest(body=body):
+                rejected = await fetch_with(body)
+                self.assertFalse(rejected.observations["workplaces_complete"])
+                self.assertIn("BRREG_SUBUNITS_MALFORMED", {e.code for e in rejected.errors})
+
     async def test_http_200_malformed_collection_is_failure_not_absence(self):
         class MalformedTransport:
             async def request(self, url, headers, timeout):

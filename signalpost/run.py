@@ -607,10 +607,14 @@ def run(args: argparse.Namespace) -> int:
                             errors=[RunError(code="WEBSITE_RESEARCH_UNEXPECTED_FAILURE",
                                 message=f"Optional website action failed: {type(exc).__name__}.", retryable=True)],
                             audit={"execution_state": "failed", "claims": []}))
-                def website_permitted(_item: Opportunity) -> bool:
+                def website_permitted(item: Opportunity) -> bool:
+                    # The jobs/activity pass only extracts the pages saved by
+                    # shallow research. HTTP exhaustion must not discard those
+                    # observations; time and completion-reserve gates still apply.
                     return (not run_budget.soft_expired and not run_budget.reserve_active
-                        and run_budget.physical_requests_remaining > 0
-                        and run_budget.logical_requests_remaining != 0)
+                        and (item.pass_name == "jobs_activity" or (
+                            run_budget.physical_requests_remaining > 0
+                            and run_budget.logical_requests_remaining != 0)))
                 verify_works = [Opportunity(key=org, company=org, pass_name="website_verify",
                     expected_company_family_gain=0.15, expected_atomic_claim_gain=0.2,
                     identity_risk=0.05, expected_requests=0.2, expected_seconds=0.15, sequence=index)
@@ -626,7 +630,7 @@ def run(args: argparse.Namespace) -> int:
                     scheduler.run(shallow_works, lambda item: website(item, "shallow", verified_by_org[item.company]), permitted=website_permitted), run_budget)
                 activity_works = [Opportunity(key=org, company=org, pass_name="jobs_activity",
                     expected_company_family_gain=0.1, expected_atomic_claim_gain=0.5,
-                    identity_risk=0.04, expected_requests=0.08, expected_seconds=0.1, sequence=index)
+                    identity_risk=0.04, expected_requests=0.0, expected_seconds=0.1, sequence=index)
                     for index, org in enumerate(profiles) if org in shallow_by_org
                     and shallow_by_org[org].phase_state.get("accepted_pages")]
                 activity_by_org, activity_deadline_cancelled = await _run_before_completion_reserve(

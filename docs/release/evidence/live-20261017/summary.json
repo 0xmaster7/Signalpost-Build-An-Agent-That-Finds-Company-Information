@@ -1,0 +1,312 @@
+{
+  "baseline_sha": "f73dcfc01cff6e75888ede7351b6338da2e392d9",
+  "selection_seed": "signalpost-independent-live-20261017-v1",
+  "selection_exclusion_count": 466,
+  "cohort_sha256": "d919e7695004e3947d7f557a600ac3c9c96d15029c8e8769b257b9811f2dd2d0",
+  "cohort": [
+    {
+      "organisation_number": "932374099",
+      "name": "FLATEBYVEIEN 7-9 AS",
+      "legal_form": "AS",
+      "employee_stratum": "undisclosed",
+      "registry_website_stratum": false,
+      "available_claims": 79,
+      "research_physical_attempts": 8
+    },
+    {
+      "organisation_number": "912427730",
+      "name": "LUNNER ALMENNING",
+      "legal_form": "FLI",
+      "employee_stratum": "5-19",
+      "registry_website_stratum": true,
+      "available_claims": 153,
+      "research_physical_attempts": 10
+    },
+    {
+      "organisation_number": "984073216",
+      "name": "BIKUBÅ BARNEHAGE SA",
+      "legal_form": "SA",
+      "employee_stratum": "20-99",
+      "registry_website_stratum": false,
+      "available_claims": 120,
+      "research_physical_attempts": 4
+    },
+    {
+      "organisation_number": "970107592",
+      "name": "STIFTELSEN MODUM BAD",
+      "legal_form": "STI",
+      "employee_stratum": "100+",
+      "registry_website_stratum": true,
+      "available_claims": 189,
+      "research_physical_attempts": 10
+    },
+    {
+      "organisation_number": "981299876",
+      "name": "BLINDHEIM BORETTSLAG",
+      "legal_form": "BRL",
+      "employee_stratum": "undisclosed",
+      "registry_website_stratum": true,
+      "available_claims": 111,
+      "research_physical_attempts": 10
+    },
+    {
+      "organisation_number": "944844139",
+      "name": "NORDISK KELLOGG NORGE, FILIAL TIL NORDISK KELLOGG APS DANMARK NUF",
+      "legal_form": "NUF",
+      "employee_stratum": "5-19",
+      "registry_website_stratum": false,
+      "available_claims": 92,
+      "research_physical_attempts": 8
+    },
+    {
+      "organisation_number": "959704996",
+      "name": "TENDEN ADVOKATFIRMA ANS",
+      "legal_form": "ANS",
+      "employee_stratum": "20-99",
+      "registry_website_stratum": true,
+      "available_claims": 302,
+      "research_physical_attempts": 20
+    },
+    {
+      "organisation_number": "882811972",
+      "name": "HAVILA SHIPPING ASA",
+      "legal_form": "ASA",
+      "employee_stratum": "100+",
+      "registry_website_stratum": false,
+      "available_claims": 127,
+      "research_physical_attempts": 4
+    },
+    {
+      "organisation_number": "916876718",
+      "name": "VERDIPAPIRFONDET EQUINOR AKSJER PACIFIC INDEKS",
+      "legal_form": "VPFO",
+      "employee_stratum": "undisclosed",
+      "registry_website_stratum": false,
+      "available_claims": 46,
+      "research_physical_attempts": 4
+    },
+    {
+      "organisation_number": "955007514",
+      "name": "OTRA KRAFT DA",
+      "legal_form": "DA",
+      "employee_stratum": "5-19",
+      "registry_website_stratum": true,
+      "available_claims": 81,
+      "research_physical_attempts": 11
+    },
+    {
+      "organisation_number": "984068085",
+      "name": "VOLDA OG ØRSTA REINHALDSVERK IKS",
+      "legal_form": "IKS",
+      "employee_stratum": "20-99",
+      "registry_website_stratum": false,
+      "available_claims": 168,
+      "research_physical_attempts": 8
+    },
+    {
+      "organisation_number": "950437537",
+      "name": "STUDENTSAMSKIPNADEN I AGDER",
+      "legal_form": "SÆR",
+      "employee_stratum": "100+",
+      "registry_website_stratum": true,
+      "available_claims": 304,
+      "research_physical_attempts": 6
+    },
+    {
+      "organisation_number": "917377286",
+      "name": "SAMEIE SOLSIKKEN 1-3 FELLESEIENDOM",
+      "legal_form": "SAM",
+      "employee_stratum": "undisclosed",
+      "registry_website_stratum": true,
+      "available_claims": 114,
+      "research_physical_attempts": 10
+    },
+    {
+      "organisation_number": "954799778",
+      "name": "VARIG ORKLA FORSIKRING GJENSIDIG",
+      "legal_form": "GFS",
+      "employee_stratum": "5-19",
+      "registry_website_stratum": false,
+      "available_claims": 124,
+      "research_physical_attempts": 4
+    },
+    {
+      "organisation_number": "976995082",
+      "name": "KVAM KYRKJELEGE FELLESRÅD",
+      "legal_form": "KIRK",
+      "employee_stratum": "20-99",
+      "registry_website_stratum": true,
+      "available_claims": 137,
+      "research_physical_attempts": 7
+    },
+    {
+      "organisation_number": "964938466",
+      "name": "ELSA ENGER TRANSPORT - innehaver Knut Enger",
+      "legal_form": "ENK",
+      "employee_stratum": "100+",
+      "registry_website_stratum": false,
+      "available_claims": 76,
+      "research_physical_attempts": 8
+    },
+    {
+      "organisation_number": "912118576",
+      "name": "P/R LEIKEN DA",
+      "legal_form": "PRE",
+      "employee_stratum": "undisclosed",
+      "registry_website_stratum": false,
+      "available_claims": 75,
+      "research_physical_attempts": 4
+    },
+    {
+      "organisation_number": "970288945",
+      "name": "BRUSHYTTEN SKANSEGUTTENES FORENING",
+      "legal_form": "BA",
+      "employee_stratum": "5-19",
+      "registry_website_stratum": true,
+      "available_claims": 84,
+      "research_physical_attempts": 8
+    },
+    {
+      "organisation_number": "948205149",
+      "name": "HELGELAND BBL",
+      "legal_form": "BBL",
+      "employee_stratum": "20-99",
+      "registry_website_stratum": false,
+      "available_claims": 136,
+      "research_physical_attempts": 4
+    },
+    {
+      "organisation_number": "983609155",
+      "name": "ENOVA SF",
+      "legal_form": "SF",
+      "employee_stratum": "100+",
+      "registry_website_stratum": true,
+      "available_claims": 160,
+      "research_physical_attempts": 11
+    }
+  ],
+  "physical_attempts_total": 193,
+  "physical_attempts_by_phase": {
+    "wave1": 42,
+    "wave2": 47,
+    "wave3": 35,
+    "wave4": 35,
+    "independent-recheck": 10,
+    "refresh-tenden": 24
+  },
+  "http_status_counts": {
+    "None": 24,
+    "200": 150,
+    "301": 6,
+    "302": 6,
+    "404": 2,
+    "500": 2,
+    "403": 1,
+    "308": 2
+  },
+  "coverage": {
+    "exact_legal_identity": {
+      "companies": 20,
+      "claims": 40,
+      "company_percent": 100.0
+    },
+    "business_industry_description": {
+      "companies": 19,
+      "claims": 24,
+      "company_percent": 95.0
+    },
+    "financial_filing_metadata": {
+      "companies": 18,
+      "claims": 434,
+      "company_percent": 90.0
+    },
+    "promotable_numeric_financial": {
+      "companies": 0,
+      "claims": 0,
+      "company_percent": 0.0
+    },
+    "leadership_roles": {
+      "companies": 20,
+      "claims": 1654,
+      "company_percent": 100.0
+    },
+    "workplaces_locations": {
+      "companies": 19,
+      "claims": 215,
+      "company_percent": 95.0
+    },
+    "verified_owned_website": {
+      "companies": 1,
+      "claims": 1,
+      "company_percent": 5.0
+    },
+    "owned_public_profiles": {
+      "companies": 1,
+      "claims": 3,
+      "company_percent": 5.0
+    },
+    "hiring": {
+      "companies": 0,
+      "claims": 0,
+      "company_percent": 0.0
+    },
+    "dated_public_activity": {
+      "companies": 0,
+      "claims": 0,
+      "company_percent": 0.0
+    },
+    "legal_historical_names": {
+      "companies": 12,
+      "claims": 27,
+      "company_percent": 60.0
+    }
+  },
+  "baseline_claims": 2678,
+  "baseline_evidence": 2729,
+  "baseline_snapshots": 82,
+  "baseline_role_records": 202,
+  "baseline_workplace_records": 34,
+  "baseline_financial_records": 62,
+  "source_value_checks_correct": 2670,
+  "source_value_checks_incorrect": 0,
+  "source_value_checks_unresolved": [
+    {
+      "organisation_number": "964938466",
+      "claim_id": "964938466:identity_brand:4",
+      "field": "municipality_number",
+      "reason": "'forretningsadresse'"
+    },
+    {
+      "organisation_number": "964938466",
+      "claim_id": "964938466:identity_brand:5",
+      "field": "municipality",
+      "reason": "'forretningsadresse'"
+    }
+  ],
+  "manual_website_claim_checks_correct": 6,
+  "fresh_authoritative_source_bodies_identical": 6,
+  "research_wall_seconds": 130.48298409800918,
+  "worker_p50_seconds": 8.702355748999253,
+  "worker_p95_seconds": 26.248343571998703,
+  "peak_rss_kib": 148964,
+  "cpu_seconds": 25.285096000000003,
+  "finalization_seconds": 0.7100000000000001,
+  "gateway_network_aggregate_seconds": 141.465808409921,
+  "ledger_sha256": "fde3313769ba76fe1a07354f93e463a161c93065f68f1a12fec527c91e76db49",
+  "original_live_refresh_false_description_updates": 3,
+  "known_ground_truth_scope": "Source support of returned claims, not population recall or hidden official scoring. Original baseline and live refresh outputs remain unchanged outside Git. Corrections validated separately offline.",
+  "research_elapsed_including_inspection_seconds": 248.728869,
+  "regressions": {
+    "tests_passed": 466,
+    "subtests_passed": 223,
+    "source_replay_existing_value_false_updates": 0,
+    "source_replay_new_document_metadata_observations": 3,
+    "repeat_events": 0,
+    "external_replay_http": 0,
+    "unchanged_other_companies_retained": 4,
+    "m06_provenance": "PASS",
+    "m07_replay": "PASS",
+    "m08_gold": "PASS",
+    "independent_cli_failure_acceptance": "PASS"
+  }
+}

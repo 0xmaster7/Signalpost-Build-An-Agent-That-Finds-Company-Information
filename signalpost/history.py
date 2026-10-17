@@ -161,6 +161,22 @@ def _claim_key(claim: dict[str, Any]) -> str:
     return sha256_json(key)
 
 
+def _comparison_keys(claim: dict[str, Any], evidence: dict[str, dict[str, Any]]) -> list[str]:
+    key = _claim_key(claim)
+    if claim.get("field") != "website_description":
+        return [key]
+    support = [evidence[ref] for ref in claim.get("evidence_ids", []) if ref in evidence]
+    pages = [item for item in support if item.get("extraction_method") == "website_html_extract_v1"]
+    if not pages:
+        pages = [item for item in support if item.get("extraction_method") not in {
+            "audited_exact_site_identity_proof_v1", "brreg_website_candidate_v1"}]
+    urls = {str(item["source_url"]) for item in pages if item.get("source_url")}
+    # Page metadata can coexist within the same company. A newly discovered
+    # article description must not replace the homepage description in history.
+    return sorted({sha256_json({"claim_key": key,
+        "source_resource": _semantic_value(url, "website_url")}) for url in urls}) or [key]
+
+
 def _configuration_fingerprint(config: dict[str, Any]) -> str:
     return sha256_json(config)
 
@@ -465,10 +481,15 @@ def compare_states(previous: CompanyState | None, current: CompanyState, *, cuto
         raise PriorStateError("refresh comparison requires the same exact organisation number")
     old_claims: dict[str, list[dict[str, Any]]] = {}
     new_claims: dict[str, list[dict[str, Any]]] = {}
+    previous_evidence = {item["evidence_id"]: item for item in previous.evidence}
+    current_evidence = {item["evidence_id"]: item for item in current.evidence}
+    previous_fingerprints = {claim_fingerprint(item) for item in previous.claims}
     for item in previous.claims:
-        old_claims.setdefault(_claim_key(item), []).append(item)
+        for key in _comparison_keys(item, previous_evidence):
+            old_claims.setdefault(key, []).append(item)
     for item in current.claims:
-        new_claims.setdefault(_claim_key(item), []).append(item)
+        for key in _comparison_keys(item, current_evidence):
+            new_claims.setdefault(key, []).append(item)
     # Do not report a transition whose source effective/publication date is
     # after the run cutoff. Retrieval-only changes are absent from fingerprints.
     events: list[dict[str, Any]] = []
@@ -501,6 +522,8 @@ def compare_states(previous: CompanyState | None, current: CompanyState, *, cuto
                 except ValueError:
                     pass
             if old is None and new is not None:
+                if new.get("field") == "website_description" and claim_fingerprint(new) in previous_fingerprints:
+                    continue  # Another page corroborates an already observed description.
                 kind = _event_type(None, new)
                 confirmation = None
             elif new is None and old is not None:

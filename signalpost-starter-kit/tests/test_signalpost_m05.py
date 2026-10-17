@@ -280,6 +280,96 @@ class M05HiringActivityTests(unittest.TestCase):
         two = _activity_record(ORG, "Launch", "https://company.no/syndicated/launch", date, "Summary", None, CUTOFF, 365, counts)
         self.assertEqual(len(_dedupe_activities([one, two])), 1)
 
+    def test_http_budget_skip_is_not_reported_as_a_website_transport_failure(self):
+        class ExhaustedGateway(FakeGateway):
+            async def fetch(self, url, **kwargs):
+                return 0, {}, b"", url, "budget_exhausted"
+        for phase in ["verify", "all"]:
+            with self.subTest(phase=phase):
+                result = asyncio.run(research_company({"organisation_number": ORG, "name": LEGAL,
+                    "website_candidates": [{"raw": "https://company.no/", "source": "registry_frozen"}]},
+                    ExhaustedGateway({}), enable_keyless=False, evidence_cutoff=CUTOFF, phase=phase))
+                self.assertIsNone(result.state)
+                self.assertEqual(result.attempt_outcome, "budget_skipped")
+                self.assertEqual(result.audit["candidates"][0]["decision"], "budget_skipped")
+                self.assertFalse(result.claims)
+
+    def test_unrequested_ats_diagnostics_have_a_closed_operational_schema(self):
+        from signalpost.synthesis import validate_synthesis_schema
+        valid = {"host": "app.cvideo.no", "status": "unlisted_origin_skipped", "requested": False}
+        validate_synthesis_schema({"website_research": {"ats_origins": [valid]}})
+        for bad in [{**valid, "requested": True}, {**valid, "host": 12},
+                    {**valid, "status": "available"}, {**valid, "unsupported_claim": "invented"}]:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate_synthesis_schema({"website_research": {"ats_origins": [bad]}})
+        with self.assertRaises(ValueError):
+            validate_synthesis_schema({"website_research": {"requested": False}})
+
+    def test_runner_extracts_saved_jobs_after_http_budget_is_consumed(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from signalpost import run as run_module
+        from signalpost.network import NetworkGateway
+        target = "923609016"
+        home = f'<html><head><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{target}"}}</script></head><body><a href="/careers">Careers</a></body></html>'
+        posting = job(deadline="2026-12-01", employer={"@type": "Organization", "name": LEGAL, "identifier": target})
+        career = f'<html><head><script type="application/ld+json">{json.dumps(posting)}</script></head><body><h1>Careers</h1><a href="https://app.cvideo.no/company/jobs">Apply</a></body></html>'
+        pages = {"https://company.no/": home.encode(), "https://company.no/careers": career.encode()}
+        class Transport:
+            async def request(self, url, headers, timeout):
+                return (200, {"Content-Type": "text/html"}, pages[url], url) if url in pages else (404, {}, b"", url)
+        gateways = []
+        def factory(*args, **kwargs):
+            gateway = NetworkGateway(*args, transport=Transport(), **kwargs)
+            gateways.append(gateway)
+            return gateway
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "input").write_text(target + "\n")
+            (root / "registry.jsonl").write_text(json.dumps({"organisation_number": target, "name": LEGAL,
+                "source_url": "https://registry.example/snapshot", "website": "https://company.no/"}) + "\n")
+            (root / "config.json").write_text(json.dumps({"budget": {"physical_request_limit": 3}}))
+            with patch.object(run_module, "NetworkGateway", factory), patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(NetworkGateway, "robots_decision", return_value=("allowed", None)):
+                code = run_module.main(["--input", str(root / "input"), "--registry-snapshot", str(root / "registry.jsonl"),
+                    "--live-websites", "--no-keyless-websites", "--config", str(root / "config.json"),
+                    "--output", str(root / "output.jsonl"), "--state-output", str(root / "state.json"),
+                    "--checkpoint", str(root / "checkpoint.sqlite"), "--evidence-cutoff", "2026-10-17T23:59:59Z"])
+            self.assertEqual(code, 0)
+            output = json.loads((root / "output.jsonl").read_text())
+            self.assertEqual(gateways[0].ledger.physical_requests, 3)
+            self.assertEqual(gateways[0].budget.physical_requests_remaining, 0)
+            self.assertTrue(any(c["field_family"] == "jobs" for c in output["claims"]))
+            self.assertEqual(output["sections"]["hiring_activity"]["state"], "available")
+            self.assertEqual(output["sections"]["hiring_activity"]["attempt_outcome"], "completed")
+            self.assertTrue(all(entry.url.startswith("https://company.no/") for entry in gateways[0].ledger.entries))
+
+    def test_sitemap_html_news_is_fetched_once_as_a_page_not_a_feed(self):
+        home = f'<html><head><meta name="description" content="We manufacture industrial products for Norwegian business customers."><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><h1>{LEGAL}</h1></body></html>'
+        article_url = "https://company.no/news/new-factory"
+        article = {"@context": "https://schema.org", "@type": "NewsArticle", "headline": f"{LEGAL} opens factory",
+                   "datePublished": "2026-09-20", "url": article_url,
+                   "about": {"@type": "Organization", "name": LEGAL, "identifier": ORG}}
+        news = f'<html><head><meta name="description" content="A detailed article about the legal rules for industrial construction."><script type="application/ld+json">{json.dumps(article)}</script></head><body><h1>{LEGAL} opens factory</h1></body></html>'
+        class RecordingGateway(FakeGateway):
+            async def fetch(self, url, **kwargs):
+                self.calls.append((url, kwargs["purpose"]))
+                return await super().fetch(url, **kwargs)
+        gateway = RecordingGateway({"https://company.no/": (200, {"Content-Type": "text/html"}, home.encode()),
+            "https://company.no/sitemap.xml": (200, {"Content-Type": "application/xml"},
+                f'<urlset><url><loc>{article_url}</loc></url></urlset>'.encode()),
+            article_url: (200, {"Content-Type": "text/html"}, news.encode())})
+        gateway.calls = []
+        result = asyncio.run(research_company({"organisation_number": ORG, "name": LEGAL,
+            "website_candidates": [{"raw": "https://company.no/", "source": "registry_frozen"}]}, gateway,
+            enable_keyless=False, evidence_cutoff=CUTOFF))
+        self.assertEqual([purpose for url, purpose in gateway.calls if url == article_url], ["website_page"])
+        self.assertTrue(any(c.field_family == "public_activity" for c in result.claims))
+        self.assertEqual([c.value for c in result.claims if c.field == "website_description"],
+                         ["We manufacture industrial products for Norwegian business customers.",
+                          "A detailed article about the legal rules for industrial construction."])
+        self.assertFalse(any(e.extraction_method == "website_feed_extract_v1" and e.source_url == article_url for e in result.evidence))
+
     def test_exact_site_feed_activity_publishes_with_explicit_date_and_source_evidence(self):
         home = f'''<html><head><title>{LEGAL}</title><script type="application/ld+json">{{"@type":"Organization","legalName":"{LEGAL}","identifier":"{ORG}"}}</script></head><body><a href="/news">News</a></body></html>'''
         news = '<html><head><title>News</title><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head><body><h1>News</h1></body></html>'

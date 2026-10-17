@@ -261,10 +261,21 @@ def _role_collection_shape(body: Any) -> bool:
                for group in body["rollegrupper"])
 
 
+def _empty_hal_subunit_page(body: Any) -> bool:
+    """BRREG may omit _embedded for an explicitly empty first HAL page."""
+    if not isinstance(body, dict) or "_embedded" in body:
+        return False
+    page, links = body.get("page"), body.get("_links")
+    return (isinstance(page, dict) and isinstance(links, dict) and "next" not in links
+            and all(type(page.get(key)) is int and page[key] == 0
+                    for key in ("number", "totalElements", "totalPages")))
+
+
 def _subunit_collection_shape(body: Any) -> bool:
-    return (isinstance(body, dict) and isinstance(body.get("_embedded"), dict)
-            and isinstance(body["_embedded"].get("underenheter"), list)
-            and all(isinstance(item, dict) for item in body["_embedded"]["underenheter"]))
+    return (_empty_hal_subunit_page(body) or
+            (isinstance(body, dict) and isinstance(body.get("_embedded"), dict)
+             and isinstance(body["_embedded"].get("underenheter"), list)
+             and all(isinstance(item, dict) for item in body["_embedded"]["underenheter"])))
 
 
 def group_relationships(body: Any, target_org: str) -> list[dict[str, Any]]:
@@ -609,6 +620,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         errors.append(RunError(code="BRREG_SUBUNITS_MALFORMED", message="Official subunit endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
     complete = subunit_status == 200 and not subunits_malformed
     subunit_pages: list[dict[str, Any]] = []
+    subunit_page_pointers: dict[str, str] = {}
     current = subunit_body
     current_url = subunit_final or subunits_url
     current_hash = subunit_hash
@@ -618,12 +630,14 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         if current_hash:
             subunit_pages.append({"url": current_url, "content_sha256": current_hash,
                                   "retrieved_at": current_time.isoformat(), "page_index": page_index})
+        collection_pointer = "/page/totalElements" if _empty_hal_subunit_page(current) else "/_embedded/underenheter"
+        subunit_page_pointers[current_url] = collection_pointer
         rows, next_path, page_complete = subunit_page(current)
         locations.extend((item, current, current_url, current_hash, current_time, i) for i, item in enumerate(rows))
         if not rows:
             observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name=f"subunits_page_{page_index}",
                 url=current_url, retrieved_at=current_time, status=200, digest=current_hash,
-                pointer="/_embedded/underenheter", method="brreg_subunit_page_collection_v1")
+                pointer=collection_pointer, method="brreg_subunit_page_collection_v1")
         complete = page_complete
         if not next_path: break
         next_url = urljoin(current_url, next_path)
@@ -689,7 +703,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                     http_status=200, rights_status=RIGHTS))
             evidence.append(Evidence(evidence_id=evidence_id, source_url=page["url"],
                 retrieved_at=datetime.fromisoformat(page["retrieved_at"]), content_sha256=digest,
-                extraction_method="brreg_complete_workplace_page_v1", json_pointer="/_embedded/underenheter",
+                extraction_method="brreg_complete_workplace_page_v1", json_pointer=subunit_page_pointers[page["url"]],
                 subject_organisation_number=org, source_snapshot_ids=[source_id]))
         observations["workplaces_completeness_evidence_ids"] = completeness_ids
         observations["workplaces_completeness_evidence_id"] = completeness_ids[0] if completeness_ids else None

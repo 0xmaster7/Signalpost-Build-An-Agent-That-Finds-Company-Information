@@ -12,7 +12,7 @@ from signalpost.adapter import _evaluator_change, to_evaluator
 from signalpost.history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, claim_fingerprint,
     compare_states, company_state, merge_prior_facts, sha256_json, validate_artifact)
 from signalpost.models import (Claim, Envelope, Evidence, PublicState, RefreshState, Section,
-    SourceSnapshot)
+    SourceSnapshot, website_claim_value_digest)
 from signalpost.run import main
 
 ORG = "923609016"
@@ -40,7 +40,8 @@ def make_envelope(specs: list[dict], *, retrieved: datetime | None = None,
             source_snapshot_ids=[snapshot_id]))
         snapshots.append(SourceSnapshot(source_id=snapshot_id, source_url=url, retrieved_at=retrieved,
             content_sha256=digest, http_status=200))
-        claims.append(Claim(claim_id=f"c{index}", organisation_number=ORG,
+        claims.append(Claim(claim_id=(f"c{index}:" + website_claim_value_digest(spec["field"], spec["value"])
+            if spec.get("family") == "owned_web" else f"c{index}"), organisation_number=ORG,
             section=spec.get("section", "identity_brand"), field_family=spec.get("family", "identity"),
             subject_id=spec.get("subject", ORG), field=spec["field"], value=spec["value"],
             state=spec.get("state", PublicState.AVAILABLE),
@@ -93,6 +94,27 @@ def changes(old: Envelope, new: Envelope) -> list[dict]:
 
 
 class CanonicalRefreshTests(unittest.TestCase):
+    def test_page_descriptions_compare_only_the_same_source_resource(self):
+        def description(value, url):
+            return {"field": "website_description", "value": value, "family": "owned_web",
+                    "section": "website_owned_profiles", "source_url": url,
+                    "extraction_method": "website_html_extract_v1"}
+        home = description("Company overview.", "https://company.no/")
+        article = description("A legal article.", "https://company.no/news/article")
+        old = make_envelope([home])
+        expanded = make_envelope([home, article])
+        events = changes(old, expanded)
+        self.assertEqual(len(events), 1)
+        self.assertIsNone(events[0]["old_value"])
+        self.assertEqual(events[0]["new_value"], "A legal article.")
+        self.assertEqual(changes(expanded, expanded), [])
+        edited = make_envelope([description("Updated company overview.", "https://company.no/"), article])
+        updates = changes(expanded, edited)
+        self.assertEqual([(e["old_value"], e["new_value"]) for e in updates],
+                         [("Company overview.", "Updated company overview.")])
+        corroborated = make_envelope([home, description("Company overview.", "https://company.no/about")])
+        self.assertEqual(changes(old, corroborated), [])
+
     def test_unchanged_snapshot_and_repeated_refresh_are_idempotent(self):
         env = make_envelope([{"field": "legal_name", "value": "Example AS"}])
         prior, current = state(env), state(env)
