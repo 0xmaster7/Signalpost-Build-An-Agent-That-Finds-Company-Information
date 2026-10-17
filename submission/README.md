@@ -2,15 +2,17 @@
 
 Status: prepared for owner review; external submission HOLD. No email, Builderr submission, revision slot, visibility change or paid service was used. No new provider is enabled in the release.
 
-Latest verification: [final coverage and submission acceptance](../docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md). A separately approved three-company / 60-attempt discovery experiment consumed 15 attempts and produced no additional external coverage; its robots-blocked adapter was rejected. Security lock updates are pypdf 6.19.0 and urllib3 2.8.0. The accepted UI and production Python remain unchanged.
+Historical verification: [final coverage and submission acceptance](../docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md). A separately approved three-company / 60-attempt discovery experiment consumed 15 attempts and produced no additional external coverage; its robots-blocked adapter was rejected. Security lock updates are pypdf 6.19.0 and urllib3 2.8.0. The accepted UI and production Python remain unchanged.
 
-Latest bounded live sprint: [measured final result](../docs/release/FINAL_COMPETITIVE_SPRINT_2026-10-17.md). Source acquisition improved from 3 to 6 companies with HTML at the same 64-request budget; verified family coverage did not improve. Total sprint HTTP attempts: 172/200, source network sealed. No financial/provider integration was promoted.
+Historical bounded live sprint: [measured final result](../docs/release/FINAL_COMPETITIVE_SPRINT_2026-10-17.md). Source acquisition improved from 3 to 6 companies with HTML at the same 64-request budget; verified family coverage did not improve. Total sprint HTTP attempts: 172/200, source network sealed. No financial/provider integration was promoted.
 
 ## Version and access
 
 Repository: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information
 
-Branch: `codex/m12-final-sol-remediation`.
+Canonical branch: `main`. Development/release branch: `codex/m12-final-sol-remediation`.
+
+Primary installation and live execution: run `./setup.sh`, then `./run.sh --input companies.jsonl --output output.jsonl`. See the [root README](../README.md). The manual uv/Python commands below remain useful for advanced use. Current implementation evidence is in the [capability integration report](../docs/release/FINAL_CAPABILITY_INTEGRATION_2026-10-17.md).
 
 Accepted UI design checkpoint: `64f69071b241614a1826c342ef65020db7a125d4`. The historical dry run was documentation/evidence only; subsequent narrowly scoped live-acceptance corrections are recorded in the [live research report](../docs/release/LIVE_RESEARCH_QUALITY_2026-10-17.md). Its frozen baseline was `f73dcfc01cff6e75888ede7351b6338da2e392d9`. Resolve the exact package commit with `git rev-parse HEAD`; the final owner handoff names that immutable SHA and its exact-SHA CI. Do not submit a moving branch, an older implementation checkpoint, or a private VM receipt as the package identifier.
 
@@ -18,16 +20,14 @@ Latest approved coverage implementation and offline evidence: [maximum verified 
 
 **Current package:** [submission dry-run report](DRY_RUN.md), [artifact index](ARTIFACTS.md), [historical 100-company report index](HISTORICAL_100_COMPANY_SMOKE.md), and [unsent submission draft](DRAFT_SUBMISSION.md). Everything required to read the report and reproduce the offline checks is tracked in this repository. Raw historical live output is not bundled or claimed available.
 
-**Important:** GitHub's default branch is the older `codex/m00-contract-audit`. Select `codex/m12-final-sol-remediation` and pin the exact final package SHA; the bare repository homepage is not the frozen submission version.
-
-The repository is PRIVATE. The authenticated collaborator listing contained only the owner `0xmaster7`; organizer access is not verified. The challenge asks for a public artifact. The owner must authorize publication or obtain explicit organizer acceptance of private read-only access, then verify cloning the exact SHA with organizer credentials. Private access alone is not assumed to satisfy the challenge wording. Do not assume that sharing this URL grants access. Repository visibility must not change without owner approval. The project has no declared repository code licence; third-party/data notices do not grant a licence for the project's own code.
+**Current access:** the repository is PUBLIC and `main` is the canonical default branch. Pin the immutable commit from the final handoff for submission. The project's own code licence remains undeclared; third-party/data notices do not grant a licence for the project's own code.
 
 ## Fresh setup (Linux/macOS, Python 3.12+)
 
-Clone using credentials that actually have access, and pin the package SHA from the final handoff:
+For advanced manual installation, clone the public canonical branch and pin the package SHA from the final handoff:
 
 ```sh
-git clone --branch codex/m12-final-sol-remediation   https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information.git
+git clone --branch main   https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information.git
 cd Signalpost-Build-An-Agent-That-Finds-Company-Information
 # Before submission: git checkout THE_EXACT_PACKAGE_SHA_FROM_THE_HANDOFF
 ```

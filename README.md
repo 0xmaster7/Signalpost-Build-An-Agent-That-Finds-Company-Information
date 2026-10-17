@@ -2,32 +2,24 @@
 
 Signalpost researches Norwegian companies by organisation number and returns ordered, evidence-backed JSONL profiles. Its read-only dashboard lets users find saved companies, compare facts, verify propositions and inspect sources and history.
 
-**Status:** the accepted UI and tested backend are preserved. Website, jobs, news and numeric-financial coverage remain weak. The [current acceptance report](docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md) records official requirements, provider decisions, a new three-company experiment and remaining blockers. The repository remains PRIVATE. No official score, qualification or submission is claimed.
+**Status:** the public `main` branch is the canonical release. The [latest measured release](docs/release/FINAL_CAPABILITY_INTEGRATION_2026-10-17.md) recovered 57 additional financial claims and registered workplace locations for 6/6 previously unseen companies. Website, jobs and news coverage remain limited. No official Builderr score or submission is claimed.
 
-## Install
+## Install and run: two commands
 
-Requires Git, **Python 3.12** (tested) and **uv 0.8.0**. Dependencies are pinned in [uv.lock](signalpost-starter-kit/uv.lock). No personal API key, model, database server or paid service is required.
+Clone this public repository and enter its directory, then run:
 
-~~~sh
-git clone --branch codex/m12-final-sol-remediation https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information.git
-cd Signalpost-Build-An-Agent-That-Finds-Company-Information
-# Pin the exact package SHA from the final handoff.
-cd signalpost-starter-kit
-uv sync --frozen --extra m08-test
-cd ..
-~~~
+```sh
+./setup.sh
+./run.sh --input companies.jsonl --output output.jsonl
+```
 
-Private clone access is required. GitHub's default branch is older; use the branch above and an immutable SHA. The [submission guide](submission/README.md) includes the tested uv bootstrap.
+Prerequisites: **CPython 3.12+** (3.12 recommended), Linux with glibc or macOS on x86_64/arm64, and `curl` for the first setup. Setup downloads checksum-verified **uv 0.8.0**, creates `signalpost-starter-kit/.venv`, installs production dependencies from [uv.lock](signalpost-starter-kit/uv.lock), and checks the local PDF/OCR modules. Tools, caches and temporary installation files stay inside the checkout. Setup is safe to rerun; it does not install Python, modify shell profiles, use sudo or require Tesseract, Docker, API keys or paid services. Outbound HTTPS is needed for installation and live research. Set `SIGNALPOST_PYTHON=/path/to/python3.12` during setup if interpreter selection needs an override.
 
-## One evaluator command
+`run.sh` performs **no installation**. By default it enables the real production evaluator's **live BRREG, official annual-account PDF/local OCR, and permitted website research** paths. Arguments and exit codes are preserved; relative input/output paths resolve from your current directory. From another directory, use `/absolute/path/to/checkout/run.sh ...`.
 
-After installation, from the repository root:
+The input contains company organisation numbers. The output is ordered JSONL with one terminal profile per input row; stdout is a separate machine-readable batch report and stderr contains diagnostics. State/checkpoint paths can be supplied with `--state-output` and `--checkpoint`. Current research limits and source/identity safeguards still apply.
 
-~~~sh
-signalpost-starter-kit/.venv/bin/python signalpost-starter-kit/run_signalpost.py --input companies.jsonl --output output.jsonl --state-output state.json --checkpoint checkpoint.sqlite --live-brreg --live-websites
-~~~
-
-This makes external requests and accepts unseen runtime IDs without a precomputed manifest. Local testing requires its own request authorization; completed test budgets are not ongoing allowances.
+An explicit `--registry-snapshot PATH` preserves the canonical CLI's offline mode unless you also supply `--live-brreg --live-websites`. For advanced direct Python, refresh, resume, configuration and dashboard commands, see the [submission guide](submission/README.md). The underlying production launcher remains `signalpost-starter-kit/run_signalpost.py`.
 
 Input:
 
@@ -60,7 +52,7 @@ Seven sections cover identity/brand, accounts/history, leadership/workplaces, we
 
 Website publication requires direct company ownership or permitted page-representation proof. Mentions/search results do not establish ownership; group and page-only scope remain separate. Hiring needs an actual employer-bound posting; activity needs a supported subject and date. Registered activity is not dated news.
 
-Financial figures require authoritative period, currency, scope and **unit/scale** proof. Saved live accounts lack scale proof, so those numbers remain withheld. Currency alone does not prove NOK versus NOK-thousands.
+Financial figures require exact-entity period, currency, scope and **unit/scale** proof. Official annual-account PDF rows are reconciled with BRREG JSON; each supported value publishes independently, while ambiguous values remain withheld. Currency alone does not prove NOK versus NOK-thousands.
 
 ## Refresh and operation
 
@@ -70,7 +62,7 @@ To resume interruption, repeat the original command with --resume. Refresh and u
 
 Use --config for supplied resource limits. Project defaults are 1,800 s hard / 1,350 s soft / 300 s completion reserve, 12*N+1000 physical attempts and $0 paid cost. These are **not published organizer limits**.
 
-Default evidence cutoff is run start. Later observations without an established effective date can be withheld, including workplaces. Use --evidence-cutoff only with the organizer's actual authorized timestamp; never invent a future cutoff. A supplied registry uses --registry-snapshot, --registry-snapshot-as-of and --registry-source-url with real provenance and rights.
+Default evidence cutoff is run start. Current registered identity/workplace observations are supported in default live mode; an explicit historical cutoff strictly excludes later observations. Use --evidence-cutoff only with the organizer's actual authorized timestamp; never invent a future cutoff. A supplied registry uses --registry-snapshot, --registry-snapshot-as-of and --registry-source-url with real provenance and rights.
 
 ## Offline demo and UI
 
@@ -87,7 +79,7 @@ Open http://127.0.0.1:8000. Find an ID, inspect its profile and evidence, compar
 
 Official BRREG entity/accounts/roles/subunit APIs provide the foundation, with NLOD attribution and privacy exclusions. Websites use bounded transient factual extraction subject to site terms, robots and ownership proof.
 
-No paid model/API, external search/news provider, ATS integration, platform scraper, PDF acquisition or browser-rendering service is enabled. [Free-provider decisions](docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md#free-provider-decisions) explain why the experimental Wikidata adapter was rejected and excluded.
+Official annual-account PDF acquisition and local OCR are enabled. No paid model/API, external search/news provider, ATS integration, platform scraper or browser-rendering service is enabled. [Free-provider decisions](docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md#free-provider-decisions) explain why the experimental Wikidata adapter was rejected and excluded.
 
 API/model cost is **$0** under the frozen configuration for 100, 1,000 or 1,100 inputs. Runner VM, bandwidth and installation infrastructure are not priced here. Full-scale live runtime is unproven. Website reach, jobs/news and financial values remain major scoring gaps; offline scale throughput is not factual accuracy or competition recall.
 

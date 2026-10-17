@@ -13,3 +13,8 @@ notices), OpenCV (Apache-2.0), Pillow (MIT-CMU), NumPy (BSD and bundled componen
 notices), Shapely (BSD-3-Clause) and pyclipper (MIT). Their licence and notice
 files remain in the installed distributions; no competitor code is incorporated.
 Exact versions and artifact hashes are frozen in `signalpost-starter-kit/uv.lock`.
+
+The setup wrapper downloads an unmodified uv 0.8.0 executable from Astral's
+upstream release (MIT OR Apache-2.0), verifies its pinned SHA256, and stores it
+inside the checkout. The binary is not vendored in Git. Upstream licences:
+https://github.com/astral-sh/uv/tree/0.8.0
