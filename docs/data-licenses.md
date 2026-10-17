@@ -1,6 +1,6 @@
 # Data and software licences
 
-Current package inventory, rechecked 2026-10-17 from a fresh Python 3.12 environment after the declared `uv sync --frozen --extra m08-test` install. **50 distributions** are installed, matched to `signalpost-starter-kit/uv.lock` (SHA-256 `40d47bd127ba8673b19d03276d7aa9cd96d2a35bd04cfc226ef8f40d22506633`). This supersedes the earlier 48-row inventory, which omitted transitive distributions and included an inactive package. No dependency or licence grant was changed. The test runner is separately installed for CI and is not included in this runtime/HTTP-test-extra inventory.
+Current package inventory, rechecked 2026-10-17 from a fresh Python 3.12 environment after the declared `uv sync --frozen --extra m08-test` install. **50 distributions** are installed, matched to `signalpost-starter-kit/uv.lock` (SHA-256 `8d9382cae669dff3eb8c5ebd327bd8a5870518c067d867fa0f22a0c53aa36c8a`). This supersedes the earlier 48-row inventory, which omitted transitive distributions and included an inactive package. The final security correction upgrades pypdf and urllib3 to the patched versions below; no licence grant was changed. The test runner is separately installed for CI and is not included in this runtime/HTTP-test-extra inventory.
 
 | Distribution | Locked version | Declared licence metadata |
 |---|---:|---|
@@ -33,7 +33,7 @@ Current package inventory, rechecked 2026-10-17 from a fresh Python 3.12 environ
 | `pydantic` | `2.13.4` | MIT |
 | `pydantic_core` | `2.46.4` | MIT |
 | `pyparsing` | `3.3.2` | MIT |
-| `pypdf` | `6.16.1` | BSD-3-Clause |
+| `pypdf` | `6.19.0` | BSD-3-Clause |
 | `pyrdfa3` | `3.6.5` | License :: OSI Approved :: W3C License |
 | `python-dateutil` | `2.9.0.post0` | Dual License |
 | `pytz` | `2026.3.post1` | MIT |
@@ -50,7 +50,7 @@ Current package inventory, rechecked 2026-10-17 from a fresh Python 3.12 environ
 | `typing-inspection` | `0.4.4` | MIT |
 | `typing_extensions` | `4.16.0` | PSF-2.0 |
 | `tzlocal` | `5.4.4` | MIT |
-| `urllib3` | `2.7.0` | MIT |
+| `urllib3` | `2.8.0` | MIT |
 | `uvicorn` | `0.54.0` | BSD-3-Clause |
 | `w3lib` | `2.4.1` | BSD-3-Clause |
 | `webencodings` | `0.6.1` | License :: OSI Approved :: BSD License |

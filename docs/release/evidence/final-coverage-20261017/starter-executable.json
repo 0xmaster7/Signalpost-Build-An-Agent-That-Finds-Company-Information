@@ -1,0 +1,35 @@
+{
+  "run_id": "offline-starter-comparison",
+  "started_at": "2026-10-17T14:46:26.704617Z",
+  "completed_at": "2026-10-17T14:46:26.706884Z",
+  "expected_count": 2,
+  "emitted_envelopes": 2,
+  "resumed_profiles": 0,
+  "profiles_fetched_this_run": 2,
+  "modules": [
+    "registry"
+  ],
+  "registry": {
+    "registry_snapshot_sha256": "2eae2d1b81e96a089510f4fc28ce9fe3f0c7e84aa75c4e08fc6f2b85922fa281",
+    "registry_rows_scanned": 2,
+    "requested": 2,
+    "selected": 2
+  },
+  "operations": {
+    "requests": 0,
+    "bytes": 0,
+    "p50_ms": null,
+    "p95_ms": null
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "unique_organisation_numbers": true,
+      "all_entity_states_terminal": true,
+      "all_module_states_terminal": true,
+      "zero_silent_drops": true
+    },
+    "invalid_states": []
+  }
+}

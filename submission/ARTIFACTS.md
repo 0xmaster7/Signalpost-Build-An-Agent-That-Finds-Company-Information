@@ -29,3 +29,7 @@ Use fresh output/checkpoint paths. This is one run command after installation, p
 ## Publication boundary
 
 Only tracked Git files are included by a source archive (`git archive HEAD`); `.git`, ignored virtualenvs/tools, VM research bundles, tmux configuration and SSH keys are not part of that archive. Publishing GitHub also exposes reachable history and other branches, so the dry-run scan covers all locally fetched branch history, not just an archive. Pattern scans and manual artifact review found no credential/private-key payloads; this is a bounded check, not a guarantee about every deleted remote object. The repository includes public registry facts, public business role names and screenshots of such facts, plus clearly identified fictional fixtures. These are intentional research evidence, not private credentials. There is no automatic repository publication or submission action.
+
+## Latest verification
+
+See [final coverage/submission acceptance](../docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md) and its tracked receipts, 20-company funnel, new three-company result and physical ledger. No new provider was promoted. The historical 100-company report remains historical. Exact organizer parser/resource handoff and public-artifact/access acceptance remain unresolved.

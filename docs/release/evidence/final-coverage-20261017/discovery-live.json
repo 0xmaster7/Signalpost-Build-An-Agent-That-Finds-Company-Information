@@ -1,0 +1,264 @@
+{
+  "cohort": [
+    {
+      "organisation_number": "996501884",
+      "legal_name": "RAKKERUNGAN BARNEHAGEDRIFT AS",
+      "identity": "independently read exact org/name from BRREG bytes",
+      "published_claims": {
+        "identity": 17,
+        "business_description": 2,
+        "financial_record_metadata": 21,
+        "role": 42
+      }
+    },
+    {
+      "organisation_number": "979642296",
+      "legal_name": "SPJELKAVIK HOTELLDRIFT AS",
+      "identity": "independently read exact org/name from BRREG bytes",
+      "published_claims": {
+        "identity": 17,
+        "business_description": 2,
+        "financial_record_metadata": 21,
+        "role": 42
+      }
+    },
+    {
+      "organisation_number": "950222905",
+      "legal_name": "DRAMMEN PAPIR ENGROS AS",
+      "identity": "independently read exact org/name from BRREG bytes",
+      "published_claims": {
+        "identity": 20,
+        "business_description": 2,
+        "financial_record_metadata": 21,
+        "role": 57
+      }
+    }
+  ],
+  "selection": {
+    "seed": "signalpost-free-discovery-v1",
+    "sort": "prefer no registry website, then SHA256(seed + ':' + organisation_number) in each employee band; exclude undisclosed employees",
+    "bands": [
+      "<20",
+      "20-99",
+      ">=100"
+    ],
+    "excluded_count": 486,
+    "companies": [
+      {
+        "organisation_number": "996501884",
+        "name": "RAKKERUNGAN BARNEHAGEDRIFT AS",
+        "legal_form": "AS",
+        "employees": 12,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "KRISTIANSAND",
+        "municipality_number": "4204",
+        "industry_code": "85.100",
+        "industry_label": "Førskoleundervisning og drift av barnehager",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      },
+      {
+        "organisation_number": "979642296",
+        "name": "SPJELKAVIK HOTELLDRIFT AS",
+        "legal_form": "AS",
+        "employees": 31,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "ÅLESUND",
+        "municipality_number": "1508",
+        "industry_code": "55.100",
+        "industry_label": "Drift av hoteller",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      },
+      {
+        "organisation_number": "950222905",
+        "name": "DRAMMEN PAPIR ENGROS AS",
+        "legal_form": "AS",
+        "employees": 142,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "DRAMMEN",
+        "municipality_number": "3301",
+        "industry_code": "46.490",
+        "industry_label": "Engroshandel med andre husholdningsvarer",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      }
+    ],
+    "hard_physical_cap": 60,
+    "paid_cost_usd": 0,
+    "authorization": "user explicitly approved 3 companies/60 physical attempts on 2026-10-17",
+    "replacement_allowed": false
+  },
+  "physical_HTTP_requests": 15,
+  "logical_gateway_requests": 20,
+  "output_rows": 3,
+  "terminal_states": [
+    "available",
+    "available",
+    "available"
+  ],
+  "coverage": {
+    "identity": {
+      "companies": 3,
+      "claims": 54
+    },
+    "business_description": {
+      "companies": 3,
+      "claims": 6
+    },
+    "financial_record_metadata": {
+      "companies": 3,
+      "claims": 63
+    },
+    "role": {
+      "companies": 3,
+      "claims": 141
+    }
+  },
+  "source_value_review": {
+    "exact_source_value_matches": 205,
+    "requires_normalization_or_additional_review": 59
+  },
+  "wrong_company_publications_confirmed": 0,
+  "numeric_financial_publications": 0,
+  "instrumentation": {
+    "wall_seconds": 11.654537274996983,
+    "peak_rss_kib": 87344,
+    "cpu_user_seconds": 1.271846,
+    "cpu_system_seconds": 0.10030299999999999,
+    "worker_timings": [
+      {
+        "company": "996501884",
+        "seconds": 5.107553641006234,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "979642296",
+        "seconds": 4.476640344000771,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "950222905",
+        "seconds": 7.150423811996006,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "996501884",
+        "seconds": 0.6707687150046695,
+        "phase": "website_verify"
+      },
+      {
+        "company": "979642296",
+        "seconds": 0.02616929500072729,
+        "phase": "website_verify"
+      },
+      {
+        "company": "950222905",
+        "seconds": 0.018329352998989634,
+        "phase": "website_verify"
+      }
+    ],
+    "physical_http_cap": 60,
+    "phase_cumulative_cap": 45,
+    "guard": "SQLite BEGIN IMMEDIATE reservation before every HTTPConnection.request, including IP fallback; all HTTP outside gateway transport context denied; no source mocks or pacing changes",
+    "body_retention": "run-scoped, prohibited personal keys redacted before disk; raw SHA is pre-redaction; no persistent raw cache"
+  },
+  "discovery": {
+    "996501884": {
+      "provider_id": "wikidata-exact-org",
+      "provider_version": "P2333-P856-v1",
+      "enabled": true,
+      "status": "completed",
+      "physical_requests": 1,
+      "logical_requests": 1,
+      "cost_usd": "0",
+      "queries": [
+        {
+          "query_id": "exact_org",
+          "status": "provider_error",
+          "cost_usd_upper_bound": "0",
+          "error_type": "ValueError",
+          "observed_elapsed_ms": 1998.261,
+          "physical_requests": 1
+        }
+      ],
+      "candidate_count": 0,
+      "elapsed_ms": 1998.286
+    },
+    "979642296": {
+      "provider_id": "wikidata-exact-org",
+      "provider_version": "P2333-P856-v1",
+      "enabled": true,
+      "status": "completed",
+      "physical_requests": 0,
+      "logical_requests": 1,
+      "cost_usd": "0",
+      "queries": [
+        {
+          "query_id": "exact_org",
+          "status": "provider_error",
+          "cost_usd_upper_bound": "0",
+          "error_type": "ValueError",
+          "observed_elapsed_ms": 0.365
+        }
+      ],
+      "candidate_count": 0,
+      "elapsed_ms": 0.383
+    },
+    "950222905": {
+      "provider_id": "wikidata-exact-org",
+      "provider_version": "P2333-P856-v1",
+      "enabled": true,
+      "status": "completed",
+      "physical_requests": 0,
+      "logical_requests": 1,
+      "cost_usd": "0",
+      "queries": [
+        {
+          "query_id": "exact_org",
+          "status": "provider_error",
+          "cost_usd_upper_bound": "0",
+          "error_type": "ValueError",
+          "observed_elapsed_ms": 0.242
+        }
+      ],
+      "candidate_count": 0,
+      "elapsed_ms": 0.25
+    }
+  },
+  "request_outcomes": {
+    "None:RemoteDisconnected:Remote end closed connection without response": 1,
+    "None:OSError:[Errno 101] Network is unreachable": 1,
+    "200:received": 13
+  },
+  "robots": {
+    "url": "https://query.wikidata.org/robots.txt",
+    "sha256": "212a112f9e27af6072758663789987cf84bfde70bd9b87f97ef76f91fd089b0c",
+    "decision": "Disallow /sparql; no SPARQL query sent"
+  },
+  "promotion": "REJECTED: no additional source coverage under required robots policy; experimental code excluded from release",
+  "limitations": [
+    "3-company convenience of deterministic strata is not population precision/recall",
+    "No new live improvement demonstrated",
+    "Raw source support copies redact prohibited personal fields; raw and saved hashes may differ",
+    "Default run-start cutoff used; no future cutoff was invented"
+  ],
+  "independent_normalization_review": {
+    "method": "Separate pointer interpreter plus source-key semantics; no production extraction functions called",
+    "supported_claims": 264,
+    "breakdown": {
+      "exact_pointer_value": 205,
+      "address_subset": 4,
+      "explicit_record_scope": 9,
+      "person_name_components": 12,
+      "explicit_inactive_flag": 17,
+      "typed_holder_relation": 17
+    },
+    "incorrect": 0,
+    "unresolved": 0,
+    "population_precision_recall": "NOT_ESTABLISHED"
+  }
+}

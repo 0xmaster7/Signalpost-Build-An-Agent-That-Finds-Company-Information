@@ -36,3 +36,7 @@ Parser/handoff clarification requested: Will Builderr run our declared command a
 Package contents and reproducibility: `submission/ARTIFACTS.md`, `submission/README.md`, `submission/DRY_RUN.md`. Exact-SHA CI: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions (select the run whose head SHA is PACKAGE_SHA).
 
 This draft has not been sent. The owner must authorize access/publication and external submission separately.
+
+## Latest validation disclosure for owner review
+
+The final package pins patched pypdf 6.19.0 and urllib3 2.8.0. Production Python and the accepted UI are preserved. A separately authorized three-company live experiment used 15/60 physical attempts, returned three envelopes and 264 source-supported registry claims, but added no website/jobs/news coverage. Wikidata discovery was refused by its robots policy; the experimental adapter is not in this submission. Do not describe this as a fresh 100-company smoke or improved external recall. Use the final handoff SHA/CI and [current report](../docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md). Repository access/public-artifact acceptance and parser/handoff clarification remain pending.

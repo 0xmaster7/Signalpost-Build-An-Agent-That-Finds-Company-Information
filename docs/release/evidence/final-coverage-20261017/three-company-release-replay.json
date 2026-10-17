@@ -1,0 +1,9 @@
+{
+  "external_HTTP": 0,
+  "compared_available_claims": 264,
+  "exact_values_and_dimensions_preserved": true,
+  "input_rows": 3,
+  "source_copies": "preserved bytes; personal keys redacted; replay evidence hashes reflect redacted copies",
+  "cutoff": "same default run-start policy, later replay observation time",
+  "explicit_past_cutoff_variant": "204 claims; correctly withholds 60 undated/post-cutoff identity/business claims; not accepted as like-for-like baseline"
+}

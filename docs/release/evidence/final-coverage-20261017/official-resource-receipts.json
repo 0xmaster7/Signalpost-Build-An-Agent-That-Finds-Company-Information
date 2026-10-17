@@ -1,0 +1,144 @@
+[
+  {
+    "file": "challenge.html",
+    "url": "https://builderr.ai/challenges/signalpost",
+    "status": 200,
+    "type": "text/html; charset=utf-8",
+    "bytes": 122506,
+    "sha256": "0ca208314733da21e104df0e1f1adad4f7bcffa67b4e1f7c1550290d0b80e4c3",
+    "retrieved_at": "2026-10-17T14:27:40.688529+00:00"
+  },
+  {
+    "file": "brief.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost.md",
+    "status": 200,
+    "type": "text/markdown; charset=utf-8",
+    "bytes": 10351,
+    "sha256": "924ff60e1dab437c63806846aa19eaa29d84d8e87132983c4e5d9f7336214c32",
+    "retrieved_at": "2026-10-17T14:27:40.892867+00:00"
+  },
+  {
+    "file": "evaluation.md",
+    "url": "https://builderr.ai/docs/signalpost-evaluation-harness.md",
+    "status": 200,
+    "type": "text/markdown; charset=utf-8",
+    "bytes": 7137,
+    "sha256": "e9f994e2fa34750411487e9fab82dbffd55dc1bb16efe9021906b92896229d45",
+    "retrieved_at": "2026-10-17T14:27:40.963856+00:00"
+  },
+  {
+    "file": "sources.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost-sources.md",
+    "status": 200,
+    "type": "text/markdown; charset=utf-8",
+    "bytes": 2567,
+    "sha256": "f080470ab29d5c6da243d812e35d0ae0aa3d35f5871d62dfef90422df1b8f630",
+    "retrieved_at": "2026-10-17T14:27:41.148932+00:00"
+  },
+  {
+    "file": "playbook.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost-agent-playbook.md",
+    "status": 200,
+    "type": "text/markdown; charset=utf-8",
+    "bytes": 6886,
+    "sha256": "0b165301576e1ad09c210bba48dd61bb2669752a07abaeb1188df4099bd4844e",
+    "retrieved_at": "2026-10-17T14:27:41.213056+00:00"
+  },
+  {
+    "file": "learning.md",
+    "url": "https://builderr.ai/starter-briefs/signalpost-learning-harness.md",
+    "status": 200,
+    "type": "text/markdown; charset=utf-8",
+    "bytes": 6102,
+    "sha256": "3a3915e312010cb6ab6cf613135aa52acad6245b0db0d1dda3374dc27c2fed9a",
+    "retrieved_at": "2026-10-17T14:27:41.272154+00:00"
+  },
+  {
+    "file": "starter.tar.gz",
+    "url": "https://builderr.ai/signalpost-starter-kit.tar.gz",
+    "retrieved_at": "2026-10-17T14:34:34.956156+00:00",
+    "status": 200,
+    "bytes": 252373,
+    "sha256": "d48da9910ea7de07d2bf51ab265539a35fe07002a6c1ca5787df81316dfabbf6"
+  },
+  {
+    "file": "guidelines.html",
+    "url": "https://builderr.ai/guidelines",
+    "retrieved_at": "2026-10-17T14:34:35.275220+00:00",
+    "status": 200,
+    "bytes": 62591,
+    "sha256": "34f944f4c298a7ed96758fd976e15d1687ff737f6ee9f8e543b7d2d23c6fe4d8"
+  },
+  {
+    "file": "basics.html",
+    "url": "https://builderr.ai/start#agent-resources",
+    "retrieved_at": "2026-10-17T14:34:35.737571+00:00",
+    "status": 200,
+    "bytes": 48088,
+    "sha256": "a81914f856d85850e091c88e3f2cab95f545644991841d37c0ca01bffd240dc2"
+  },
+  {
+    "file": "wikidata-access.html",
+    "url": "https://www.wikidata.org/wiki/Wikidata:Data_access",
+    "retrieved_at": "2026-10-17T14:34:36.622815+00:00",
+    "status": 200,
+    "bytes": 143836,
+    "sha256": "032bacf82f1a1b157b44d2ba7b698768691e6a3646e403476724742b99f9bd65"
+  },
+  {
+    "file": "wikidata-service.html",
+    "url": "https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual",
+    "retrieved_at": "2026-10-17T14:34:37.657820+00:00",
+    "status": 200,
+    "bytes": 185598,
+    "sha256": "8946acb5e4babef7bb481e7779aff2289fa4fafe472a787f2ecea524da34b7e9"
+  },
+  {
+    "file": "wikimedia-agent.html",
+    "url": "https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy",
+    "retrieved_at": "2026-10-17T14:34:39.031495+00:00",
+    "status": 200,
+    "bytes": 99932,
+    "sha256": "1d4012916084eba96855d79a03f4d39aa1f4fe3a8f202602dac7c5ba01054537"
+  },
+  {
+    "file": "marginalia.html",
+    "url": "https://about.marginalia-search.com/article/api/",
+    "retrieved_at": "2026-10-17T14:34:39.849960+00:00",
+    "status": 200,
+    "bytes": 23081,
+    "sha256": "442cf37b807973296a8d3bc8af83ab9010f03df969aca29a0d9744b343f5b370"
+  },
+  {
+    "file": "searxng.html",
+    "url": "https://docs.searxng.org/dev/search_api.html",
+    "retrieved_at": "2026-10-17T14:34:40.995198+00:00",
+    "status": 200,
+    "bytes": 46464,
+    "sha256": "b982eff3b80c1acfc8dfd184eb5ce41a0796d8a62ba63e23beedea827267866f"
+  },
+  {
+    "file": "commoncrawl.html",
+    "url": "https://index.commoncrawl.org/",
+    "retrieved_at": "2026-10-17T14:34:41.973813+00:00",
+    "status": 200,
+    "bytes": 7391,
+    "sha256": "7beb65c8ff3f5ed6b0744426593bfae7f2d6640bb8927ef79ac0a07839fe4c8c"
+  },
+  {
+    "file": "commoncrawl-terms.html",
+    "url": "https://commoncrawl.org/terms-of-use",
+    "retrieved_at": "2026-10-17T14:34:42.068031+00:00",
+    "status": 200,
+    "bytes": 47964,
+    "sha256": "cf611940d6e82bbc6a47aae017b72b646fad52c6a673c3a6399d4f9dd4e7e101"
+  },
+  {
+    "file": "gdelt.html",
+    "url": "https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/",
+    "retrieved_at": "2026-10-17T14:34:43.351029+00:00",
+    "status": 200,
+    "bytes": 80455,
+    "sha256": "a50e7de66f1801629af5fb4b37ebf8f85d3fd6a5fb3da363078a3e19d103b334"
+  }
+]

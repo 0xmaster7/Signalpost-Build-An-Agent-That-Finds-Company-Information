@@ -1,0 +1,269 @@
+{
+  "baseline_sha": "5de39259969bf94173ea9470c54996099605bb1b",
+  "production_python_and_UI": "unchanged from baseline",
+  "lock_updates": {
+    "pypdf": [
+      "6.16.1",
+      "6.19.0"
+    ],
+    "urllib3": [
+      "2.7.0",
+      "2.8.0"
+    ]
+  },
+  "dependency_audit": {
+    "service": "OSV via pip-audit 2.9.0",
+    "installed_distributions": 55,
+    "known_advisories_after": 0,
+    "uninstalled_extras_audited": false
+  },
+  "full_suite": {
+    "tests": 484,
+    "subtests": 237,
+    "seconds": 216.85,
+    "warning": "existing pyRdfa UTC deprecation",
+    "log_sha256": "4d3c02256b8deb82d43d5d04a7d1766cedcd928dee035e68595262a44f3f87c8"
+  },
+  "independent_process_acceptance": {
+    "measurement_kind": "independent_process_json_http_acceptance",
+    "source_sha": "5de39259969bf94173ea9470c54996099605bb1b",
+    "dirty": true,
+    "official_schema_available": false,
+    "network_acquisition": false,
+    "real_data_sha256": "57469ab6f88547812aef9ce9a357221e2a6c2c8edf6dd1e95643095fa9061602",
+    "cases": {
+      "single": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "6103083b74ee7dddf26f3bd82bacd65b7e82521738bfab0b52762c52015233b6"
+      },
+      "array": {
+        "status": "PASS",
+        "rows": 3,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "5b48169e4087aec29be0ef9130c7fc64538ef5ef87c8173110e09d041280f3d7"
+      },
+      "starter_wrapper": {
+        "status": "PASS",
+        "rows": 2,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "bbc7e2c95e36c0dab4bff85a71315140d14525c4ccfbefde6b432ccd4feea519"
+      },
+      "csv": {
+        "status": "PASS",
+        "rows": 2,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "0ed25b13ae52b84b381a0cba1e0e8f437484a16b1de9b00a81fddb2a8143408b"
+      },
+      "malformed": {
+        "status": "PASS",
+        "rows": 4,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "failed",
+          "failed",
+          "failed"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "b1a287b01ecfe279fbc1ee8dcfb5dbbf08316183645a2ed0f93238e40735f0a2"
+      },
+      "resume": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "b200b81c5d89407af072d65cb87ba329f1f7be6786dfed4eafc2249bb4ee35b1"
+      },
+      "baseline": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "aeeba244bf14fea80303f2473daa1d6682bec20c8034df5fede87ba6f5c7d734"
+      },
+      "changed": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "017fdac66aba9d94b132e23282b4442c4ca1b418b3e8c36433d930bdc562c777"
+      },
+      "repeated": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "784d7d8f1085970923707e9b8688ca887304aaf5a81522a14632cc0179ca0b10"
+      },
+      "growing_batch": {
+        "status": "PASS",
+        "rows": 3,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "359ed138262e4bc9bff56a49a9fe832418d9ae55c02178122e5ff61b58b05d60"
+      },
+      "subset_batch": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "e78279bdf7c2faa28ca1f7644a1e97e3f623419570cefb4ef15a46d14abc514f"
+      },
+      "missing_input": {
+        "status": "PASS",
+        "exit_code": 2
+      },
+      "http_real_records": {
+        "status": "PASS",
+        "number_search": "PASS",
+        "verify_supported_contradicted": "PASS",
+        "source_url_and_hash": "PASS",
+        "unknown_history": "PASS"
+      },
+      "mixed_invalid_input_dashboard": {
+        "status": "PASS",
+        "invalid_rows_visible": 2
+      },
+      "controlled_source_failures": {
+        "not_found": {
+          "status": "PASS",
+          "terminal_state": "not_available",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 0
+        },
+        "refused": {
+          "status": "PASS",
+          "terminal_state": "blocked",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 0
+        },
+        "timeout": {
+          "status": "PASS",
+          "terminal_state": "failed",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 0
+        },
+        "partial": {
+          "status": "PASS",
+          "terminal_state": "available",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 5
+        }
+      }
+    },
+    "passed": true
+  },
+  "documentation_local_links": "PASS",
+  "browser": {
+    "real_saved_companies": 4,
+    "workflows": [
+      "Find Equinor",
+      "Profile",
+      "legal form citation",
+      "Compare Equinor and NRK",
+      "Verify supported",
+      "Verify contradicted",
+      "Changes empty",
+      "Changes invalid company"
+    ],
+    "responsive_Find_and_Profile": [
+      {
+        "width": 1440,
+        "scroll_width": 1440
+      },
+      {
+        "width": 1280,
+        "scroll_width": 1280
+      },
+      {
+        "width": 768,
+        "scroll_width": 768
+      },
+      {
+        "width": 375,
+        "scroll_width": 375
+      }
+    ],
+    "mobile_compare": {
+      "width": 375,
+      "scroll_width": 375,
+      "table_scroll_affordance": true
+    },
+    "design_changes": false
+  },
+  "historical_evidence_seal": {
+    "files": 32,
+    "unchanged": true
+  },
+  "live": {
+    "companies": 3,
+    "physical_attempts": 15,
+    "hard_cap": 60,
+    "phase_closed": true,
+    "unsupported_or_wrong_company_confirmed": 0,
+    "new_external_coverage": 0
+  },
+  "fresh_exact_SHA_install": "recorded after final commit in owner handoff; not preclaimed",
+  "exact_SHA_CI": "recorded after push in owner handoff; not preclaimed"
+}

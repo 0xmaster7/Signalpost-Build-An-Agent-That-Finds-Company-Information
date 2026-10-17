@@ -1,6 +1,8 @@
 # Signalpost submission and demonstration guide
 
-Status: prepared for owner review; external submission HOLD. No email, Builderr submission, revision slot, visibility change, new provider, or paid service was used.
+Status: prepared for owner review; external submission HOLD. No email, Builderr submission, revision slot, visibility change or paid service was used. No new provider is enabled in the release.
+
+Latest verification: [final coverage and submission acceptance](../docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md). A separately approved three-company / 60-attempt discovery experiment consumed 15 attempts and produced no additional external coverage; its robots-blocked adapter was rejected. Security lock updates are pypdf 6.19.0 and urllib3 2.8.0. The accepted UI and production Python remain unchanged.
 
 ## Version and access
 
@@ -16,7 +18,7 @@ Latest approved coverage implementation and offline evidence: [maximum verified 
 
 **Important:** GitHub's default branch is the older `codex/m00-contract-audit`. Select `codex/m12-final-sol-remediation` and pin the exact final package SHA; the bare repository homepage is not the frozen submission version.
 
-The repository is PRIVATE. The authenticated collaborator listing contained only the owner `0xmaster7`; organizer access is not verified. The owner must approve and arrange appropriate reviewer access, then verify cloning the exact SHA with organizer credentials. Do not assume that sharing this URL grants access. Repository visibility must not change without owner approval. The project has no declared repository code licence; third-party/data notices do not grant a licence for the project's own code.
+The repository is PRIVATE. The authenticated collaborator listing contained only the owner `0xmaster7`; organizer access is not verified. The challenge asks for a public artifact. The owner must authorize publication or obtain explicit organizer acceptance of private read-only access, then verify cloning the exact SHA with organizer credentials. Private access alone is not assumed to satisfy the challenge wording. Do not assume that sharing this URL grants access. Repository visibility must not change without owner approval. The project has no declared repository code licence; third-party/data notices do not grant a licence for the project's own code.
 
 ## Fresh setup (Linux/macOS, Python 3.12+)
 
