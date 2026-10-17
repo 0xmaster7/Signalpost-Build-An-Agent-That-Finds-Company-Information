@@ -10,6 +10,8 @@ Branch: `codex/m12-final-sol-remediation`.
 
 Accepted UI design checkpoint: `64f69071b241614a1826c342ef65020db7a125d4`. The historical dry run was documentation/evidence only; subsequent narrowly scoped live-acceptance corrections are recorded in the [live research report](../docs/release/LIVE_RESEARCH_QUALITY_2026-10-17.md). Its frozen baseline was `f73dcfc01cff6e75888ede7351b6338da2e392d9`. Resolve the exact package commit with `git rev-parse HEAD`; the final owner handoff names that immutable SHA and its exact-SHA CI. Do not submit a moving branch, an older implementation checkpoint, or a private VM receipt as the package identifier.
 
+Latest approved coverage implementation and offline evidence: [maximum verified coverage remediation](../docs/release/MAXIMUM_VERIFIED_COVERAGE_2026-10-17.md). This adds exact-source registered business statements and bounded retrieval fixes; the historical live results are not relabeled as a new live run. The UI design remains frozen.
+
 **Current package:** [submission dry-run report](DRY_RUN.md), [artifact index](ARTIFACTS.md), [historical 100-company report index](HISTORICAL_100_COMPANY_SMOKE.md), and [unsent submission draft](DRAFT_SUBMISSION.md). Everything required to read the report and reproduce the offline checks is tracked in this repository. Raw historical live output is not bundled or claimed available.
 
 **Important:** GitHub's default branch is the older `codex/m00-contract-audit`. Select `codex/m12-final-sol-remediation` and pin the exact final package SHA; the bare repository homepage is not the frozen submission version.

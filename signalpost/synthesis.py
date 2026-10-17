@@ -101,7 +101,12 @@ def _value_text(value: Any) -> str:
 
 
 def _sentence(claim: Any) -> str:
-    text = f"{claim.field}: {_value_text(claim.value)}"
+    registered_labels = {"registered_business_activity": "Registered business activity",
+                         "registered_purpose": "Registered purpose"}
+    if claim.field in registered_labels and isinstance(claim.value, list) and all(isinstance(line, str) for line in claim.value):
+        text = registered_labels[claim.field] + ": " + " ".join(line.strip() for line in claim.value if line.strip())
+    else:
+        text = f"{claim.field}: {_value_text(claim.value)}"
     dimensions = []
     if claim.period_start or claim.period_end:
         dimensions.append("period " + " – ".join(

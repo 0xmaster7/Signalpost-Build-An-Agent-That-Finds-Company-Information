@@ -62,9 +62,9 @@ NEGATIVE_PATHS = ("privacy", "personvern", "cookie", "terms", "vilkar", "login",
 POSITIVE_PATHS = {
     "legal": ("legal", "imprint", "company-information", "bedriftsinformasjon", "organisasjonsnummer", "orgnr"),
     "about": ("about", "om-oss", "om_oss", "company", "bedriften", "who-we-are"),
-    "contact": ("contact", "kontakt", "contact-us"),
-    "careers": ("career", "careers", "jobb", "ledige-stillinger", "stillinger", "work-with-us"),
-    "news": ("news", "nyheter", "press", "aktuelt", "blog", "rss", "feed"),
+    "contact": ("contact", "kontakt", "contact-us", "kontaktinformasjon"),
+    "careers": ("career", "careers", "jobb", "jobbe", "ledige-stillinger", "stillinger", "work-with-us"),
+    "news": ("news", "nyheter", "press", "presserom", "pressrom", "aktuelt", "blog", "rss", "feed"),
     "products": ("product", "products", "services", "tjenester", "produkter", "what-we-do"),
     "locations": ("locations", "avdelinger", "lokasjoner", "contact", "besoksadresse"),
 }
@@ -1216,10 +1216,14 @@ def verify_site_pages(profile: dict[str, Any], pages: list[PageRecord], *, share
 
 
 def _kind(url: str, text: str = "") -> str:
-    value = (urllib.parse.urlsplit(url).path + " " + text).casefold()
-    for kind, tokens in POSITIVE_PATHS.items():
-        if any(token in value for token in tokens):
-            return kind
+    # A specific child route takes precedence over generic parents such as
+    # /om-oss. Match token boundaries: "press" must not classify "depression".
+    path = urllib.parse.unquote(urllib.parse.urlsplit(url).path).casefold()
+    for value in [*reversed(path.split("/")), text.casefold()]:
+        for kind, tokens in POSITIVE_PATHS.items():
+            if any(re.search(r"(?<!\w)" + re.escape(token) + r"(?!\w)",
+                             value.replace("_", "-")) for token in tokens):
+                return kind
     return "other"
 
 
@@ -1228,7 +1232,7 @@ def _link_rank(item: dict[str, str]) -> tuple[int, int, str]:
     if any(token in path for token in NEGATIVE_PATHS):
         return (9, 9, item["url"])
     kind = _kind(item["url"], item.get("text", ""))
-    rank = {"legal": 0, "about": 1, "contact": 2, "locations": 3, "careers": 4,
+    rank = {"legal": 0, "contact": 1, "about": 2, "locations": 3, "careers": 4,
             "news": 5, "products": 6, "other": 8}.get(kind, 8)
     return rank, 0, item["url"]
 
@@ -1281,6 +1285,16 @@ def _profile_links(page: PageRecord, target_org: str | None = None) -> list[dict
             if platform:
                 found[(platform, url)] = {"platform": platform, "url": url}
     return sorted(found.values(), key=lambda item: (item["platform"], item["url"]))
+
+
+def _profile_locator(page: PageRecord, profile_url: str, org: str) -> str:
+    for node in page.schema_organizations:
+        ids = (_identifier_values(node.get("identifier")) + _identifier_values(node.get("taxID"))
+               + _identifier_values(node.get("vatID")))
+        values = node.get("sameAs")
+        if org in ids and profile_url in (values if isinstance(values, list) else [values]):
+            return "/structured_data/Organization/sameAs"
+    return "/html/body//a[@href]"
 
 
 def _page_key(page: PageRecord) -> str:
@@ -1352,8 +1366,19 @@ def _parse_sitemap(body: bytes) -> tuple[list[str], list[str]]:
     return urls, indexes
 
 
+def _feed_document(body: bytes) -> bool:
+    try:
+        root = ET.fromstring(body[:MAX_PAGE_BYTES])
+    except (ET.ParseError, ValueError):
+        return False
+    return root.tag in {"rss", "feed", "{http://www.w3.org/2005/Atom}feed",
+                        "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}RDF"}
+
+
 def _parse_feed(body: bytes) -> list[dict[str, str]]:
     """Parse bounded RSS/Atom entries retaining only explicit source fields."""
+    if not _feed_document(body):
+        return []
     try:
         root = ET.fromstring(body[:MAX_PAGE_BYTES])
     except (ET.ParseError, ValueError):
@@ -1407,12 +1432,24 @@ def _contains_direct_contact_or_identifier(value: str) -> bool:
     return bool(re.search(r"(?i)\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|(?<!\d)(?:\+47\s?)?\d{8}(?!\d)|(?<!\d)\d{11}(?!\d)", value))
 
 
+def _schema_types(value: Any) -> set[str]:
+    values = value if isinstance(value, list) else [value]
+    result = set()
+    for kind in values:
+        if not isinstance(kind, str):
+            continue
+        if kind.startswith(("https://schema.org/", "http://schema.org/")):
+            kind = kind.rsplit("/", 1)[-1]
+        elif ":" in kind or "/" in kind:
+            continue
+        result.add(kind.casefold())
+    return result
+
+
 def _schema_nodes(value: Any) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     if isinstance(value, dict):
-        kind = value.get("@type")
-        kinds = [kind] if isinstance(kind, str) else (kind if isinstance(kind, list) else [])
-        if any(str(item).casefold() in {"jobposting", "newsarticle", "article", "blogposting"} for item in kinds):
+        if _schema_types(value.get("@type")) & {"jobposting", "newsarticle", "article", "blogposting"}:
             found.append(value)
         for child in value.values():
             found.extend(_schema_nodes(child))
@@ -1420,6 +1457,44 @@ def _schema_nodes(value: Any) -> list[dict[str, Any]]:
         for child in value:
             found.extend(_schema_nodes(child))
     return found
+
+
+def _footprint_schema_nodes(structured: Any) -> list[dict[str, Any]]:
+    """Resolve exact local graph references only; never fetch contexts or IDs.
+
+    Conflicting definitions are deliberately unresolved. This adapter applies
+    only to job/activity extraction after ownership has already been verified.
+    """
+    jsonld = structured.get("json-ld", []) if isinstance(structured, dict) else []
+    roots = jsonld if isinstance(jsonld, list) else [jsonld]
+    definitions: dict[str, dict[str, Any]] = {}
+    conflicts: set[str] = set()
+    for root in roots:
+        if not isinstance(root, dict):
+            continue
+        for node in root.get("@graph", []) if isinstance(root.get("@graph"), list) else [root]:
+            if not isinstance(node, dict) or not isinstance(node.get("@id"), str) or len(node) < 2:
+                continue
+            key = node["@id"]
+            if key in definitions and definitions[key] != node:
+                conflicts.add(key)
+            definitions[key] = node
+
+    def resolve(value: Any, visited: frozenset[str] = frozenset(), depth: int = 0) -> Any:
+        if depth >= 12:
+            return value
+        if isinstance(value, list):
+            return [resolve(item, visited, depth + 1) for item in value]
+        if not isinstance(value, dict):
+            return value
+        if set(value) == {"@id"} and isinstance(value["@id"], str):
+            key = value["@id"]
+            if key not in conflicts and key in definitions and key not in visited:
+                return resolve(definitions[key], visited | {key}, depth + 1)
+            return value
+        return {key: resolve(item, visited, depth + 1) for key, item in value.items()}
+
+    return [resolve(node) for node in _schema_nodes(structured)]
 
 
 def _schema_text(value: Any) -> str | None:
@@ -1468,7 +1543,7 @@ def _article_subject_matches(node: dict[str, Any], title: str, org: str,
                            + _identifier_values(row.get("taxID")))
             name = _schema_text(row.get("legalName") or row.get("name"))
             if identifiers:
-                if org in identifiers and (not name or _employer_matches({"identifier": org, "name": name}, org, verified_names)):
+                if all(identifier == org for identifier in identifiers) and (not name or _employer_matches({"identifier": org, "name": name}, org, verified_names)):
                     target_found = True
                 else:
                     # A second identified organisation makes the article multi-entity.
@@ -1543,9 +1618,8 @@ def _page_footprints(page: PageRecord, *, org: str, legal_name: str, verified_na
     activities: list[dict[str, Any]] = []
     counts = {"job_candidates": 0, "job_identity_rejected": 0, "job_future": 0, "activity_candidates": 0,
               "activity_undated": 0, "activity_future": 0, "activity_outside_window": 0}
-    for node in _schema_nodes(page.structured):
-        kinds = node.get("@type")
-        kinds = [kinds] if isinstance(kinds, str) else (kinds or [])
+    for node in _footprint_schema_nodes(page.structured):
+        kinds = _schema_types(node.get("@type"))
         if any(str(kind).casefold() == "jobposting" for kind in kinds):
             counts["job_candidates"] += 1
             employer = node.get("hiringOrganization")
@@ -1770,8 +1844,10 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             source = item.get("source", "registry_frozen") if isinstance(item, dict) else "registry_frozen"
             source_ref = item if isinstance(item, dict) else {"raw": raw, "source": source}
             for sanitized in sanitize_registry_websites(raw):
-                candidates.append({**sanitized, "source": source, "source_ref": source_ref,
-                    "discovery": source_ref.get("discovery") if isinstance(source_ref, dict) else None})
+                candidate = {**sanitized, "source": source, "source_ref": source_ref,
+                    "discovery": source_ref.get("discovery") if isinstance(source_ref, dict) else None}
+                if candidate not in candidates:
+                    candidates.append(candidate)
         if not any(item["kind"] == "website" for item in candidates) and enable_keyless:
             guessed = keyless_no_candidate(str(profile.get("name") or ""))
             if guessed:
@@ -1935,6 +2011,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 if page is None:
                     candidate_row["decision"] = "rejected_non_html_or_oversized"
                     break
+                seen_urls.add(_clean_url(page.final_url) or page.final_url)
                 page.rights_status = rights_status
                 output.audit["page_count"] += 1
                 output.audit["pages"].append({"url": page.final_url, "kind": _kind(page.final_url, page.title), "sha256": page.digest, "bytes": len(page.body)})
@@ -2146,7 +2223,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     if social["url"] in seen_profiles:
                         continue
                     seen_profiles.add(social["url"])
-                    eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator="/html/body//a[@href]")
+                    eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator=_profile_locator(page, social["url"], org))
                     output.claims.append(Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
                         organisation_number=org, section="website_owned_profiles", field_family="owned_profile", subject_id=org,
                         field="company_owned_profile", value=social, state=PublicState.AVAILABLE, scope="legal_entity",
@@ -2196,7 +2273,14 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 if status != 200 or len(body) > 256 * 1024:
                     continue
                 urls, indexes = _parse_sitemap(body)
-                if indexes and level < 1:
+                known_content = {_kind(link["url"], link.get("text", ""))
+                    for page in pages if "nofollow" not in page.directives for link in page.links
+                    if "nofollow" not in link.get("rel", "").casefold().split()
+                    and _internal_url(link["url"], allowed_hosts)}
+                # With direct careers AND news surfaces, reach them before
+                # optional sitemap-index depth. Sitemap-only sites retain the
+                # bounded fallback; sitemap dates never become claim dates.
+                if indexes and level < 1 and not {"careers", "news"} <= known_content:
                     queue.extend((url, level + 1) for url in indexes[:MAX_SITEMAP_INDEXES - sitemap_count])
                 sitemap_urls.extend(urls[:MAX_SITEMAP_URLS - len(sitemap_urls)])
             for item in sitemap_urls:
@@ -2210,6 +2294,9 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     feed_candidates.append(item)
             feed_candidates = list(dict.fromkeys(url for url in feed_candidates if _internal_url(url, allowed_hosts)))[:MAX_FEEDS]
             feed_entries: list[dict[str, str]] = []
+            downloaded_html: dict[str, tuple[int, dict[str, str], bytes, str, str]] = {}
+            fetched_feed_urls: set[str] = set()
+            actual_feed_urls: set[str] = set()
             for feed_url in feed_candidates:
                 if len(feed_entries) >= MAX_SITEMAP_URLS or page_limit >= MAX_ABSOLUTE_PAGES or page_total_bytes >= MAX_SITE_BYTES:
                     break
@@ -2223,7 +2310,15 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 if _normalized_site_host(final_url) != _normalized_site_host(candidate["url"]):
                     output.audit["request_outcomes"]["off_host_feed_redirect"] = output.audit["request_outcomes"].get("off_host_feed_redirect", 0) + 1
                     continue
+                fetched_feed_urls.update({feed_url, final_url})
                 if status == 200 and len(body) <= 256 * 1024:
+                    media_type = next((v for k, v in headers.items() if k.casefold() == "content-type"), "")
+                    if "html" in media_type.casefold():
+                        downloaded_html[feed_url] = (status, headers, body, final_url, outcome)
+                        continue
+                    if not _feed_document(body):
+                        continue
+                    actual_feed_urls.update({feed_url, final_url})
                     parsed_entries = _parse_feed(body)
                     feed_page = PageRecord(requested_url=feed_url, final_url=final_url, status=status,
                         content_type=next((v for k, v in headers.items() if k.casefold() == "content-type"), "application/xml"),
@@ -2231,31 +2326,40 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     feed_observations.append((candidate["url"], feed_page, parsed_entries))
                     feed_entries.extend(row for row in parsed_entries if _same_host_url(row.get("url"), final_url))
             seen_page_urls = {page.final_url for page in pages}
-            candidates_for_pages = sitemap_urls + [row["url"] for row in feed_entries] + [link["url"] for page in pages if "nofollow" not in page.directives
+            candidates_for_pages = list(downloaded_html) + sitemap_urls + [row["url"] for row in feed_entries] + [link["url"] for page in pages if "nofollow" not in page.directives
                 for link in page.links if "nofollow" not in link.get("rel", "").casefold().split() and _internal_url(link["url"], allowed_hosts)]
             ranked: dict[str, tuple[int, int, str]] = {}
             for page_url in candidates_for_pages:
-                if page_url in seen_page_urls or not _internal_url(page_url, allowed_hosts):
+                if (page_url in seen_page_urls or not _internal_url(page_url, allowed_hosts)
+                        or (page_url in actual_feed_urls and page_url not in downloaded_html)):
                     continue
                 rank = _link_rank({"url": page_url, "text": ""})
                 if rank[0] >= 9:
                     continue
+                # Identity is already proven. Reach careers/news/products before
+                # spending the content budget on more legal/about pages.
+                kind = _kind(page_url)
+                content_rank = {"careers": 0, "news": 1, "products": 2}.get(kind, rank[0] + 3)
+                rank = (content_rank, rank[1], rank[2])
                 ranked[page_url] = min(rank, ranked.get(page_url, rank))
-            for page_url, _ in sorted(ranked.items(), key=lambda item: item[1]):
-                if website_page_requests >= MAX_DEFAULT_PAGES or page_limit >= MAX_ABSOLUTE_PAGES or page_total_bytes >= MAX_SITE_BYTES:
-                    break
+            for page_url, _ in sorted(ranked.items(), key=lambda item: (item[0] not in downloaded_html, item[1])):
+                if page_url not in downloaded_html and (website_page_requests >= MAX_DEFAULT_PAGES or page_limit >= MAX_ABSOLUTE_PAGES or page_total_bytes >= MAX_SITE_BYTES):
+                    continue
                 kind = _kind(page_url)
                 if delay is not None and 10 < delay <= 60 and kind not in {"about", "legal", "contact", "locations", "careers", "news"}:
                     continue
-                page_limit += 1
-                output.audit["page_requests"] += 1
-                website_page_requests += 1
-                try:
-                    status, headers, body, final_url, outcome = await _fetch(gateway, page_url, purpose="website_page", allowed_hosts=allowed_hosts,
-                        cap=min(MAX_PAGE_BYTES, MAX_SITE_BYTES - page_total_bytes))
-                except Exception:
-                    continue
-                page_total_bytes += len(body)
+                if page_url in downloaded_html:
+                    status, headers, body, final_url, outcome = downloaded_html[page_url]
+                else:
+                    page_limit += 1
+                    output.audit["page_requests"] += 1
+                    website_page_requests += 1
+                    try:
+                        status, headers, body, final_url, outcome = await _fetch(gateway, page_url, purpose="website_page", allowed_hosts=allowed_hosts,
+                            cap=min(MAX_PAGE_BYTES, MAX_SITE_BYTES - page_total_bytes))
+                    except Exception:
+                        continue
+                    page_total_bytes += len(body)
                 page = _parse_page(page_url, status, headers, body, final_url)
                 if page and _normalized_site_host(page.final_url) != _normalized_site_host(candidate["url"]):
                     output.audit["request_outcomes"]["off_host_website_page_redirect"] = output.audit["request_outcomes"].get("off_host_website_page_redirect", 0) + 1
@@ -2286,7 +2390,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     for social in (_profile_links(page, org) if deep_page_verified else []):
                         if any(claim.field == "company_owned_profile" and claim.value == social for claim in output.claims):
                             continue
-                        social_eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator="/html/body//a[@href]")
+                        social_eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator=_profile_locator(page, social["url"], org))
                         output.claims.append(Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
                             organisation_number=org, section="website_owned_profiles", field_family="owned_profile", subject_id=org,
                             field="company_owned_profile", value=social, state=PublicState.AVAILABLE, scope="legal_entity",
@@ -2294,7 +2398,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                             evidence_ids=[social_eid, proof_evidence], source_snapshot_ids=[f"website:{_page_key(page)}", proof_source]))
                         output.audit["website_claim_families"].append("company_owned_profile")
             # Feed declarations can live on careers/news pages fetched during this pass.
-            observed_feed_urls = {record.final_url for _candidate_url, record, _rows in feed_observations}
+            observed_feed_urls = fetched_feed_urls | {record.final_url for _candidate_url, record, _rows in feed_observations}
             for page in pages:
                 for node in BeautifulSoup(page.body.decode("utf-8", "replace"), "lxml").select('link[rel~="alternate"][href]'):
                     media_type = str(node.get("type") or "").casefold()

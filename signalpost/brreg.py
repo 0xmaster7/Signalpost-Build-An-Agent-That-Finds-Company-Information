@@ -453,6 +453,21 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             add_claim(key, value, "identity_brand", "identity", org, "legal_entity", entity_final, entity_time,
                       entity, pointer, "entity", source_hash=entity_hash,
                       extraction_method="brreg_json_pointer_projection_v1" if key in {"business_address", "postal_address"} else "brreg_json_pointer_v1")
+        # These are registered statements, not observed dated events or an
+        # inferred industry description. Preserve the complete source arrays:
+        # their elements can be line wraps rather than independent activities.
+        for source_field, field in (("aktivitet", "registered_business_activity"),
+                                    ("vedtektsfestetFormaal", "registered_purpose")):
+            value = entity.get(source_field)
+            if (not isinstance(value, list) or not value or
+                    not all(isinstance(line, str) for line in value) or
+                    not any(line.strip() for line in value)):
+                continue
+            text = " ".join(value)
+            if re.search(r"(?i)\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|(?<!\d)(?:\+47\s?)?\d{8}(?!\d)|(?<!\d)\d{11}(?!\d)", text):
+                continue
+            add_claim(field, value, "identity_brand", "business_description", org, "legal_entity",
+                      entity_final, entity_time, entity, "/" + source_field, "entity", source_hash=entity_hash)
         for i, item in enumerate(identity["historical_names"]):
             add_claim("historical_name", item["name"], "identity_brand", "identity_history", org, "legal_entity",
                       entity_final, entity_time, entity, f"/historiskeNavn/{i}/navn", "entity", start=item["from"], end=item["to"], source_hash=entity_hash)

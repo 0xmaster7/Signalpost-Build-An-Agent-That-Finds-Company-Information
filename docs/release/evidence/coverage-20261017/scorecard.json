@@ -1,0 +1,257 @@
+{
+  "starting_sha": "771e01722d3aa6f1d23686e4e9e846445dec1b02",
+  "historical_live_baseline_sha": "f73dcfc01cff6e75888ede7351b6338da2e392d9",
+  "scope": "offline production CLI replay of the same four preserved five-company source pools; production pacing retained; uncaptured URLs fail closed, not invented 404s",
+  "source_corpus": {
+    "response_receipts": 143,
+    "unique_urls": 139,
+    "saved_bytes": 5489952,
+    "accounts_records": 62,
+    "amount_nodes_without_scale": 1465,
+    "roles": 202,
+    "workplaces": 34,
+    "role_and_ENK_source_copies_privacy_redacted": true
+  },
+  "before": {
+    "rows": 20,
+    "external_http_requests": 0,
+    "mock_transport_attempts": 151,
+    "uncaptured_url_attempts": 9,
+    "wall_seconds": 75.0875288079842,
+    "worker_active_p50_seconds": 5.658650284996838,
+    "worker_active_p95_seconds": 12.347050615993794,
+    "cpu_seconds": 13.00521,
+    "peak_rss_kib": 159196,
+    "coverage": {
+      "identity": {
+        "companies": 20,
+        "claims": 340
+      },
+      "identity_history": {
+        "companies": 12,
+        "claims": 27
+      },
+      "financial_record_metadata": {
+        "companies": 18,
+        "claims": 434
+      },
+      "role": {
+        "companies": 20,
+        "claims": 1654
+      },
+      "workplace": {
+        "companies": 19,
+        "claims": 215
+      },
+      "owned_web": {
+        "companies": 1,
+        "claims": 3
+      },
+      "owned_profile": {
+        "companies": 1,
+        "claims": 3
+      }
+    }
+  },
+  "after": {
+    "rows": 20,
+    "external_http_requests": 0,
+    "mock_transport_attempts": 149,
+    "uncaptured_url_attempts": 13,
+    "wall_seconds": 73.89911039899744,
+    "worker_active_p50_seconds": 5.689680651499657,
+    "worker_active_p95_seconds": 9.132733059988823,
+    "cpu_seconds": 12.352529,
+    "peak_rss_kib": 156864,
+    "coverage": {
+      "identity": {
+        "companies": 20,
+        "claims": 340
+      },
+      "business_description": {
+        "companies": 20,
+        "claims": 33
+      },
+      "identity_history": {
+        "companies": 12,
+        "claims": 27
+      },
+      "financial_record_metadata": {
+        "companies": 18,
+        "claims": 434
+      },
+      "role": {
+        "companies": 20,
+        "claims": 1654
+      },
+      "workplace": {
+        "companies": 19,
+        "claims": 215
+      },
+      "owned_web": {
+        "companies": 1,
+        "claims": 6
+      },
+      "owned_profile": {
+        "companies": 1,
+        "claims": 3
+      }
+    }
+  },
+  "after_package_code_hashes": {
+    "signalpost/network.py": "1abe3f2d61aba113350ee49f0d44e8cb53d797dbeffe8748ca808cb6f10d082f",
+    "signalpost/brreg.py": "1947e2fe121d6e8306794dcc268c556f19007185f4c67883ce5ae7f3fb85dc2e",
+    "signalpost/history.py": "f3ac3f586e77e7a70bbdd8dab7cb7987ea3da64fc31809eecd3f04aec7469d23",
+    "signalpost/adapter.py": "b405475c1e1f77041ee7efdda7daee8fd304cca4e82610206159b0a8dd133e0f",
+    "signalpost/models.py": "dc416f06f14527fdb34b4d0fe311eb0a4124b0b9a042387ca2b65fc44f9a53b8",
+    "signalpost/query.py": "5168dba7a6f5465a0fc4161b598411ba3d8d060dfdfbe301dfc3e74ae0f66e7b",
+    "signalpost/run.py": "abfcef7eb032a48402f41bb4004c3374b49540c02362b64a22fa006d5a92d748",
+    "signalpost/identifiers.py": "95424c027d1ede9c8f43bd2bd420f8bd9af753781fceed2b6297294a24fc93fd",
+    "signalpost/operations.py": "1ebe2e88ba4be01228de448d038f9f57b342c2af48195f3bb2fdd2604af96918",
+    "signalpost/inputs.py": "7159a46592a88065a756ce61554de8c75831fd609703a58fe7db3131dab90f02",
+    "signalpost/discovery.py": "15e8fdec1e30c18363218b9d34ea84bcacec0874b05718edf7b6ea2fd4572ef1",
+    "signalpost/websites.py": "c33e7c625b0d155b0a0dbbd39e12cf19353d3ab43c5b0b1abda58cf448799dd4",
+    "signalpost/__init__.py": "b5a8b95ade910d93341bd62c315dd04d390d1037602ae2fd7dfb1a33326a26ad",
+    "signalpost/synthesis.py": "96cb83d28061682644218f66f20ad0f6df0ea41da8ff7f69607878b0a371186c",
+    "signalpost/web.py": "0940a38af7b5382d5d2aba10f14c82ca22f1ce6ef7dad14ae86548d83b2b92a7",
+    "signalpost/web_ui.py": "fadcd7c8dda0327a4a02e60d2f7df4318dc9c10b63279632f16625a47299034a"
+  },
+  "protected_files_unchanged": {
+    "adapter.py": "b405475c1e1f77041ee7efdda7daee8fd304cca4e82610206159b0a8dd133e0f",
+    "models.py": "dc416f06f14527fdb34b4d0fe311eb0a4124b0b9a042387ca2b65fc44f9a53b8",
+    "web.py": "0940a38af7b5382d5d2aba10f14c82ca22f1ce6ef7dad14ae86548d83b2b92a7",
+    "web_ui.py": "fadcd7c8dda0327a4a02e60d2f7df4318dc9c10b63279632f16625a47299034a"
+  },
+  "controlled_before": {
+    "label": "controlled-before",
+    "synthetic_controlled_sources": true,
+    "external_HTTP": 0,
+    "cases": [
+      {
+        "case": "breadth_four_requests",
+        "requests": [
+          "https://company.no/",
+          "https://company.no/sitemap.xml",
+          "https://company.no/child.xml",
+          "https://company.no/about/0"
+        ],
+        "transport_attempts": 4,
+        "fields": [
+          "verified_website_domain",
+          "verified_website_url"
+        ],
+        "facts": 2,
+        "fixture_cpu_wall_seconds": 0.21781997999642044
+      },
+      {
+        "case": "downloaded_html_three_requests",
+        "requests": [
+          "https://company.no/",
+          "https://company.no/sitemap.xml",
+          "https://company.no/careers"
+        ],
+        "transport_attempts": 3,
+        "fields": [
+          "verified_website_domain",
+          "verified_website_url"
+        ],
+        "facts": 2,
+        "fixture_cpu_wall_seconds": 0.009891931011225097
+      },
+      {
+        "case": "contact_two_requests",
+        "requests": [
+          "https://company.no/",
+          "https://company.no/about/0"
+        ],
+        "transport_attempts": 2,
+        "fields": [],
+        "facts": 0,
+        "fixture_cpu_wall_seconds": 0.012112904994864948
+      }
+    ],
+    "namespace_local_reference_job_subjects": 0,
+    "namespace_local_reference_activity_subjects": 0,
+    "peak_rss_kib": 102868
+  },
+  "controlled_after": {
+    "label": "controlled-after",
+    "synthetic_controlled_sources": true,
+    "external_HTTP": 0,
+    "cases": [
+      {
+        "case": "breadth_four_requests",
+        "requests": [
+          "https://company.no/",
+          "https://company.no/sitemap.xml",
+          "https://company.no/careers",
+          "https://company.no/news"
+        ],
+        "transport_attempts": 4,
+        "fields": [
+          "activity_headline",
+          "activity_source_url",
+          "activity_type",
+          "application_deadline",
+          "canonical_job_url",
+          "job_status",
+          "job_title",
+          "posting_date",
+          "source_published_at",
+          "verified_website_domain",
+          "verified_website_url"
+        ],
+        "facts": 11,
+        "fixture_cpu_wall_seconds": 0.17533570200612303
+      },
+      {
+        "case": "downloaded_html_three_requests",
+        "requests": [
+          "https://company.no/",
+          "https://company.no/sitemap.xml",
+          "https://company.no/careers"
+        ],
+        "transport_attempts": 3,
+        "fields": [
+          "activity_headline",
+          "activity_source_url",
+          "activity_type",
+          "application_deadline",
+          "canonical_job_url",
+          "job_status",
+          "job_title",
+          "posting_date",
+          "source_published_at",
+          "verified_website_domain",
+          "verified_website_url"
+        ],
+        "facts": 11,
+        "fixture_cpu_wall_seconds": 0.018431101998430677
+      },
+      {
+        "case": "contact_two_requests",
+        "requests": [
+          "https://company.no/",
+          "https://company.no/contact"
+        ],
+        "transport_attempts": 2,
+        "fields": [
+          "verified_website_domain",
+          "verified_website_url"
+        ],
+        "facts": 2,
+        "fixture_cpu_wall_seconds": 0.05171993200201541
+      }
+    ],
+    "namespace_local_reference_job_subjects": 1,
+    "namespace_local_reference_activity_subjects": 1,
+    "peak_rss_kib": 103144
+  },
+  "limitations": [
+    "No new live company-data HTTP requests. The historical 193/200 authorization is closed.",
+    "Synthetic controlled scenarios are not real-company results or competition recall.",
+    "The replay is incomplete where a URL was never captured; its failures and timings are not live-source availability evidence.",
+    "Registered activity is a registered business statement, not dated public activity.",
+    "No authoritative financial scale contract was found."
+  ]
+}

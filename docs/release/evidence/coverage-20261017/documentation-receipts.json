@@ -1,0 +1,58 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/brreg/regnskapsregister-api/main/src/main/java/no/brreg/regnskap/mapper/RegnskapFieldsMapper.java",
+    "retrieved_at": "2026-10-17T13:10:54.720644+00:00",
+    "sha256": "e8996ec6126aac253fba1f335812fbb3e76c4be1453e88724558832e39c28ef1",
+    "bytes": 18676
+  },
+  {
+    "url": "https://raw.githubusercontent.com/brreg/regnskapsregister-api/main/src/main/java/no/brreg/regnskap/service/RegnskapService.java",
+    "retrieved_at": "2026-10-17T13:10:55.980341+00:00",
+    "sha256": "6de83ca2134426dd908761a0f3eb3d17cab6f4beadd2f895d2bdc9ab7e4116da",
+    "bytes": 975
+  },
+  {
+    "url": "https://raw.githubusercontent.com/brreg/regnskapsregister-api/main/src/main/java/no/brreg/regnskap/RegnskapUtil.java",
+    "retrieved_at": "2026-10-17T13:10:55.033853+00:00",
+    "sha256": "668a25f428d8475de3d2795a0629ddfb5166dd2d41a522873c555b22c125c586",
+    "bytes": 433
+  },
+  {
+    "url": "https://raw.githubusercontent.com/brreg/regnskapsregister-api/main/src/main/java/no/brreg/regnskap/model/RegnskapXmlHead.java",
+    "retrieved_at": "2026-10-17T13:10:55.341678+00:00",
+    "sha256": "137a2d86734163b9e67ae001eee239607ffe0e1d61af77d87ac1ea0bee2238b8",
+    "bytes": 7368
+  },
+  {
+    "url": "https://raw.githubusercontent.com/brreg/regnskapsregister-api/main/src/main/java/no/brreg/regnskap/model/RegnskapXmlPost.java",
+    "retrieved_at": "2026-10-17T13:10:55.660443+00:00",
+    "sha256": "0d10f94e6a07eb0e07aeca8a0ce3705ee71b4b0999720a3ff3f264e2ba65cfc4",
+    "bytes": 1376
+  },
+  {
+    "url": "https://data.brreg.no/regnskapsregisteret/regnskap/v3/api-docs",
+    "retrieved_at": "2026-10-17T13:08:56.783746+00:00",
+    "sha256": "c6b99a196249d22b494a26341a9b7f84d15388ebbb989bce63dcbcb55c59dac5",
+    "bytes": 14666,
+    "purpose": "official documentation only; no company-data acquisition"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/brreg/regnskapsregister-api/main/README.md",
+    "retrieved_at": "2026-10-17T13:08:57.113588+00:00",
+    "sha256": "39f96d8bc066f3103ebd59d261e5b03c069fd458d3fef5dffb98308ed499e974",
+    "bytes": 504,
+    "purpose": "official documentation only; no company-data acquisition"
+  },
+  {
+    "url": "https://data.brreg.no/enhetsregisteret/api/dokumentasjon/no/index.html",
+    "sha256": "a7806ef1bc286a74830f41f9a5b7807ce07db26b7c812497f15505456f58f910",
+    "bytes": 1192440,
+    "retrieved_at": "2026-10-17T13:18:13.792835+00:00"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/brreg/regnskapsregister-api/main/src/main/resources/specification/regnskapsregister.yaml",
+    "retrieved_at": "2026-10-17T13:10:56.276102+00:00",
+    "sha256": "25e8160817fa67b8b9776c228a65396870bc9b1afa81968b77c39e60e8183c9f",
+    "bytes": 16573
+  }
+]

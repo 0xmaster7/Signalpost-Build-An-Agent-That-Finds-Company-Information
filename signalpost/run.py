@@ -21,7 +21,7 @@ from .models import (Claim, Envelope, Evidence, PublicState, RefreshState, RunEr
                      empty_section, validate_batch_publication_graph)
 from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
                          OrderedAtomicWriter, RunBudget, publish_paired_artifacts)
-from .network import NetworkGateway, StructuredLogger, registered_domain
+from .network import NetworkGateway, StructuredLogger, registered_domain, request_company_scope
 from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company
 from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, artifact_ref, canonical_json,
                       compare_states, company_state, merge_prior_facts, validate_artifact, sha256_json)
@@ -596,9 +596,10 @@ def run(args: argparse.Namespace) -> int:
                 scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
                 async def website(item: Opportunity, phase: str, previous: WebsiteResearchResult | None = None):
                     try:
-                        return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
-                            enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
-                            phase=phase, previous=previous, rights_decisions=website_rights_decisions)
+                        with request_company_scope(item.company):
+                            return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
+                                enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
+                                phase=phase, previous=previous, rights_decisions=website_rights_decisions)
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:

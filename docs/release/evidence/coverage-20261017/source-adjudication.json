@@ -1,0 +1,409 @@
+{
+  "external_HTTP": 0,
+  "validated_rows": 20,
+  "publication_graph_adapter_roundtrip": "PASS",
+  "new_registered_claims": {
+    "registered_business_activity": 20,
+    "registered_purpose": 13
+  },
+  "new_claims_independently_source_matched": 33,
+  "preexisting_unique_claim_values_preserved": 1705,
+  "preexisting_available_claim_values_preserved": 2676,
+  "new_available_claims": 36,
+  "numeric_financial_claims": 0,
+  "sealed_historical_files_unchanged": 32,
+  "checks": [
+    {
+      "company": "932374099",
+      "field": "registered_business_activity",
+      "value": [
+        "Utleie av fast eiendom.",
+        "Investering i aksjer og verdipapirer."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/932374099",
+      "json_pointer": "/aktivitet",
+      "sha256": "28b963687740fbce7979b548cc634b122d7abd69b82ade704664a92aaac709ef"
+    },
+    {
+      "company": "932374099",
+      "field": "registered_purpose",
+      "value": [
+        "Kjøp, salg, utvikling, samt utleie av eiendom, herunder deltakelse i",
+        "slik virksomhet, samt investering i andre selskaper forøvrig."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/932374099",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "28b963687740fbce7979b548cc634b122d7abd69b82ade704664a92aaac709ef"
+    },
+    {
+      "company": "912427730",
+      "field": "registered_business_activity",
+      "value": [
+        "Egen avvirkning samt kjøp og salg av tømmer.",
+        "Foredling - og salg av trelast.",
+        "Salg av vanlige byggevarer (Byggshop)."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/912427730",
+      "json_pointer": "/aktivitet",
+      "sha256": "848b546a7068eb030672e5759d183cdb0467550e912ae8797324c91aea6eacb1"
+    },
+    {
+      "company": "912427730",
+      "field": "registered_purpose",
+      "value": [
+        "Egen avvirkning samt kjøp og salg av tømmer.",
+        "Foredling - og salg av trelast.",
+        "Salg av vanlige byggevarer (Byggshop)."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/912427730",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "848b546a7068eb030672e5759d183cdb0467550e912ae8797324c91aea6eacb1"
+    },
+    {
+      "company": "984073216",
+      "field": "registered_business_activity",
+      "value": [
+        "Barnehage."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/984073216",
+      "json_pointer": "/aktivitet",
+      "sha256": "81555cffc80e43999b6a8b2e81f5553f4133597b1b2f87c1f1333c345a4d07bf"
+    },
+    {
+      "company": "984073216",
+      "field": "registered_purpose",
+      "value": [
+        "Å eie og drive barnehage til det beste for medlemmene og deres barn.",
+        "Foretaket skal fremme medlemmenes økonomiske interesser gjennom deres",
+        "deltakelse i virksomheten som kjøpere av barnehagetjenester fra",
+        "foretaket. Formålet er ikke kapitalavkastning til medlemmene.",
+        "Eventuelt årsoverskudd skal godskrives egenkapitalen i foretaket."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/984073216",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "81555cffc80e43999b6a8b2e81f5553f4133597b1b2f87c1f1333c345a4d07bf"
+    },
+    {
+      "company": "970107592",
+      "field": "registered_business_activity",
+      "value": [
+        "Stiftelsens formål er gjennom behandling, forebygging, sjelesorg,",
+        "forskning og fagutvikling å fremme psykisk helse og livskvalitet."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/970107592",
+      "json_pointer": "/aktivitet",
+      "sha256": "bcefd534dd6c82d76914ba34dc8810fa6bf744c1c8a37be02ba6d86531daad34"
+    },
+    {
+      "company": "981299876",
+      "field": "registered_business_activity",
+      "value": [
+        "Borettslag."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/981299876",
+      "json_pointer": "/aktivitet",
+      "sha256": "853e23b11f445a14d56086742f06997adaa0efe7ad6bfd646803fbe91045d6a0"
+    },
+    {
+      "company": "981299876",
+      "field": "registered_purpose",
+      "value": [
+        "Borettslag."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/981299876",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "853e23b11f445a14d56086742f06997adaa0efe7ad6bfd646803fbe91045d6a0"
+    },
+    {
+      "company": "944844139",
+      "field": "registered_business_activity",
+      "value": [
+        "Handel med morgenmadsprodukter."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/944844139",
+      "json_pointer": "/aktivitet",
+      "sha256": "9b68aab5ce68bf1b46d6fc288e873dadfe372e1aa048f34c02db15540fab7708"
+    },
+    {
+      "company": "959704996",
+      "field": "registered_business_activity",
+      "value": [
+        "Advokatvirksomhet samt hertil naturlig liggende virksomheter."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/959704996",
+      "json_pointer": "/aktivitet",
+      "sha256": "a2fe998b1b4485d45b9c4177530e72a5e05ebdd863e45c87da67df4cb02f6b2f"
+    },
+    {
+      "company": "959704996",
+      "field": "registered_purpose",
+      "value": [
+        "Advokatvirksomhet samt enhver annen virksomhet som naturlig står i",
+        "forbindelse med dette."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/959704996",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "a2fe998b1b4485d45b9c4177530e72a5e05ebdd863e45c87da67df4cb02f6b2f"
+    },
+    {
+      "company": "882811972",
+      "field": "registered_business_activity",
+      "value": [
+        "Rederivirksomhet og alt som står i forbindelse med dette, herunder å",
+        "eie aksjer og andeler i selskap som driver tilsvarende eller beslektet",
+        "virksomhet."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/882811972",
+      "json_pointer": "/aktivitet",
+      "sha256": "7040756bb4b4b33b43f66aa6d7a13b2269f56cf96182925ac5008d096c638bd5"
+    },
+    {
+      "company": "882811972",
+      "field": "registered_purpose",
+      "value": [
+        "Rederivirksomhet og alt som står i forbindelse med dette, herunder å",
+        "eie aksjer og andeler i selskap som driver tilsvarende eller beslektet",
+        "virksomhet."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/882811972",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "7040756bb4b4b33b43f66aa6d7a13b2269f56cf96182925ac5008d096c638bd5"
+    },
+    {
+      "company": "916876718",
+      "field": "registered_business_activity",
+      "value": [
+        "Aksjefond."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/916876718",
+      "json_pointer": "/aktivitet",
+      "sha256": "88dd6fe278dcab4e6e2d40649ee836fb5ce01bdb0d32001465bda89c0f9dcf49"
+    },
+    {
+      "company": "955007514",
+      "field": "registered_business_activity",
+      "value": [
+        "Utbygging av kraftanlegg og produksjon av",
+        "elektrisk kraft i Øvre Otra."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/955007514",
+      "json_pointer": "/aktivitet",
+      "sha256": "fe74c467f35379370266651cdb18db10cbc744fd7f6761928e912dce93664b2a"
+    },
+    {
+      "company": "955007514",
+      "field": "registered_purpose",
+      "value": [
+        "Utbygging, produksjon, transport og avhendelse av elektrisk kraft og",
+        "hva dertil naturlig hører inn under disse oppgaver."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/955007514",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "fe74c467f35379370266651cdb18db10cbc744fd7f6761928e912dce93664b2a"
+    },
+    {
+      "company": "984068085",
+      "field": "registered_business_activity",
+      "value": [
+        "Avfallsbehandling."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/984068085",
+      "json_pointer": "/aktivitet",
+      "sha256": "8ecb0d92046da5c15addc874c9dfdc85260a0c296c7727d73abe5591ceff084c"
+    },
+    {
+      "company": "984068085",
+      "field": "registered_purpose",
+      "value": [
+        "1. Å eige, bygge og drive behandlingsanlegg for avfall og slam,",
+        "herunder transport av avfall og slamtil forbrenning/deponering.",
+        "2. Å drive med innsamling, sortering og transport av avfall og slam.",
+        "Selskapet har høve til å konkurrere om innsamling og mottak av",
+        "næringsavfall.3. Å anlegge og drive fyllplass for grovavfall og eventu",
+        "frå behandlingsanlegg.",
+        "4. Å administrere mottak og vidaresending av spesialavfall.",
+        "5. Å bygge og drive distribusjonsnett for varmt vatn for sal, dersom",
+        "det kan betre driftsresultatet.",
+        " ",
+        "Selskapet kan ta på seg andre oppgaver, som deltakarkommunane vert",
+        "samde om.",
+        "Selskapet kan inngå samarbeidsavtalar med kommunar, andre selskap og",
+        "verksemder. Selskapet kan delta på eigarsida i andre selskap, når",
+        "dette ligg innanfor dei rammer kommunelova/forskrifter gjev for",
+        "kommunen si deltaking i selskap/forretningsdrift."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/984068085",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "8ecb0d92046da5c15addc874c9dfdc85260a0c296c7727d73abe5591ceff084c"
+    },
+    {
+      "company": "950437537",
+      "field": "registered_business_activity",
+      "value": [
+        "Lov av 9. mai 1986  om velferd for elever og",
+        "studenter."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/950437537",
+      "json_pointer": "/aktivitet",
+      "sha256": "0dfb2f32e65b4823dbc6d1a34365669597689845527df39449fb064348249ee4"
+    },
+    {
+      "company": "950437537",
+      "field": "registered_purpose",
+      "value": [
+        "Lov av 9. mai 1986  om velferd for elever og",
+        "studenter."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/950437537",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "0dfb2f32e65b4823dbc6d1a34365669597689845527df39449fb064348249ee4"
+    },
+    {
+      "company": "917377286",
+      "field": "registered_business_activity",
+      "value": [
+        "Felleseiendom."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/917377286",
+      "json_pointer": "/aktivitet",
+      "sha256": "3353da0400cc9ec8bb4d5f484d94fc504780f48682c40371b109e2d1b1040bb4"
+    },
+    {
+      "company": "954799778",
+      "field": "registered_business_activity",
+      "value": [
+        "Forsikring. Finansiering."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/954799778",
+      "json_pointer": "/aktivitet",
+      "sha256": "984201f8f5ef377882ea5a1145182ba5930d10df31d9ee793101dcda0c253a4f"
+    },
+    {
+      "company": "954799778",
+      "field": "registered_purpose",
+      "value": [
+        "Drive direkte skadeforsikringsvirksomhet, samt virksomhet som naturlig",
+        "henger sammen med forsikringsvirksomheten."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/954799778",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "984201f8f5ef377882ea5a1145182ba5930d10df31d9ee793101dcda0c253a4f"
+    },
+    {
+      "company": "976995082",
+      "field": "registered_business_activity",
+      "value": [
+        "Kyrkjeleg fellesråd"
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/976995082",
+      "json_pointer": "/aktivitet",
+      "sha256": "183ada7a6c3cd281088ddba0a43b613e445b71bb75c5b74f2fa968551983056a"
+    },
+    {
+      "company": "964938466",
+      "field": "registered_business_activity",
+      "value": [
+        "Veitransport av gods. Transport av farlig gods (ADR) og",
+        "avfallstransport. Drift av bilverksted. Anleggsvirksomhet, inkludert",
+        "snørydding."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/964938466",
+      "json_pointer": "/aktivitet",
+      "sha256": "9fcf2c39ca8acd364795462a69c0e20e81b4cf7c55d4a44cc007ab3789452acd"
+    },
+    {
+      "company": "912118576",
+      "field": "registered_business_activity",
+      "value": [
+        "Drive fiske med M/S Leik og levere tjenestar til prosjektmarknad for",
+        "vedlikehald og nyinstallasjon av elektriske anlegg."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/912118576",
+      "json_pointer": "/aktivitet",
+      "sha256": "d9cd6b98dfb9a4e58f61de45deebc2103ededca9988dc96ca2b30c86d9da2790"
+    },
+    {
+      "company": "912118576",
+      "field": "registered_purpose",
+      "value": [
+        "Drive fiske med M/S Leik og levere tjenestar til prosjektmarknad for",
+        "vedlikehald og nyinstallasjon av elektriske anlegg."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/912118576",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "d9cd6b98dfb9a4e58f61de45deebc2103ededca9988dc96ca2b30c86d9da2790"
+    },
+    {
+      "company": "970288945",
+      "field": "registered_business_activity",
+      "value": [
+        "Frivelig drift av hytte med butikkhandel med sjokolade og drops."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/970288945",
+      "json_pointer": "/aktivitet",
+      "sha256": "8c23a5aa5aacbead4570f63e18b34df3e5077aa4d82837000fb0a16bf4772485"
+    },
+    {
+      "company": "948205149",
+      "field": "registered_business_activity",
+      "value": [
+        "Boligbyggelag."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/948205149",
+      "json_pointer": "/aktivitet",
+      "sha256": "6bc893e5ec73c0b45edc4a2c836cbae5518303e79ba25c8bce73e296a43b3652"
+    },
+    {
+      "company": "948205149",
+      "field": "registered_purpose",
+      "value": [
+        "Boligbyggelag."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/948205149",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "6bc893e5ec73c0b45edc4a2c836cbae5518303e79ba25c8bce73e296a43b3652"
+    },
+    {
+      "company": "983609155",
+      "field": "registered_business_activity",
+      "value": [
+        "Forvaltning av offentlige bevilgninger og innbetalinger fra",
+        "energibrukerne til fremme av mer effektiv og miljøvennlig energibruk",
+        "og energiproduksjon samt økt innenlands bruk av gass. Virksomheten går",
+        "ut på å identifisere, evaluere, utforme og implementere virkemidler",
+        "til støtte for virksomhetens formål. Målene søkes oppnådd først og",
+        "fremst ved å yte økonomisk tilskudd til et bredt sett av tiltak.",
+        "Foretaket skal også være myndighetenes fagorgan på området og skal",
+        "delta i internasjonalt samarbeid."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/983609155",
+      "json_pointer": "/aktivitet",
+      "sha256": "eb53e92f7744a83c3f5a4bd35df32a84fa41d39c000b7f8a50d7dff1a1d89ba0"
+    },
+    {
+      "company": "983609155",
+      "field": "registered_purpose",
+      "value": [
+        "Enova SFs formål er å bidra til å nå Norges klimaforpliktelser, og å",
+        "fremme effektive klima- og energiomstillingstiltak på veien mot",
+        "lavutslippssamfunnet.",
+        " ",
+        "Enova SF skal forvalte midlene fra klima- og energifondet i henhold",
+        "til vedtekter for klima- og energifondet, oppdragsbrev og avtale med",
+        "Klima- og miljødepartementet.",
+        " ",
+        "Enova SF skal pase at Klima- og energifondet tilføres de inntekter som",
+        "følger av forskrift til energiloven.",
+        " ",
+        "Enova SF skal i sitt operative arbeide fremme konkurranse og benytte",
+        "eksterne aktører der det er hensiktsmessig.",
+        " ",
+        "Enova SF har ikke erverv til formål."
+      ],
+      "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/983609155",
+      "json_pointer": "/vedtektsfestetFormaal",
+      "sha256": "eb53e92f7744a83c3f5a4bd35df32a84fa41d39c000b7f8a50d7dff1a1d89ba0"
+    }
+  ],
+  "attribution": "Source: Brønnøysund Register Centre (Brønnøysundregistrene), retrieved 2026-10-17, licensed under NLOD 2.0."
+}

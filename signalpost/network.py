@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from contextvars import ContextVar
 import gzip
 import http.client
 import ipaddress
@@ -21,6 +23,19 @@ from html.parser import HTMLParser
 from tldextract import TLDExtract
 
 from .operations import Budget
+
+
+_REQUEST_COMPANY: ContextVar[str | None] = ContextVar("signalpost_request_company", default=None)
+
+
+@contextmanager
+def request_company_scope(company: str):
+    """Attribute concurrent optional-source requests to their scheduled company."""
+    token = _REQUEST_COMPANY.set(company)
+    try:
+        yield
+    finally:
+        _REQUEST_COMPANY.reset(token)
 
 
 class NetworkPolicyError(ValueError):
@@ -151,6 +166,8 @@ class UrlLibTransport:
 
     @staticmethod
     def _pinned_request(url: str, headers: dict[str, str], timeout: float, addresses: tuple[str, ...], max_bytes: int) -> tuple[int, dict[str, str], bytes, str]:
+        if len(addresses) != 1:
+            raise NetworkPolicyError("each pinned connection requires its own gateway reservation")
         parsed = urllib.parse.urlsplit(url)
         host = parsed.hostname or ""
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
@@ -308,7 +325,8 @@ class NetworkGateway:
             return 0, {}, b"", target, "budget_exhausted"
         key = (target, purpose, user_agent, max_bytes or self.response_cap, use_robots,
                tuple(sorted(h.casefold() for h in allowed_hosts)) if allowed_hosts is not None else None,
-               access_profile, self.trusted_proxy)
+               access_profile, self.trusted_proxy,
+               _REQUEST_COMPANY.get() if self.budget and self.budget.config.per_company_physical_limit is not None else None)
         existing = self._inflight.get(key)
         if existing is not None:
             self.coalesced_requests += 1
@@ -364,6 +382,11 @@ class NetworkGateway:
                 return 0, {}, b"", target, "redirect_loop"
             redirects_seen.add(target)
             approved_ips = validate_public_host(target, trusted_proxy=self.trusted_proxy)
+            # Prefer IPv4 on hosts where IPv6 is unreachable. Each failed
+            # address consumes a separately paced, budgeted, logged retry;
+            # the transport must not fan out below the request ledger.
+            ordered_ips = tuple(sorted(approved_ips or (), key=lambda ip: (ipaddress.ip_address(ip).version != 4, ip)))
+            address_index = 0
             parsed = urllib.parse.urlsplit(target)
             slot = self._host_slots.setdefault(parsed.hostname or "", _AdaptiveHostLimit(
                 self.budget.config.per_host_concurrency if self.budget else 2))
@@ -377,7 +400,7 @@ class NetworkGateway:
                             org_match = re.match(r"(\d{9})", query_org[0])
                     if self.budget and not await self.budget.reserve_request(
                             required=access_profile == "brreg_structured_api",
-                            company=org_match.group(1) if org_match else None,
+                            company=org_match.group(1) if org_match else _REQUEST_COMPANY.get(),
                             host=urllib.parse.urlsplit(target).hostname):
                         return 0, {}, b"", target, "budget_exhausted"
                     start = time.monotonic()
@@ -389,7 +412,8 @@ class NetworkGateway:
                     try:
                         status, headers, body, _ = await asyncio.wait_for(
                             self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity"}, self.timeout,
-                                                   approved_ips=approved_ips, max_bytes=cap) if isinstance(self.transport, UrlLibTransport) else
+                                                   approved_ips=(ordered_ips[address_index % len(ordered_ips)],) if ordered_ips else None,
+                                                   max_bytes=cap) if isinstance(self.transport, UrlLibTransport) else
                             self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity"}, self.timeout),
                             timeout=self.timeout,
                         )
@@ -460,6 +484,7 @@ class NetworkGateway:
                         raise
                     except (asyncio.TimeoutError, OSError, urllib.error.URLError) as exc:
                         outcome = "timeout" if isinstance(exc, asyncio.TimeoutError) else "transport_error"
+                        address_index += 1
                         self._record(target, purpose, status, len(body), start, outcome)
                         if attempt >= self.retries:
                             return status or 0, headers, b"", target, outcome
@@ -527,7 +552,8 @@ class NetworkGateway:
                 self._robots[origin] = ("", None, "unreachable")
                 return "unreachable", None
             if outcome == "budget_exhausted":
-                self._robots[origin] = ("", None, "budget_skipped")
+                # A company-specific budget denial says nothing about robots
+                # on this origin. Do not poison another company's permission.
                 return "budget_skipped", None
             if outcome in {"response_too_large", "decompression_limit", "unsupported_encoding",
                            "waf_challenge", "soft_404", "redirect_limit"}:

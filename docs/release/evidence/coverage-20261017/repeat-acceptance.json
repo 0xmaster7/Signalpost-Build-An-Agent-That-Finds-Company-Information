@@ -1,0 +1,13 @@
+{
+  "rows": 5,
+  "changes": 0,
+  "registered_statement_claims": 8,
+  "external_HTTP": 0,
+  "terminal_states": [
+    "available",
+    "available",
+    "available",
+    "available",
+    "available"
+  ]
+}
