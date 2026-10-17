@@ -1,0 +1,835 @@
+{
+  "rows": 8,
+  "unique_companies": 8,
+  "counts": {
+    "revenue": 6,
+    "operating_result": 6,
+    "annual_result": 6,
+    "full_time_equivalents": 7
+  },
+  "total_document_claims": 25,
+  "results": [
+    {
+      "organisation_number": "987974249",
+      "facts": [
+        {
+          "field": "revenue",
+          "value": 5135536,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "987974249:annual-document:165b8165127dcd61a98e:revenue",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/987974249/2025",
+              "retrieved_at": "2026-10-17T17:38:54.322697Z",
+              "content_sha256": "165b8165127dcd61a98e924567d37a128bdf82fff1f05667b20e5db4e79afd3b",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Sum inntekter 5 135 536 5 590 589",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "987974249",
+              "source_snapshot_ids": [
+                "987974249:annual-document:165b8165127dcd61a98e"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "operating_result",
+          "value": -22366,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "987974249:annual-document:165b8165127dcd61a98e:operating_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/987974249/2025",
+              "retrieved_at": "2026-10-17T17:38:54.322697Z",
+              "content_sha256": "165b8165127dcd61a98e924567d37a128bdf82fff1f05667b20e5db4e79afd3b",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Driftsresultat -22 366 1 099 625",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "987974249",
+              "source_snapshot_ids": [
+                "987974249:annual-document:165b8165127dcd61a98e"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "annual_result",
+          "value": -12695,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "987974249:annual-document:165b8165127dcd61a98e:annual_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/987974249/2025",
+              "retrieved_at": "2026-10-17T17:38:54.322697Z",
+              "content_sha256": "165b8165127dcd61a98e924567d37a128bdf82fff1f05667b20e5db4e79afd3b",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Arsresultat 4 -12 695 865 488",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "987974249",
+              "source_snapshot_ids": [
+                "987974249:annual-document:165b8165127dcd61a98e"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "full_time_equivalents",
+          "value": 10.0,
+          "unit": "FTE",
+          "currency": null,
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "987974249:annual-document:165b8165127dcd61a98e:fte",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/987974249/2025",
+              "retrieved_at": "2026-10-17T17:38:54.322697Z",
+              "content_sha256": "165b8165127dcd61a98e924567d37a128bdf82fff1f05667b20e5db4e79afd3b",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Antall arsverk i regnskapsaret | 10.00",
+              "page_number": 5,
+              "source_class": "official",
+              "subject_organisation_number": "987974249",
+              "source_snapshot_ids": [
+                "987974249:annual-document:165b8165127dcd61a98e"
+              ]
+            }
+          ]
+        }
+      ],
+      "document_errors": [],
+      "state": "available"
+    },
+    {
+      "organisation_number": "918652493",
+      "facts": [
+        {
+          "field": "revenue",
+          "value": 3089741,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "918652493:annual-document:e65222136814b7c4ad33:revenue",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/918652493/2025",
+              "retrieved_at": "2026-10-17T17:38:54.323603Z",
+              "content_sha256": "e65222136814b7c4ad33ec84c20a34faf294d5297bfa63d84d98e4ec9a4ca3e0",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Sum inntekter 3089741 2970070",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "918652493",
+              "source_snapshot_ids": [
+                "918652493:annual-document:e65222136814b7c4ad33"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "operating_result",
+          "value": 335294,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "918652493:annual-document:e65222136814b7c4ad33:operating_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/918652493/2025",
+              "retrieved_at": "2026-10-17T17:38:54.323603Z",
+              "content_sha256": "e65222136814b7c4ad33ec84c20a34faf294d5297bfa63d84d98e4ec9a4ca3e0",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Driftsresultat 335294 -190 059",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "918652493",
+              "source_snapshot_ids": [
+                "918652493:annual-document:e65222136814b7c4ad33"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "annual_result",
+          "value": 260481,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "918652493:annual-document:e65222136814b7c4ad33:annual_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/918652493/2025",
+              "retrieved_at": "2026-10-17T17:38:54.323603Z",
+              "content_sha256": "e65222136814b7c4ad33ec84c20a34faf294d5297bfa63d84d98e4ec9a4ca3e0",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Arsresultat 260 481 -148876",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "918652493",
+              "source_snapshot_ids": [
+                "918652493:annual-document:e65222136814b7c4ad33"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "full_time_equivalents",
+          "value": 7.0,
+          "unit": "FTE",
+          "currency": null,
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "918652493:annual-document:e65222136814b7c4ad33:fte",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/918652493/2025",
+              "retrieved_at": "2026-10-17T17:38:54.323603Z",
+              "content_sha256": "e65222136814b7c4ad33ec84c20a34faf294d5297bfa63d84d98e4ec9a4ca3e0",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Antall arsverk i regnskapsaret | 7.00",
+              "page_number": 5,
+              "source_class": "official",
+              "subject_organisation_number": "918652493",
+              "source_snapshot_ids": [
+                "918652493:annual-document:e65222136814b7c4ad33"
+              ]
+            }
+          ]
+        }
+      ],
+      "document_errors": [],
+      "state": "available"
+    },
+    {
+      "organisation_number": "959312869",
+      "facts": [
+        {
+          "field": "revenue",
+          "value": 12356957,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "959312869:annual-document:30a2db671c5d2cb55605:revenue",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/959312869/2025",
+              "retrieved_at": "2026-10-17T17:39:38.406941Z",
+              "content_sha256": "30a2db671c5d2cb55605118d3f5c34f06ffab49271e9d109166421dd476019ad",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i: NOK Note 2025 2024 | year column 2025 | Sum inntekter 12 356 957 10 960 079",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "959312869",
+              "source_snapshot_ids": [
+                "959312869:annual-document:30a2db671c5d2cb55605"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "operating_result",
+          "value": -390854,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "959312869:annual-document:30a2db671c5d2cb55605:operating_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/959312869/2025",
+              "retrieved_at": "2026-10-17T17:39:38.406941Z",
+              "content_sha256": "30a2db671c5d2cb55605118d3f5c34f06ffab49271e9d109166421dd476019ad",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i: NOK Note 2025 2024 | year column 2025 | Driftsresultat -390 854 -647 706",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "959312869",
+              "source_snapshot_ids": [
+                "959312869:annual-document:30a2db671c5d2cb55605"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "annual_result",
+          "value": -301747,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "959312869:annual-document:30a2db671c5d2cb55605:annual_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/959312869/2025",
+              "retrieved_at": "2026-10-17T17:39:38.406941Z",
+              "content_sha256": "30a2db671c5d2cb55605118d3f5c34f06ffab49271e9d109166421dd476019ad",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i: NOK Note 2025 2024 | year column 2025 | Arsresultat -301 747 -500 273",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "959312869",
+              "source_snapshot_ids": [
+                "959312869:annual-document:30a2db671c5d2cb55605"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "full_time_equivalents",
+          "value": 10.4,
+          "unit": "FTE",
+          "currency": null,
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "959312869:annual-document:30a2db671c5d2cb55605:fte",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/959312869/2025",
+              "retrieved_at": "2026-10-17T17:39:38.406941Z",
+              "content_sha256": "30a2db671c5d2cb55605118d3f5c34f06ffab49271e9d109166421dd476019ad",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Antall arsverk i regnskapsaret | 10.40",
+              "page_number": 5,
+              "source_class": "official",
+              "subject_organisation_number": "959312869",
+              "source_snapshot_ids": [
+                "959312869:annual-document:30a2db671c5d2cb55605"
+              ]
+            }
+          ]
+        }
+      ],
+      "document_errors": [],
+      "state": "available"
+    },
+    {
+      "organisation_number": "923160388",
+      "facts": [
+        {
+          "field": "revenue",
+          "value": 63131609,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "923160388:annual-document:44c6a89287b1a8a35c52:revenue",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/923160388/2025",
+              "retrieved_at": "2026-10-17T17:39:46.584677Z",
+              "content_sha256": "44c6a89287b1a8a35c52360aa851676f49b2d5e5a685cba72c0f1cb786231d10",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Sum inntekter 63 131 609 110340349",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "923160388",
+              "source_snapshot_ids": [
+                "923160388:annual-document:44c6a89287b1a8a35c52"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "full_time_equivalents",
+          "value": 40.0,
+          "unit": "FTE",
+          "currency": null,
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "923160388:annual-document:44c6a89287b1a8a35c52:fte",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/923160388/2025",
+              "retrieved_at": "2026-10-17T17:39:46.584677Z",
+              "content_sha256": "44c6a89287b1a8a35c52360aa851676f49b2d5e5a685cba72c0f1cb786231d10",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Antall arsverk i regnskapsaret | 40.00",
+              "page_number": 6,
+              "source_class": "official",
+              "subject_organisation_number": "923160388",
+              "source_snapshot_ids": [
+                "923160388:annual-document:44c6a89287b1a8a35c52"
+              ]
+            }
+          ]
+        }
+      ],
+      "document_errors": [],
+      "state": "available"
+    },
+    {
+      "organisation_number": "947942638",
+      "facts": [],
+      "document_errors": [
+        {
+          "code": "ANNUAL_DOCUMENT_FAILED",
+          "message": "pdf_0_transport_error",
+          "retryable": false,
+          "source_id": null
+        }
+      ],
+      "state": "available"
+    },
+    {
+      "organisation_number": "997356624",
+      "facts": [
+        {
+          "field": "revenue",
+          "value": 707016,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "997356624:annual-document:5de040c4085aabff81bc:revenue",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/997356624/2025",
+              "retrieved_at": "2026-10-17T17:40:23.345302Z",
+              "content_sha256": "5de040c4085aabff81bc81fcb5b2e5156f78b14c556a8d23f92dbd17a0508e4f",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belopi:NOK Note 2025 2024 | year column 2025 | Sum inntekter 707016 707835",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "997356624",
+              "source_snapshot_ids": [
+                "997356624:annual-document:5de040c4085aabff81bc"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "operating_result",
+          "value": 432089,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "997356624:annual-document:5de040c4085aabff81bc:operating_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/997356624/2025",
+              "retrieved_at": "2026-10-17T17:40:23.345302Z",
+              "content_sha256": "5de040c4085aabff81bc81fcb5b2e5156f78b14c556a8d23f92dbd17a0508e4f",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belopi:NOK Note 2025 2024 | year column 2025 | Driftsresultat 432089 462544",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "997356624",
+              "source_snapshot_ids": [
+                "997356624:annual-document:5de040c4085aabff81bc"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "annual_result",
+          "value": 25003,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "997356624:annual-document:5de040c4085aabff81bc:annual_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/997356624/2025",
+              "retrieved_at": "2026-10-17T17:40:23.345302Z",
+              "content_sha256": "5de040c4085aabff81bc81fcb5b2e5156f78b14c556a8d23f92dbd17a0508e4f",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belopi:NOK Note 2025 2024 | year column 2025 | Arsresultat 25 003 44 563",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "997356624",
+              "source_snapshot_ids": [
+                "997356624:annual-document:5de040c4085aabff81bc"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "full_time_equivalents",
+          "value": 0.0,
+          "unit": "FTE",
+          "currency": null,
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "997356624:annual-document:5de040c4085aabff81bc:fte",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/997356624/2025",
+              "retrieved_at": "2026-10-17T17:40:23.345302Z",
+              "content_sha256": "5de040c4085aabff81bc81fcb5b2e5156f78b14c556a8d23f92dbd17a0508e4f",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Antall arsverk i regnskapsaret | 0.00",
+              "page_number": 5,
+              "source_class": "official",
+              "subject_organisation_number": "997356624",
+              "source_snapshot_ids": [
+                "997356624:annual-document:5de040c4085aabff81bc"
+              ]
+            }
+          ]
+        }
+      ],
+      "document_errors": [],
+      "state": "available"
+    },
+    {
+      "organisation_number": "974350033",
+      "facts": [
+        {
+          "field": "revenue",
+          "value": 3916,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "974350033:annual-document:b9d15aa20496ebc6361f:revenue",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/974350033/2025",
+              "retrieved_at": "2026-10-17T17:40:50.674588Z",
+              "content_sha256": "b9d15aa20496ebc6361f0a2e1a6e4a3e2047f1f98a9cb750e44679b00c714a66",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Sum inntekter 3916",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "974350033",
+              "source_snapshot_ids": [
+                "974350033:annual-document:b9d15aa20496ebc6361f"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "operating_result",
+          "value": -77284,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "974350033:annual-document:b9d15aa20496ebc6361f:operating_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/974350033/2025",
+              "retrieved_at": "2026-10-17T17:40:50.674588Z",
+              "content_sha256": "b9d15aa20496ebc6361f0a2e1a6e4a3e2047f1f98a9cb750e44679b00c714a66",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Driftsresultat -77284 -43 585",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "974350033",
+              "source_snapshot_ids": [
+                "974350033:annual-document:b9d15aa20496ebc6361f"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "annual_result",
+          "value": 3093445,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "974350033:annual-document:b9d15aa20496ebc6361f:annual_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/974350033/2025",
+              "retrieved_at": "2026-10-17T17:40:50.674588Z",
+              "content_sha256": "b9d15aa20496ebc6361f0a2e1a6e4a3e2047f1f98a9cb750e44679b00c714a66",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belop i:NOK Note 2025 2024 | year column 2025 | Arsresultat 3 3 093 445 6 082 892",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "974350033",
+              "source_snapshot_ids": [
+                "974350033:annual-document:b9d15aa20496ebc6361f"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "full_time_equivalents",
+          "value": 0.0,
+          "unit": "FTE",
+          "currency": null,
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "974350033:annual-document:b9d15aa20496ebc6361f:fte",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/974350033/2025",
+              "retrieved_at": "2026-10-17T17:40:50.674588Z",
+              "content_sha256": "b9d15aa20496ebc6361f0a2e1a6e4a3e2047f1f98a9cb750e44679b00c714a66",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Antall arsverk i regnskapsaret | 0.00",
+              "page_number": 5,
+              "source_class": "official",
+              "subject_organisation_number": "974350033",
+              "source_snapshot_ids": [
+                "974350033:annual-document:b9d15aa20496ebc6361f"
+              ]
+            }
+          ]
+        }
+      ],
+      "document_errors": [],
+      "state": "available"
+    },
+    {
+      "organisation_number": "915716121",
+      "facts": [
+        {
+          "field": "operating_result",
+          "value": -19573,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "915716121:annual-document:844159e50df1e5a6e225:operating_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/915716121/2025",
+              "retrieved_at": "2026-10-17T17:40:51.412375Z",
+              "content_sha256": "844159e50df1e5a6e225b4d38b16ef18d760a1d74e946134c173879c8a1d6b07",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belopi:NOK Note 2025 2024 | year column 2025 | Driftsresultat -19573 -13 019",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "915716121",
+              "source_snapshot_ids": [
+                "915716121:annual-document:844159e50df1e5a6e225"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "annual_result",
+          "value": -19573,
+          "unit": "NOK",
+          "currency": "NOK",
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "915716121:annual-document:844159e50df1e5a6e225:annual_result",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/915716121/2025",
+              "retrieved_at": "2026-10-17T17:40:51.412375Z",
+              "content_sha256": "844159e50df1e5a6e225b4d38b16ef18d760a1d74e946134c173879c8a1d6b07",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Belopi:NOK Note 2025 2024 | year column 2025 | Arsresultat -19573 -63 019",
+              "page_number": 2,
+              "source_class": "official",
+              "subject_organisation_number": "915716121",
+              "source_snapshot_ids": [
+                "915716121:annual-document:844159e50df1e5a6e225"
+              ]
+            }
+          ]
+        },
+        {
+          "field": "full_time_equivalents",
+          "value": 0.0,
+          "unit": "FTE",
+          "currency": null,
+          "scope": "legal_entity",
+          "period_start": "2025-01-01T00:00:00Z",
+          "period_end": "2025-12-31T00:00:00Z",
+          "document_evidence": [
+            {
+              "evidence_id": "915716121:annual-document:844159e50df1e5a6e225:fte",
+              "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/915716121/2025",
+              "retrieved_at": "2026-10-17T17:40:51.412375Z",
+              "content_sha256": "844159e50df1e5a6e225b4d38b16ef18d760a1d74e946134c173879c8a1d6b07",
+              "extraction_method": "official-filing-ocr-v1",
+              "json_pointer": null,
+              "excerpt": "Antall arsverk i regnskapsaret | 0.00",
+              "page_number": 5,
+              "source_class": "official",
+              "subject_organisation_number": "915716121",
+              "source_snapshot_ids": [
+                "915716121:annual-document:844159e50df1e5a6e225"
+              ]
+            }
+          ]
+        }
+      ],
+      "document_errors": [],
+      "state": "available"
+    }
+  ],
+  "requests_total": 93,
+  "requests_acceptance": 43,
+  "instrumentation": {
+    "wall_seconds": 178.44137646700256,
+    "peak_rss_kib": 89688,
+    "cpu_user_seconds": 2.713549,
+    "cpu_system_seconds": 0.18873299999999998,
+    "worker_timings": [
+      {
+        "company": "987974249",
+        "seconds": 4.597287580007105,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "918652493",
+        "seconds": 4.471347098995466,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "959312869",
+        "seconds": 7.0734586420003325,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "923160388",
+        "seconds": 7.423360360000515,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "997356624",
+        "seconds": 5.918089402010082,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "947942638",
+        "seconds": 7.447977727992111,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "974350033",
+        "seconds": 7.089380270001129,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "915716121",
+        "seconds": 7.1292107030021725,
+        "phase": "official_foundation"
+      },
+      {
+        "company": "987974249",
+        "seconds": 44.08414470599382,
+        "phase": "annual_documents"
+      },
+      {
+        "company": "918652493",
+        "seconds": 52.26100344599399,
+        "phase": "annual_documents"
+      },
+      {
+        "company": "959312869",
+        "seconds": 44.93829398199159,
+        "phase": "annual_documents"
+      },
+      {
+        "company": "923160388",
+        "seconds": 43.90164316500886,
+        "phase": "annual_documents"
+      },
+      {
+        "company": "947942638",
+        "seconds": 20.18814328100416,
+        "phase": "annual_documents"
+      },
+      {
+        "company": "997356624",
+        "seconds": 28.067047004995402,
+        "phase": "annual_documents"
+      },
+      {
+        "company": "974350033",
+        "seconds": 42.36333626900159,
+        "phase": "annual_documents"
+      },
+      {
+        "company": "915716121",
+        "seconds": 45.64518539598794,
+        "phase": "annual_documents"
+      }
+    ],
+    "physical_http_cap": 100,
+    "phase_cumulative_cap": 100,
+    "guard": "SQLite BEGIN IMMEDIATE reservation before every HTTPConnection.request, including IP fallback; all HTTP outside gateway transport context denied; no source mocks or pacing changes",
+    "body_retention": "run-scoped, prohibited personal keys redacted before disk; raw SHA is pre-redaction; no persistent raw cache"
+  },
+  "requests_final_live": 43,
+  "baseline": {
+    "type": "exact old-release offline replay of captured live source bytes; not new live results",
+    "sha": "3c204eecfabf0b5f16e83250b3aa3b682889954a",
+    "companies": 8,
+    "revenue": 0,
+    "operating_result": 0,
+    "annual_result": 0,
+    "full_time_equivalents": 0,
+    "document_claims": 0
+  },
+  "independent_review": {
+    "published_claims_reviewed": 25,
+    "unsupported_or_incorrectly_attributed_found": 0,
+    "method": "Rendered official filing covers, financial statements and FTE notes; checked identity, standalone scope, actual 2025 period, currency/scale, year column and quoted row against output. No claim of independent audit or population precision."
+  }
+}

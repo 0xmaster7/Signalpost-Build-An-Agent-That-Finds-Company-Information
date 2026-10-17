@@ -4,7 +4,9 @@
     {
       "source_class": "brreg_structured_api",
       "host": "data.brreg.no",
-      "methods": ["GET"],
+      "methods": [
+        "GET"
+      ],
       "scope": "Exact-organisation entity, accounts, roles, group and subunit endpoints through NetworkGateway",
       "rights_basis": "Documented public BRREG API; NLOD 2.0 attribution for applicable register data",
       "retention": "Run-scoped source bytes; hashes, URLs, JSON pointers and retrieval times are retained as provenance",
@@ -15,21 +17,51 @@
     {
       "source_class": "exact_company_owned_website",
       "host": "Per-company verified public host",
-      "methods": ["Bounded GET"],
+      "methods": [
+        "Bounded GET"
+      ],
       "scope": "Registry-linked or policy-bounded .no candidate; same-origin pages only after exact-company verification",
       "rights_basis": "Public factual extraction subject to source-specific terms; skip prohibited sources; do not retain unnecessary personal data",
       "retention": "Run-scoped bodies; hashes, short permitted extracts, locators and identity proof",
       "robots": "Fail closed on explicit disallow, unusable response or transport/server failure; crawl delays and request caps apply",
       "credentials": "None",
       "cost": "No paid API cost"
+    },
+    {
+      "source_class": "brreg_official_annual_account_copy",
+      "host": "data.brreg.no",
+      "methods": [
+        "GET"
+      ],
+      "scope": "Exact /regnskapsregisteret/regnskap/aarsregnskap/kopi/{orgnr}/{year}; latest matching company filing only",
+      "rights_basis": "Public official filing, factual extraction with attribution; no redistribution of full reports and no blanket third-party copyright licence asserted",
+      "retention": "Run-scoped PDF and SHA cache; short evidence quotes, page numbers, hashes and URLs retained",
+      "robots": "Explicit disallow enforced; narrow documented official API transport-failure exception, same as structured BRREG API",
+      "credentials": "None",
+      "cost": "No paid API cost; bounded local CPU OCR"
     }
   ],
   "disabled_sources": [
-    {"source_class": "search_provider", "reason": "No reproducible rights-approved provider or credential; search remains disabled and unpromoted."},
-    {"source_class": "LLM_or_model", "reason": "No model is required or enabled; no model key or paid inference."},
-    {"source_class": "ATS_or_external_jobs", "reason": "No approved provider or source-rights basis."},
-    {"source_class": "social_or_restricted_platforms", "reason": "No authorized connector; no scraping."},
-    {"source_class": "broad_crawl_or_browser_automation", "reason": "Outside the approved bounded source surface."}
+    {
+      "source_class": "search_provider",
+      "reason": "No reproducible rights-approved provider or credential; search remains disabled and unpromoted."
+    },
+    {
+      "source_class": "LLM_or_model",
+      "reason": "No model is required or enabled; no model key or paid inference."
+    },
+    {
+      "source_class": "ATS_or_external_jobs",
+      "reason": "No approved provider or source-rights basis."
+    },
+    {
+      "source_class": "social_or_restricted_platforms",
+      "reason": "No authorized connector; no scraping."
+    },
+    {
+      "source_class": "broad_crawl_or_browser_automation",
+      "reason": "Outside the approved bounded source surface."
+    }
   ],
   "unknowns": [
     "Builderr frozen snapshot licence, URL, as-of date and retention terms until supplied.",

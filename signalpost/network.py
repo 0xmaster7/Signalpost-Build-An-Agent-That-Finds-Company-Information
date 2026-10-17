@@ -46,6 +46,15 @@ _BRREG_API_PURPOSES = {"entity", "accounts", "roles", "subunits", "subunits_page
 APPROVED_BRREG_REQUEST_PURPOSES = frozenset(_BRREG_API_PURPOSES)
 _BRREG_ORG_PATH = re.compile(r"^/enhetsregisteret/api/(?:enheter|konsernstruktur)/\d{9}(?:/roller)?/?$")
 _BRREG_ACCOUNTS_PATH = re.compile(r"^/regnskapsregisteret/regnskap/\d{9}/?$")
+_BRREG_COPY_PATH = re.compile(r"^/regnskapsregisteret/regnskap/aarsregnskap/kopi/\d{9}/\d{4}$")
+
+
+def _brreg_document_api_url(url: str, purpose: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    return (purpose == "annual_account_copy" and parsed.scheme == "https"
+        and parsed.hostname == "data.brreg.no" and parsed.port in {None, 443}
+        and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
+        and bool(_BRREG_COPY_PATH.fullmatch(parsed.path)))
 
 
 def _brreg_structured_api_url(url: str, purpose: str) -> bool:
@@ -356,10 +365,12 @@ class NetworkGateway:
         target = canonical_url(url)
         if allowed_hosts is not None and (urllib.parse.urlsplit(target).hostname or "").casefold() not in {h.casefold() for h in allowed_hosts}:
             raise NetworkPolicyError("destination host is outside the caller's source allowlist")
-        if access_profile is not None and access_profile != "brreg_structured_api":
+        if access_profile not in {None, "brreg_structured_api", "brreg_document_api"}:
             raise NetworkPolicyError("unknown source access profile")
         if access_profile == "brreg_structured_api" and not _brreg_structured_api_url(target, purpose):
             raise NetworkPolicyError("BRREG structured API profile is limited to documented BRREG endpoints")
+        if access_profile == "brreg_document_api" and not _brreg_document_api_url(target, purpose):
+            raise NetworkPolicyError("BRREG document profile requires an exact official filing-copy URL")
         self._assert_proxy_route(target)
         if use_robots and purpose != "robots":
             robots_state, delay = await self.robots_decision(target, user_agent, allowed_hosts=allowed_hosts)
@@ -371,7 +382,7 @@ class NetworkGateway:
                 return 0, {}, b"", target, "budget_exhausted"
             if robots_state == "unusable":
                 return 0, {}, b"", target, "robots_unusable"
-            if robots_state == "unreachable" and access_profile != "brreg_structured_api":
+            if robots_state == "unreachable" and access_profile not in {"brreg_structured_api", "brreg_document_api"}:
                 return 0, {}, b"", target, "robots_unreachable"
         else:
             delay = None
@@ -393,7 +404,7 @@ class NetworkGateway:
             async with self._global_slots, slot:
                 for attempt in range(self.retries + 1):
                     await self._pace(target, delay or 0.0)
-                    org_match = re.search(r"(?:enheter|regnskap|konsernstruktur)/(\d{9})", urllib.parse.urlsplit(target).path)
+                    org_match = re.search(r"(?:enheter|regnskap|konsernstruktur|kopi)/(\d{9})", urllib.parse.urlsplit(target).path)
                     if org_match is None:
                         query_org = urllib.parse.parse_qs(urllib.parse.urlsplit(target).query).get("overordnetEnhet", [])
                         if len(query_org) == 1 and re.fullmatch(r"\d{9}", query_org[0]):
@@ -429,6 +440,9 @@ class NetworkGateway:
                                 raise NetworkPolicyError("redirect host is outside the caller's source allowlist")
                             if access_profile == "brreg_structured_api" and not _brreg_structured_api_url(target, purpose):
                                 raise NetworkPolicyError("BRREG structured API profile is limited to documented BRREG endpoints")
+                            if access_profile == "brreg_document_api" and (
+                                    not _brreg_document_api_url(target, purpose) or target != canonical_url(url)):
+                                raise NetworkPolicyError("BRREG document redirect left its exact permitted endpoint")
                             self._assert_proxy_route(target)
                             validate_public_host(target, trusted_proxy=self.trusted_proxy)
                             if use_robots and purpose != "robots":
@@ -441,7 +455,7 @@ class NetworkGateway:
                                     return 0, {}, b"", target, "budget_exhausted"
                                 if robots_state == "unusable":
                                     return 0, {}, b"", target, "robots_unusable"
-                                if robots_state == "unreachable" and access_profile != "brreg_structured_api":
+                                if robots_state == "unreachable" and access_profile not in {"brreg_structured_api", "brreg_document_api"}:
                                     return 0, {}, b"", target, "robots_unreachable"
                             break
                         if status in {429, 503}:

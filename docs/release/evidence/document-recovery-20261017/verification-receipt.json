@@ -1,0 +1,28 @@
+{
+  "full_suite_pre_final_narrow_adjustments": {
+    "tests": 492,
+    "subtests": 237,
+    "passed": true
+  },
+  "final_targeted_suite": {
+    "tests": 71,
+    "subtests": 5,
+    "passed": true
+  },
+  "clean_install": {
+    "command": "uv sync --frozen --extra m08-test",
+    "fresh_environment": true,
+    "saved_official_pdf_ocr_passed": true,
+    "tesseract_installed": false
+  },
+  "final_offline_refresh": {
+    "envelopes_each_run": 8,
+    "document_claims_each_run": 25,
+    "changes": 0,
+    "actual_http": 0,
+    "missing_tine_response": "explicit unavailable capture, not live response"
+  },
+  "network_closed": true,
+  "physical_attempts": 93,
+  "limit": 100
+}

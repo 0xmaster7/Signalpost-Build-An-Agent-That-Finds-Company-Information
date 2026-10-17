@@ -55,6 +55,32 @@ sources:
       response_bodies: run_scoped
       persistent_raw_cache: false
       retain_provenance: [source_url, retrieved_at, content_sha256, json_pointer, extraction_method, source_snapshot]
+  brreg_account_copy:
+    name: Official annual-account filing copies
+    hosts: [data.brreg.no]
+    endpoints: ["/regnskapsregisteret/regnskap/aarsregnskap/kopi/{organisation_number}/{year}"]
+    acquisition:
+      mode: documented_public_get
+      gateway: signalpost.network.NetworkGateway
+      access_profile: brreg_document_api
+      robots:
+        enforce_explicit_rules: true
+        on_unreachable: allow_only_exact_documented_filing_copy_api
+      redirects: same_host_and_exact_document_path_only
+      request_start_interval_seconds: 2.1
+      pdf_bytes: 26214400
+      ocr_workers: 2
+      ocr_timeout_seconds: 90
+      ocr_pages: 7
+    rights:
+      reference: https://data.brreg.no/regnskapsregisteret/regnskap/v3/api-docs
+      basis: public_official_filing_factual_extraction
+      attribution: Brønnøysundregistrene and the identified company filing
+      document_republication: false
+    retention:
+      response_bodies: run_scoped
+      ocr_cache: run_scoped_document_sha256
+      retain_provenance: [source_url, retrieved_at, content_sha256, page_number, excerpt, reporting_period, source_snapshot]
   builderr_frozen_registry:
     name: Builderr evaluator frozen registry snapshot
     hosts: []

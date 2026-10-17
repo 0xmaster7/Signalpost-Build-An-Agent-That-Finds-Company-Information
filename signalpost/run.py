@@ -153,7 +153,8 @@ def _live_envelope(row: Any, result: Any, batch_id: str, cutoff: datetime, previ
         errors.append(RunError(code="INPUT_INVALID", message="A nine-digit organisation number with a valid mod-11 checksum is required."))
         terminal = PublicState.FAILED
     else:
-        for name in ("identity_brand", "accounts_history", "leadership_workplaces"):
+        for name in ("identity_brand", "accounts_history", "leadership_workplaces", *(
+                ["hiring_activity"] if "hiring_activity" in result.section_states else [])):
             diagnostics = []
             observation = result.observations
             if name == "identity_brand" and observation.get("identity_state_evidence_id"):
@@ -251,7 +252,7 @@ def _attach_frozen_baseline(envelope: Envelope, record: dict[str, Any] | None, s
 
 def _merge_website_provenance(envelope: Envelope, result: Any) -> None:
     """Merge website provenance, reusing identical BRREG candidate records safely."""
-    evidence_fields = ("source_url", "content_sha256", "extraction_method", "json_pointer", "excerpt",
+    evidence_fields = ("source_url", "content_sha256", "extraction_method", "json_pointer", "excerpt", "page_number",
         "source_class", "subject_organisation_number", "source_snapshot_ids")
     existing_evidence = {item.evidence_id: item for item in envelope.evidence}
     for item in result.evidence:
@@ -554,6 +555,30 @@ def run(args: argparse.Namespace) -> int:
                 scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
                     "companies": scheduler.company_metrics,
                     "hard_deadline_cancelled": official_deadline_cancelled}
+                # Foundation envelopes are checkpointed before optional CPU work.
+                # One current official copy supplies both workforce and per-row
+                # financial validation; the scheduler still guarantees completion.
+                from .annual_accounts import DocumentProcessor, enrich_company
+                processor = DocumentProcessor()
+                document_scheduler = OpportunityScheduler(concurrency=2)
+                document_works = [Opportunity(key=org, company=org, pass_name="annual_documents",
+                    expected_company_family_gain=2, expected_atomic_claim_gain=4,
+                    expected_requests=1, expected_seconds=30, sequence=index)
+                    for index, (org, result) in enumerate(by_org.items()) if getattr(result, "account_records", [])]
+                async def annual_document(item: Opportunity):
+                    with request_company_scope(item.company):
+                        return await enrich_company(by_org[item.company], item.company, gateway, cutoff, processor)
+                for item in document_works:
+                    by_org[item.company].section_states["hiring_activity"] = PublicState.BLOCKED
+                    by_org[item.company].observations["annual_accounts_document"] = {"state": "blocked", "reason": "document_not_scheduled"}
+                gateway.set_rate_limit("data.brreg.no", 1 / 2.1)
+                document_results, document_cancelled = await _run_before_completion_reserve(
+                    document_scheduler.run(document_works, annual_document,
+                        permitted=lambda item: not run_budget.soft_expired and not run_budget.reserve_active), run_budget)
+                by_org.update(document_results)
+                gateway.set_rate_limit("data.brreg.no", 3.0)
+                scheduler_report["annual_documents"] = {"passes": document_scheduler.metrics,
+                    "companies": document_scheduler.company_metrics, "hard_deadline_cancelled": document_cancelled}
             output = []
             for row in rows:
                 if row.row_number in prior_terminalized:
@@ -654,8 +679,9 @@ def run(args: argparse.Namespace) -> int:
                             "reason": "soft_deadline_or_completion_reserve" if outcome == "deadline_skipped" else "request_budget_exhausted", "claims": []}
                         envelope.sections["website_owned_profiles"].state = None
                         envelope.sections["website_owned_profiles"].attempt_outcome = outcome
-                        envelope.sections["hiring_activity"].state = None
-                        envelope.sections["hiring_activity"].attempt_outcome = outcome
+                        if not envelope.sections["hiring_activity"].claims:
+                            envelope.sections["hiring_activity"].state = None
+                            envelope.sections["hiring_activity"].attempt_outcome = outcome
                         envelope.sections["website_owned_profiles"].diagnostics.append(
                             "scheduler_execution_state:budget_skipped")
                         envelope.sections["hiring_activity"].diagnostics.append(
@@ -671,7 +697,7 @@ def run(args: argparse.Namespace) -> int:
                     section.attempt_outcome = result.attempt_outcome or ("completed" if result.phase_state.get("accepted_pages") else None)
                     hiring = envelope.sections["hiring_activity"]
                     hiring.claims.extend(footprint_claims)
-                    hiring.state = result.hiring_activity_state
+                    hiring.state = PublicState.AVAILABLE if hiring.claims else result.hiring_activity_state
                     hiring.attempt_outcome = result.hiring_attempt_outcome or result.attempt_outcome
                     envelope.sections["claims_evidence_states"].claims.extend(result.claims)
                     if result.claims:

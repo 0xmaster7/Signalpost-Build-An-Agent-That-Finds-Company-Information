@@ -368,7 +368,7 @@ def merge_prior_facts(current: CompanyState, previous: CompanyState | None) -> C
             conclusive = current.coverage.get("_roles", {}).get("complete", False)
         elif family == "workplace":
             conclusive = current.coverage.get("_workplaces", {}).get("complete", False)
-        elif family in {"financial", "financial_record_metadata"}:
+        elif family in {"financial", "financial_record_metadata", "workforce"}:
             conclusive = False  # Keep submitted/restated periods as history.
         elif family in {"jobs", "public_activity"}:
             conclusive = False  # Missing web observations never prove closure.

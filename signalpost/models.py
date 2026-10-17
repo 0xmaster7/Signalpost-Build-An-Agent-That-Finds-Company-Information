@@ -47,6 +47,7 @@ class Evidence(StrictModel):
     extraction_method: str = Field(min_length=1)
     json_pointer: str | None = None
     excerpt: str | None = None
+    page_number: int | None = Field(default=None, ge=1)
     source_class: str = "official"
     subject_organisation_number: str | None = None
     source_snapshot_ids: list[str] = Field(default_factory=list)
@@ -121,6 +122,7 @@ class ChangeEvidenceRef(StrictModel):
     extraction_method: str
     json_pointer: str | None = None
     excerpt: str | None = None
+    page_number: int | None = Field(default=None, ge=1)
     source_class: str = "official"
     subject_organisation_number: str | None = None
     source_snapshot_ids: list[str] = Field(default_factory=list)

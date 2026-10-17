@@ -5,7 +5,7 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -47,6 +47,8 @@ class BrregResult:
     section_states: dict[str, PublicState]
     terminal_state: PublicState
     observations: dict[str, Any]
+    account_records: list[dict[str, Any]] = field(default_factory=list)
+    account_source: dict[str, Any] = field(default_factory=dict)
 
 
 def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
@@ -352,6 +354,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     observations: dict[str, Any] = {"workplace_count": 0, "workplaces_complete": False, "financial_records": 0,
                                    "roles_count": 0, "entity_http_status": None, "group_checked": False}
     target_legal_form: str | None = None
+    records: list[dict[str, Any]] = []
 
     async def request(url: str, purpose: str, section: str) -> tuple[Any, str | None, int, datetime, str | None]:
         retrieved = datetime.now(timezone.utc)
@@ -775,4 +778,6 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     terminal = PublicState.AVAILABLE if any(c.section in states and c.state == PublicState.AVAILABLE for c in claims) else (
         PublicState.BLOCKED if any(s == PublicState.BLOCKED for s in states.values()) else
         PublicState.FAILED if any(s == PublicState.FAILED for s in states.values()) else PublicState.NOT_AVAILABLE)
-    return BrregResult(claims, evidence, snapshots, errors, states, terminal, observations)
+    return BrregResult(claims, evidence, snapshots, errors, states, terminal, observations,
+        account_records=records, account_source={"url": account_final or accounts_url,
+            "retrieved_at": account_time, "content_sha256": account_hash, "status": account_status})
