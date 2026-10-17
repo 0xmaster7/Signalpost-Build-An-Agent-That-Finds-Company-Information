@@ -1,5 +1,7 @@
 # Signalpost
 
+**[Results — live evaluation and evidence](RESULTS.md)**
+
 Signalpost researches Norwegian companies by organisation number and returns ordered, evidence-backed JSONL profiles. Its read-only dashboard lets users find saved companies, compare facts, verify propositions and inspect sources and history.
 
 **Status:** the public `main` branch is the canonical release. The [latest measured release](docs/release/FINAL_CAPABILITY_INTEGRATION_2026-10-17.md) recovered 57 additional financial claims and registered workplace locations for 6/6 previously unseen companies. Website, jobs and news coverage remain limited. No official Builderr score or submission is claimed.
