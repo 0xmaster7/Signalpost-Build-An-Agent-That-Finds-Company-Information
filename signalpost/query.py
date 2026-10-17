@@ -192,9 +192,13 @@ FIELD_ALIASES = {
     "total_assets": "total_assets", "equity": "equity", "total_debt": "total_debt",
     "website": "verified_website_url", "role": "role.name", "job": "job_title",
 }
-NUMERIC_FIELDS = {"employees", "revenue", "operating_result", "profit_before_tax", "annual_result",
-                  "total_assets", "equity", "total_debt"}
-FINANCIAL_FIELDS = NUMERIC_FIELDS - {"employees"}
+from .brreg import METRICS as OFFICIAL_FINANCIAL_METRICS
+
+FIELD_ALIASES.update({key: key for key in OFFICIAL_FINANCIAL_METRICS})
+FIELD_ALIASES.update({"registered_address": "business_address",
+    "registered_workplace_address": "registered_workplace_address"})
+FINANCIAL_FIELDS = set(OFFICIAL_FINANCIAL_METRICS)
+NUMERIC_FIELDS = FINANCIAL_FIELDS | {"employees"}
 SINGLE_VALUE_FIELDS = {"name", "public_brand", "legal_form", "municipality", "verified_website_url", "employees"}
 SUPPORTED_OPERATORS = {"eq", "contains", "gt", "gte", "lt", "lte", "range"}
 

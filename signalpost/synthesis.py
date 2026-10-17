@@ -14,11 +14,11 @@ SYNTHESIS_ROOT_KEYS = frozenset({"summary", "brreg_observations", "baseline_iden
 _SYNTHESIS_KEYS = frozenset("""
 summary brreg_observations baseline_identity live_identity_observation cutoff_identity_source
 evidence_cutoff evidence_cutoff_source website_research schema_version mode sentences unknown_sections
-text fact_ids change_ids evidence_ids organisation_number name legal_form as_of source_url content_sha256
+text fact_ids change_ids evidence_ids json_pointer organisation_number name legal_form as_of source_url content_sha256
 state reason fields retrieved_at accounts_state_evidence_id ceo_state entity_http_status
 group_checked rule_id
 entity_removed_from_disclosure financial_records identity_profile identity_state_evidence_id
-business_address employees historical_names industry_codes latest_submitted_accounts
+business_address registered_workplace_address land landkode employees historical_names industry_codes latest_submitted_accounts
 legal_form_description municipality_number parent_organisation_number postal_address status status_dates website
 registrertIForetaksregisteret registrertIMvaregisteret konkurs underAvvikling
 underTvangsavviklingEllerTvangsopplosning registreringsdatoEnhetsregisteret stiftelsesdato
@@ -106,6 +106,11 @@ def _sentence(claim: Any) -> str:
                          "registered_purpose": "Registered purpose"}
     if claim.field in registered_labels and isinstance(claim.value, list) and all(isinstance(line, str) for line in claim.value):
         text = registered_labels[claim.field] + ": " + " ".join(line.strip() for line in claim.value if line.strip())
+    elif claim.field in {"business_address", "postal_address", "registered_workplace_address", "workplace.beliggenhetsadresse", "workplace.postadresse"}:
+        label = {"business_address": "Registered business address", "postal_address": "Registered postal address",
+            "registered_workplace_address": "Registered workplace address",
+            "workplace.beliggenhetsadresse": "Registered workplace location", "workplace.postadresse": "Workplace postal address"}[claim.field]
+        text = label + ": " + _value_text(claim.value) + " (registry record)"
     else:
         text = f"{claim.field}: {_value_text(claim.value)}"
     dimensions = []

@@ -61,7 +61,7 @@ def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
     def address_value(value: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(value, dict) or not value:
             return None
-        return {key: value.get(key) for key in ("adresse", "postnummer", "poststed", "kommunenummer", "kommune") if value.get(key) is not None}
+        return {key: value.get(key) for key in ("adresse", "postnummer", "poststed", "kommunenummer", "kommune", "land", "landkode") if value.get(key) is not None}
     hist = body.get("historiskeNavn") or []
     history = [{"name": h.get("navn"), "from": h.get("fraDato"), "to": h.get("tilDato")} for h in hist if isinstance(h, dict)]
     return {
@@ -73,6 +73,7 @@ def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
         # ENK registration addresses can be an owner's home address; keep them out.
         "business_address": None if legal_form == "ENK" else address_value(address),
         "postal_address": None if legal_form == "ENK" else address_value(postal),
+        "registered_workplace_address": None if legal_form == "ENK" else address_value(body.get("beliggenhetsadresse") or {}),
         "industry_codes": [body.get(f"naeringskode{i}") for i in range(1, 4) if body.get(f"naeringskode{i}")],
         "municipality_number": body.get("kommunenummer") or address.get("kommunenummer"),
         "municipality": body.get("kommune") or address.get("kommune"),
@@ -83,6 +84,23 @@ def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
 
 
 METRICS = {
+    "sales_revenue": "resultatregnskapResultat/driftsresultat/driftsinntekter/salgsinntekter",
+    "operating_costs": "resultatregnskapResultat/driftsresultat/driftskostnad/sumDriftskostnad",
+    "payroll_costs": "resultatregnskapResultat/driftsresultat/driftskostnad/loennskostnad",
+    "net_financial_items": "resultatregnskapResultat/finansresultat/nettoFinans",
+    "tax_expense": "resultatregnskapResultat/ordinaertResultatSkattekostnad",
+    "fixed_assets": "eiendeler/anleggsmidler/sumAnleggsmidler",
+    "current_assets": "eiendeler/omloepsmidler/sumOmloepsmidler",
+    "receivables": "eiendeler/sumFordringer",
+    "cash": "eiendeler/sumBankinnskuddOgKontanter",
+    "paid_in_equity": "egenkapitalGjeld/egenkapital/innskuttEgenkapital/sumInnskuttEgenkaptial",
+    "retained_earnings": "egenkapitalGjeld/egenkapital/opptjentEgenkapital/sumOpptjentEgenkapital",
+    "short_term_debt": "egenkapitalGjeld/gjeldOversikt/kortsiktigGjeld/sumKortsiktigGjeld",
+    "long_term_debt": "egenkapitalGjeld/gjeldOversikt/langsiktigGjeld/sumLangsiktigGjeld",
+    "financial_income": "resultatregnskapResultat/finansresultat/finansinntekt/sumFinansinntekter",
+    "financial_costs": "resultatregnskapResultat/finansresultat/finanskostnad/sumFinanskostnad",
+    "total_comprehensive_result": "resultatregnskapResultat/totalresultat",
+
     "revenue": "resultatregnskapResultat/driftsresultat/driftsinntekter/sumDriftsinntekter",
     "operating_result": "resultatregnskapResultat/driftsresultat/driftsresultat",
     "profit_before_tax": "resultatregnskapResultat/ordinaertResultatFoerSkattekostnad",
@@ -356,6 +374,31 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     target_legal_form: str | None = None
     records: list[dict[str, Any]] = []
 
+    def contact_leads(row: dict[str, Any], url: str, digest: str | None, retrieved: datetime,
+                      status: int, source_name: str, prefix: str = "", *, workplace: bool = False) -> None:
+        # Exact linked registry rows supply leads only; no mailbox or website fact is published.
+        from .websites import registry_contact_leads
+        if not digest:
+            return
+        sid = _source_id(org, source_name, digest, url)
+        for raw, source_field in registry_contact_leads(row):
+            if source_field == "hjemmeside" and not workplace:
+                continue
+            pointer = prefix + "/" + source_field
+            eid = f"{org}:contact-lead:" + hashlib.sha256((url + pointer + raw).encode()).hexdigest()[:20]
+            if any(e.evidence_id == eid for e in evidence):
+                continue
+            evidence.append(Evidence(evidence_id=eid, source_url=url, retrieved_at=retrieved,
+                content_sha256=digest, json_pointer=pointer, extraction_method="brreg_contact_domain_lead_v1",
+                subject_organisation_number=org, source_snapshot_ids=[sid]))
+            if not any(item.source_id == sid for item in snapshots):
+                snapshots.append(SourceSnapshot(source_id=sid, source_url=url, retrieved_at=retrieved,
+                    content_sha256=digest, http_status=status, cache_mode="transient", rights_status=RIGHTS))
+            observations.setdefault("website_candidates", []).append({"raw": raw,
+                "source": "workplace_contact" if workplace else "registry_email", "json_pointer": pointer,
+                "rights_status": RIGHTS, "source_url": url, "content_sha256": digest,
+                "evidence_id": eid, "source_snapshot_id": sid})
+
     async def request(url: str, purpose: str, section: str) -> tuple[Any, str | None, int, datetime, str | None]:
         retrieved = datetime.now(timezone.utc)
         try:
@@ -432,20 +475,21 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             observations["website_candidates"] = [{"raw": identity["website"], "source": "registry_live", "rights_status": "NLOD-2.0",
                 "source_url": entity_final, "content_sha256": entity_hash, "evidence_id": candidate_evidence_id,
                 "source_snapshot_id": candidate_source_id}]
+        contact_leads(entity, entity_final, entity_hash, entity_time, entity_status, "entity")
         identity_source_paths = {
             "organisation_number": "/organisasjonsnummer", "name": "/navn", "legal_form": "/organisasjonsform/kode",
             "legal_form_description": "/organisasjonsform/beskrivelse", "website": "/hjemmeside", "employees": "/antallAnsatte",
             "latest_submitted_accounts": "/sisteInnsendteAarsregnskap", "parent_organisation_number": "/overordnetEnhet",
             "municipality_number": "/kommunenummer" if entity.get("kommunenummer") else "/forretningsadresse/kommunenummer",
             "municipality": "/kommune" if entity.get("kommune") else "/forretningsadresse/kommune",
-            "business_address": "/forretningsadresse", "postal_address": "/postadresse", "status": "/",
+            "business_address": "/forretningsadresse", "postal_address": "/postadresse", "registered_workplace_address": "/beliggenhetsadresse", "status": "/",
             "status_dates": "/", "industry_codes": "/",
         }
-        fields = [(k, v) for k, v in identity.items() if v is not None and k not in {"status", "status_dates", "historical_names", "industry_codes", "business_address", "postal_address", "website"}]
+        fields = [(k, v) for k, v in identity.items() if v is not None and k not in {"status", "status_dates", "historical_names", "industry_codes", "business_address", "postal_address", "registered_workplace_address", "website"}]
         fields.extend((f"status.{k}", v) for k, v in identity["status"].items())
         fields.extend((f"status_dates.{k}", v) for k, v in identity["status_dates"].items())
         fields.extend((f"industry_codes.{i}", v) for i, v in enumerate(identity["industry_codes"]))
-        for key in ("business_address", "postal_address"):
+        for key in ("business_address", "postal_address", "registered_workplace_address"):
             if identity[key]: fields.append((key, identity[key]))
         for key, value in fields:
             pointer = identity_source_paths.get(key, "/")
@@ -455,7 +499,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                 pointer = f"/naeringskode{int(key.rsplit('.', 1)[1]) + 1}"
             add_claim(key, value, "identity_brand", "identity", org, "legal_entity", entity_final, entity_time,
                       entity, pointer, "entity", source_hash=entity_hash,
-                      extraction_method="brreg_json_pointer_projection_v1" if key in {"business_address", "postal_address"} else "brreg_json_pointer_v1")
+                      extraction_method="brreg_json_pointer_projection_v1" if key in {"business_address", "postal_address", "registered_workplace_address"} else "brreg_json_pointer_v1")
         # These are registered statements, not observed dated events or an
         # inferred industry description. Preserve the complete source arrays:
         # their elements can be line wraps rather than independent activities.
@@ -729,6 +773,8 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         child_org = normalize_org_number(item.get("organisasjonsnummer"))[0]
         parent_org = normalize_org_number(item.get("overordnetEnhet"))[0]
         item["organisasjonsnummer"] = child_org
+        contact_leads(item, page_url, page_hash, page_time, 200, "subunits",
+            f"/_embedded/underenheter/{page_row_index}", workplace=True)
         for key in ("organisasjonsnummer", "navn", "beliggenhetsadresse", "postadresse", "naeringskode1", "antallAnsatte", "overordnetEnhet"):
             if target_legal_form == "ENK" and key in {"beliggenhetsadresse", "postadresse"}:
                 continue
@@ -758,9 +804,13 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         observed_at = claim.as_of or claim.period_end
         if observed_at is None and claim.evidence_ids:
             observed_at = evidence_by_id[claim.evidence_ids[0]].retrieved_at
+        # In default live mode these are current registry observations, not historical
+        # events. Explicit evaluator cutoffs keep the original strict date gate.
         current_live_identity = (
             allow_current_identity_after_run_start
-            and claim.section == "identity_brand"
+            and (claim.section == "identity_brand" or (
+                claim.section == "leadership_workplaces" and claim.field_family == "workplace"
+                and claim.scope == "workplace"))
             and claim.as_of is None
             and claim.period_end is None
             and claim.evidence_ids

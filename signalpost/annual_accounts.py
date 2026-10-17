@@ -27,6 +27,27 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 MAX_OCR_SECONDS = 90
 PAGE_PRIORITY = (0, 1, 4, 3, 5, 2, 6)
 LABELS = {
+    "sales_revenue": {'salgsinntekt', 'salgsinntekter'},
+    "operating_costs": {'sum driftskostnader', 'sum kostnader'},
+    "payroll_costs": {'lonnskostnad', 'lonnskostnader'},
+    "net_financial_items": {'netto finansposter', 'netto finans'},
+    "profit_before_tax": {'ordinaert resultat for skattekostnad', 'resultat for skattekostnad'},
+    "tax_expense": {'skattekostnad pa resultat', 'skattekostnad'},
+    "total_assets": {'sum eiendeler'},
+    "fixed_assets": {'sum anleggsmidler'},
+    "current_assets": {'sum omlopsmidler'},
+    "receivables": {'sum fordringer'},
+    "cash": {'sum bankinnskudd kontanter og lignende', 'bankinnskudd kontanter og lignende', 'sum bankinnskudd og kontanter'},
+    "equity": {'sum egenkapital'},
+    "paid_in_equity": {'sum innskutt egenkapital'},
+    "retained_earnings": {'sum opptjent egenkapital'},
+    "total_debt": {'sum gjeld'},
+    "short_term_debt": {'sum kortsiktig gjeld'},
+    "long_term_debt": {'sum langsiktig gjeld'},
+    "financial_income": {'sum finansinntekter'},
+    "financial_costs": {'sum finanskostnader'},
+    "total_comprehensive_result": {'totalresultat'},
+
     "revenue": {"sum inntekter", "sum driftsinntekter", "driftsinntekter i alt"},
     "operating_result": {"driftsresultat"},
     "annual_result": {"arsresultat"},
@@ -140,7 +161,7 @@ def _company_page(page: dict[str, Any], org: str, *, nonparent: bool, notes: boo
         return False
     if notes:
         return bool(re.search(r"noteopplysninger\s*[-:]?\s*selskap", heading))
-    return bool(number) and (nonparent or bool(re.search(r"resultatregnskap\s*[-:]?\s*selskap", heading)))
+    return bool(number) and (nonparent or bool(re.search(r"(?:resultatregnskap|balanse)\s*[-:]?\s*selskap", heading)))
 
 
 def _money_unit(rows: list[list[dict[str, Any]]]) -> tuple[str, Decimal, str] | None:
@@ -167,7 +188,7 @@ def _money_unit(rows: list[list[dict[str, Any]]]) -> tuple[str, Decimal, str] | 
 
 
 def financial_candidates(page: dict[str, Any], org: str, record: dict[str, Any], nonparent: bool) -> list[dict[str, Any]]:
-    if "resultatregnskap" not in fold(page_text(page))[:700] or not _company_page(page, org, nonparent=nonparent):
+    if not re.search(r"\b(?:resultatregnskap|balanse)\b", fold(page_text(page))[:700]) or not _company_page(page, org, nonparent=nonparent):
         return []
     rows = lines(page)
     unit = _money_unit(rows)

@@ -1,0 +1,92 @@
+{
+  "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/930827088/2025": {
+    "reviewed_pages": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "before_final_pixels_identical": true,
+    "page_pixel_hashes": {
+      "1": "e33c6dc171412a0d8e6e96514109dd33e37de3de3e5ee7fcc9483a0a6d6fed8c",
+      "2": "07be38fd2cd0173fbef863709f09e550e874070ca8e06baebb5436e031dd1ec0",
+      "3": "2c573e97a8330d0d4636858222c3b5983a567832b049ceef0e46198d33100b94",
+      "4": "20e81dda176ff33ce7013b033a2cb65f44cbcd8819c65a050b85ce5bbde20589"
+    }
+  },
+  "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/920710514/2025": {
+    "reviewed_pages": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "before_final_pixels_identical": true,
+    "page_pixel_hashes": {
+      "1": "767fe65c92fad9e4fecf9f0c4fe4b88b1f921a193d71be1b913a389250c72a6d",
+      "2": "312e84f73ba61d70e0e4c8043a8daf4abc9f0d97221eec81fdd879721ac98040",
+      "3": "3c5dc1c2b504ebcc5350e68f1a6f695b8f89473524f949935a630b4a6056bb1c",
+      "4": "33a9c7b0331cb5e7b39dd97a9d8ccb91dd6d7b60732899383152e488ba1505bc"
+    }
+  },
+  "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/952780093/2025": {
+    "reviewed_pages": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "before_final_pixels_identical": true,
+    "page_pixel_hashes": {
+      "1": "75ba38c97b8854c54bac8aedf57fd16d21b6742d51737f789302b1284dde5c07",
+      "2": "da9b676b034601ff0a9c6062f81a444dc17fa93eac5c3a261b3128245e4ebdfb",
+      "3": "700645eb8634a11a48651bf3547bc1fb5a48e6d48a1b3f57440bca0bd7561013",
+      "4": "d267a3a1f9650e2f815011c1c7b1a871b4048988ec0f285c7da5599f3fd52c1e"
+    }
+  },
+  "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/993955299/2025": {
+    "reviewed_pages": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "before_final_pixels_identical": true,
+    "page_pixel_hashes": {
+      "1": "8f335421ea17727a76c11fa84ebf049502ace9a02313e6c135c891b8f9e54ef4",
+      "2": "c912d37035a4a2be57b671fff71f42730ee24ea0678021c9b82051652f425866",
+      "3": "cd5455bd115a77368158965005d4ba713ebcc16b58b7de19fea05bcf6d862636",
+      "4": "6a5f8123212c02adf8c493368724406446ab0e9fb8c5f5b0a4bf971f656033b1"
+    }
+  },
+  "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/992936916/2025": {
+    "reviewed_pages": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "before_final_pixels_identical": true,
+    "page_pixel_hashes": {
+      "1": "850bebf68a66a0c53557367528e3db5202239b0fdcd7c716a6bcae8599a0dbbb",
+      "2": "5adafe4312b604c15ecc7ac4117daa2d5dd895a1bc1ee12fb2bba6452a3f51ae",
+      "3": "78f4b95e84d5ec3d41c4df176b4e747848126b7ed947c9dc0e1c55ec9d7b700c",
+      "4": "8cd1dcca65e29bccedcb958f80e4ccd3e1f69ff1be48f38d094884bec3eec30f"
+    }
+  },
+  "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/924356715/2025": {
+    "reviewed_pages": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "before_final_pixels_identical": true,
+    "page_pixel_hashes": {
+      "1": "d1489933fc26e5166fa7e39b7857ac869328732638af04b3b41661addebcb09a",
+      "2": "ddba8a6faba5d2680a81d3b9c98a89a8830d5d04eff6d385b220f08f8d9dd93c",
+      "3": "11db35c640a6d672c9ef9c308e9c6808274401f5b77286907db60a6b4f04a422",
+      "4": "d2d12db8f3a38663f4349d977fb56d4eab3b3f56ee377da031c281bc7290b696"
+    }
+  }
+}

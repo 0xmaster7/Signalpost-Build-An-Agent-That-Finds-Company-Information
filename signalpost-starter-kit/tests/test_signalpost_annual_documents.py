@@ -74,3 +74,41 @@ def test_parent_requires_explicit_standalone_scope_and_joined_ocr_unit_label():
     pages[0]["words"].append(word("Konsernregnskap lagt ved: Nei",10,90,600))
     pages[1]["words"][2]["text"]="Belopi:NOK"
     assert len(reconcile(pages,ORG,record)["financial"])==3
+
+
+def test_balance_sheet_metrics_reconcile_individually():
+    pages,record=sample()
+    balance=dict(page=3,width=1000,words=[word("Organisasjonsnr: "+ORG,10,10,500),
+        word("BALANSE",10,30,500),word("Belop i: TNOK",10,50,200),word("2025",650,50,50),word("2024",850,50,50)])
+    labels={"total_assets":"Sum eiendeler","equity":"Sum egenkapital","total_debt":"Sum gjeld",
+        "fixed_assets":"Sum anleggsmidler","current_assets":"Sum omlopsmidler",
+        "receivables":"Sum fordringer","cash":"Sum bankinnskudd og kontanter",
+        "paid_in_equity":"Sum innskutt egenkapital","retained_earnings":"Sum opptjent egenkapital",
+        "short_term_debt":"Sum kortsiktig gjeld","long_term_debt":"Sum langsiktig gjeld"}
+    for i,(metric,label) in enumerate(labels.items()):
+        value=i+1;record["metrics"][metric]=value*1000
+        balance['words'] += [word(label,10,90+i*20,400),word(str(value),650,90+i*20,50),word('99',850,90+i*20,50)]
+    out=reconcile(pages+[balance],ORG,record)
+    values={c['metric']:c['value'] for c in out['financial']}
+    assert all(values[m]==record['metrics'][m] for m in labels)
+    record['metrics']['equity']+=1
+    out=reconcile(pages+[balance],ORG,record)
+    assert 'equity' in out['conflicts'] and 'total_assets' in {c['metric'] for c in out['financial']}
+    balance['words'][1]['text']='BALANSE - KONSERN'
+    assert 'total_assets' not in {c['metric'] for c in reconcile(pages+[balance],ORG,record)['financial']}
+
+
+def test_extended_income_rows_require_json_and_correct_year():
+    pages,record=sample()
+    fields={'operating_costs':'Sum kostnader','payroll_costs':'Lonnskostnader',
+        'profit_before_tax':'Resultat for skattekostnad','tax_expense':'Skattekostnad pa resultat',
+        'net_financial_items':'Netto finans','sales_revenue':'Salgsinntekter',
+        'financial_income':'Sum finansinntekter','financial_costs':'Sum finanskostnader',
+        'total_comprehensive_result':'Totalresultat'}
+    for i,(metric,label) in enumerate(fields.items()):
+        record['metrics'][metric]=i*100
+        pages[1]['words'] += [word(label,10,170+i*20,400),word(str(i*100),650,170+i*20,50),word('99',850,170+i*20,50)]
+    got={c['metric'] for c in reconcile(pages,ORG,record)['financial']}
+    assert set(fields)<=got
+    record['metrics'].pop('tax_expense')
+    assert 'tax_expense' not in {c['metric'] for c in reconcile(pages,ORG,record)['financial']}

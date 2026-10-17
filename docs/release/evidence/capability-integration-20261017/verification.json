@@ -1,0 +1,23 @@
+{
+  "actual_live_source_runs": true,
+  "baseline_sha": "8076e1b627cf1bdac00f9a241fdf6c6bf1831af8",
+  "six_input_six_output_verified": true,
+  "all_financial_and_workplace_evidence_hashes_bind_to_captured_live_responses": true,
+  "manual_financial_review": "71 published values compared with rendered 2025 statement/balance rows across all six filings; covers checked for identity, period and standalone scope",
+  "wrong_company_findings": 0,
+  "source_failure": "No inaccessible PDFs in completed paired runs; all six downloads succeeded in each",
+  "publication_repair": "new contact-candidate json_pointer key added to closed synthesis whitelist; final live checkpoints republished with --resume; zero physical HTTP during resume",
+  "targeted_tests": 165,
+  "targeted_subtests": 47,
+  "dependencies_changed": false,
+  "new_runtime_credentials": false,
+  "network_closed": true,
+  "offline_refresh": {
+    "financial_claims": 71,
+    "workplace_claims": 37,
+    "fte_claims": 4,
+    "envelopes": 6,
+    "changes": 0,
+    "actual_http_attempts": 0
+  }
+}

@@ -36,8 +36,10 @@ def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[s
         identity = live_result.observations.get("identity_profile") or {}
         profile.update(identity)
         profile["website_candidates"] = list(live_result.observations.get("website_candidates", []))
+        person_evidence = {e.evidence_id for e in live_result.evidence if e.extraction_method == "brreg_role_name_join_v1"}
         profile["registered_roles"] = [str(claim.value) for claim in live_result.claims
-            if claim.section == "leadership_workplaces" and claim.field == "role.role_description" and isinstance(claim.value, str)]
+            if claim.section == "leadership_workplaces" and claim.field == "role.name" and claim.scope == "person_role" and isinstance(claim.value, str)
+            and person_evidence.intersection(claim.evidence_ids)]
         parent = identity.get("parent_organisation_number") or live_result.observations.get("parent_organisation_number")
         if parent:
             profile["related_organisation_numbers"] = [str(parent)]
@@ -830,7 +832,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--network-policy", choices=("direct", "trusted-proxy"), default=os.environ.get("SIGNALPOST_NETWORK_POLICY", "direct"))
     parser.add_argument("--live-brreg", action="store_true", help="Fetch official BRREG sections through the centralized gateway")
     parser.add_argument("--live-websites", action="store_true", help="Discover and verify website candidates through the centralized gateway")
-    parser.add_argument("--no-keyless-websites", action="store_true", help="Disable conservative one-candidate .no discovery")
+    parser.add_argument("--no-keyless-websites", action="store_true", help="Disable bounded distinctive-name .no discovery")
     parser.add_argument("--batch-id")
     return run(parser.parse_args(argv))
 

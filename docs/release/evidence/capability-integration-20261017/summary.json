@@ -1,0 +1,85 @@
+{
+  "before": {
+    "companies": 6,
+    "counts": {
+      "financial": 6,
+      "workforce_fte": 4,
+      "registered_locations": 6,
+      "registered_workplace_locations": 0,
+      "verified_websites": 0,
+      "public_profiles": 0,
+      "jobs": 0,
+      "dated_activity": 0
+    },
+    "claim_counts": {
+      "financial": 14,
+      "workforce_fte": 4,
+      "registered_locations": 6,
+      "registered_workplace_locations": 0,
+      "verified_websites": 0,
+      "public_profiles": 0,
+      "jobs": 0,
+      "dated_activity": 0
+    },
+    "metric_company_counts": {
+      "revenue": 3,
+      "operating_result": 5,
+      "annual_result": 6
+    },
+    "runtime": 183.22593998200318
+  },
+  "final": {
+    "companies": 6,
+    "counts": {
+      "financial": 6,
+      "workforce_fte": 4,
+      "registered_locations": 6,
+      "registered_workplace_locations": 6,
+      "verified_websites": 0,
+      "public_profiles": 0,
+      "jobs": 0,
+      "dated_activity": 0
+    },
+    "claim_counts": {
+      "financial": 71,
+      "workforce_fte": 4,
+      "registered_locations": 12,
+      "registered_workplace_locations": 6,
+      "verified_websites": 0,
+      "public_profiles": 0,
+      "jobs": 0,
+      "dated_activity": 0
+    },
+    "metric_company_counts": {
+      "operating_costs": 3,
+      "net_financial_items": 6,
+      "profit_before_tax": 6,
+      "total_assets": 5,
+      "fixed_assets": 5,
+      "current_assets": 6,
+      "receivables": 6,
+      "financial_income": 4,
+      "financial_costs": 5,
+      "revenue": 3,
+      "operating_result": 5,
+      "annual_result": 6,
+      "payroll_costs": 4,
+      "total_comprehensive_result": 2,
+      "tax_expense": 2,
+      "sales_revenue": 1,
+      "paid_in_equity": 2
+    },
+    "runtime": 197.5470801019983,
+    "publication_resume_seconds": 1.600541735009756
+  },
+  "additional_financial_claims": 57,
+  "additional_registered_workplace_address_claims": 6,
+  "new_workplace_facts": 37,
+  "new_workplace_address_including_postal": 7,
+  "physical_http_total": 100,
+  "physical_http_by_wave": {
+    "before": 34,
+    "after": 32,
+    "final": 34
+  }
+}

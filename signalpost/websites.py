@@ -155,6 +155,38 @@ def sanitize_registry_websites(value: Any) -> list[dict[str, str]]:
     return results
 
 
+FREE_EMAIL_DOMAINS = frozenset({"gmail.com", "hotmail.com", "hotmail.no", "outlook.com", "outlook.no",
+    "live.com", "live.no", "yahoo.com", "yahoo.no", "icloud.com", "me.com", "online.no", "frisurf.no"})
+
+
+def registry_contact_leads(row: dict[str, Any]) -> list[tuple[str, str]]:
+    """Return registry contact-domain leads; mailboxes never become published facts."""
+    result = []
+    # Homepages are already handled for legal entities, but are new for verified workplaces.
+    for candidate in sanitize_registry_websites(row.get("hjemmeside")):
+        result.append((candidate["url"], "hjemmeside"))
+    raw = row.get("epostadresse")
+    if isinstance(raw, str):
+        match = re.fullmatch(r"[^\s@]+@([^\s@]+)", raw.strip())
+        if match:
+            host = match.group(1).casefold().rstrip(".")
+            if re.fullmatch(r"[A-Za-z0-9\u00c0-\u024f.-]+\.[A-Za-z\u00c0-\u024f]{2,}", host) and host not in FREE_EMAIL_DOMAINS and not any(host.endswith("." + d) for d in FREE_EMAIL_DOMAINS):
+                clean = _clean_url("https://" + host + "/")
+                if clean and not _host_social(host):
+                    result.append((clean, "epostadresse"))
+    return list(dict.fromkeys(result))
+
+
+def additional_no_candidates(legal_name: str) -> list[str]:
+    """Bounded distinctive name variants, each requiring the existing hard identity gate."""
+    original = keyless_no_candidate(legal_name)
+    if not original:
+        return []
+    host = urllib.parse.urlsplit(original).hostname or ""
+    joined = host.replace("-", "")
+    return list(dict.fromkeys([original, "https://" + joined + "/"]))[:2]
+
+
 def keyless_no_candidate(legal_name: str) -> str | None:
     """Generate one conservative .no candidate, without searching or network access."""
     tokens = _distinctive_tokens(legal_name)
@@ -1128,7 +1160,7 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
                     "operator_name": compatible_name, "operator_organisation_number": org,
                     "address_match": address, "identity_block_sha256": hashlib.sha256(block.encode()).hexdigest(),
                     "resource_url": page.final_url})
-        if candidate_source == "keyless_no" and address and (role or has_contact_endpoint):
+        if candidate_source in {"keyless_no", "registry_email", "workplace_contact"} and address and (role or has_contact_endpoint):
             return final_acceptance_gate({"method": "keyless_contact_identity", "subject_scope": "site_operator",
                     "operator_name": compatible_name, "operator_organisation_number": org,
                     "address_match": address, "registered_role": role,
@@ -1779,10 +1811,11 @@ def _source_evidence(candidate: dict[str, Any], evidence: list[Evidence], snapsh
     evidence_id = candidate.get("evidence_id") or f"registry-site-candidate:{digest[:16]}"
     source_id = candidate.get("source_snapshot_id") or f"brreg:entity:{digest[:16]}"
     extraction_method = ("frozen_registry_jsonl_v1" if candidate.get("source") == "registry_frozen"
+                         else "brreg_contact_domain_lead_v1" if candidate.get("source") in {"registry_email", "workplace_contact"}
                          else "brreg_website_candidate_v1")
     if not any(item.evidence_id == evidence_id for item in evidence):
         evidence.append(Evidence(evidence_id=evidence_id, source_url=url, retrieved_at=datetime.now(timezone.utc),
-            content_sha256=digest, extraction_method=extraction_method, json_pointer="/hjemmeside", source_class="official",
+            content_sha256=digest, extraction_method=extraction_method, json_pointer=candidate.get("json_pointer") or "/hjemmeside", source_class="official",
             subject_organisation_number=org, source_snapshot_ids=[source_id]))
     if not any(item.source_id == source_id for item in snapshots):
         snapshots.append(SourceSnapshot(source_id=source_id, source_url=url, retrieved_at=datetime.now(timezone.utc),
@@ -1848,10 +1881,13 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     "discovery": source_ref.get("discovery") if isinstance(source_ref, dict) else None}
                 if candidate not in candidates:
                     candidates.append(candidate)
-        if not any(item["kind"] == "website" for item in candidates) and enable_keyless:
-            guessed = keyless_no_candidate(str(profile.get("name") or ""))
-            if guessed:
-                candidates.append({"url": guessed, "kind": "website", "source": "keyless_no", "source_ref": {}})
+        if enable_keyless:
+            for guessed in additional_no_candidates(str(profile.get("name") or "")):
+                if not any(item["url"] == guessed for item in candidates):
+                    candidates.append({"url": guessed, "kind": "website", "source": "keyless_no", "source_ref": {}})
+        # Candidate budgets are shared with the existing crawl cap, never per lead.
+        seen_urls = set()
+        candidates = [item for item in candidates if not (item["url"] in seen_urls or seen_urls.add(item["url"]))][:6]
         output.audit = {"organisation_number": org, "candidate_count": len(candidates), "candidates": [],
             "accepted_domains": [], "page_count": 0, "page_requests": 0, "pages": [], "request_count_scope": "batch_gateway_metrics", "request_outcomes": {},
             "crawl_state": "not_started", "website_claim_families": [], "high_risk_review": [],

@@ -1,0 +1,115 @@
+{
+  "seed": "signalpost-capability-unseen-employer-20261017-v1",
+  "selection": "six minimum SHA256 seeded values among previously unseen AS with at least five registry employees; before any source outcomes",
+  "excluded_org_count": 559,
+  "rows": [
+    [
+      "0000a736fa462d699a226aac59b013b80530e15c06b592328c2fe7f6418b5aa6",
+      "930827088",
+      {
+        "organisation_number": "930827088",
+        "name": "ROMERIKE BARNEHAGE - SOLHAUG AS",
+        "legal_form": "AS",
+        "employees": 23,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "LILLESTR\u00d8M",
+        "municipality_number": "3205",
+        "industry_code": "85.100",
+        "industry_label": "F\u00f8rskoleundervisning og drift av barnehager",
+        "website": "romerikebarnehage.no",
+        "latest_submitted_accounts": "2025"
+      }
+    ],
+    [
+      "00017f2349ad849d36fa5e045ae3b5aca8291839f5ef63d7f472c4977cb02f58",
+      "920710514",
+      {
+        "organisation_number": "920710514",
+        "name": "LAUVVERKET AS",
+        "legal_form": "AS",
+        "employees": 11,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "H\u00c6GEBOSTAD",
+        "municipality_number": "4226",
+        "industry_code": "02.100",
+        "industry_label": "Skogskj\u00f8tsel og andre skogbruksaktiviteter",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      }
+    ],
+    [
+      "0002239aa7e024afd231dd2b0411f7057f56c256e40098b5a45ef56b15bad47c",
+      "952780093",
+      {
+        "organisation_number": "952780093",
+        "name": "PAUL AS",
+        "legal_form": "AS",
+        "employees": 6,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "DRAMMEN",
+        "municipality_number": "3301",
+        "industry_code": "47.710",
+        "industry_label": "Detaljhandel med kl\u00e6r",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      }
+    ],
+    [
+      "00033b2df85330f54a57de6da5086bffdab4269d94c5a5ce9f6a8b087eb3a362",
+      "993955299",
+      {
+        "organisation_number": "993955299",
+        "name": "RISINGVEIEN MAT AS",
+        "legal_form": "AS",
+        "employees": 34,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "SKIEN",
+        "municipality_number": "4003",
+        "industry_code": "47.110",
+        "industry_label": "Detaljhandel med bredt vareutvalg med hovedvekt p\u00e5 n\u00e6rings- og nytelsesmidler",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      }
+    ],
+    [
+      "0005430e420915d6d55cf6c389db8908f1a81127de87e5dda5d80310cef609f1",
+      "992936916",
+      {
+        "organisation_number": "992936916",
+        "name": "KVISTE MASKIN AS",
+        "legal_form": "AS",
+        "employees": 6,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "ALVER",
+        "municipality_number": "4631",
+        "industry_code": "43.120",
+        "industry_label": "Grunnarbeid",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      }
+    ],
+    [
+      "00058c94a08ea1e693a6496173138bb0b6f29b2d61f937f26c4aa0f069e74ee9",
+      "924356715",
+      {
+        "organisation_number": "924356715",
+        "name": "TRAFIKKDRIFT AS",
+        "legal_form": "AS",
+        "employees": 30,
+        "bankrupt": false,
+        "liquidating": false,
+        "municipality": "FREDRIKSTAD",
+        "municipality_number": "3107",
+        "industry_code": "77.320",
+        "industry_label": "Utleie og leasing av bygge- og anleggsmaskiner og -utstyr",
+        "website": "",
+        "latest_submitted_accounts": "2025"
+      }
+    ]
+  ]
+}
