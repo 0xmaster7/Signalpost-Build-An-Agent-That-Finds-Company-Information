@@ -1,0 +1,404 @@
+{
+  "measurement_kind": "submission_dry_run",
+  "accepted_production_sha": "64f69071b241614a1826c342ef65020db7a125d4",
+  "package_change_scope": "documentation/evidence only; final exact package SHA and CI supplied in owner handoff",
+  "official_materials": [
+    {
+      "name": "challenge",
+      "url": "https://builderr.ai/challenges/signalpost",
+      "retrieved_at": "2026-10-17T07:46:07.854450+00:00",
+      "status": 200,
+      "bytes": 122506,
+      "sha256": "0ca208314733da21e104df0e1f1adad4f7bcffa67b4e1f7c1550290d0b80e4c3",
+      "bundled_capture": null,
+      "note": "Successful current source fetch/hash receipt; a bundled capture is identified only when byte-identical. /rules 404 was corrected by following the actual /guidelines link."
+    },
+    {
+      "name": "evaluation",
+      "url": "https://builderr.ai/docs/signalpost-evaluation-harness.md",
+      "retrieved_at": "2026-10-17T07:46:07.967197+00:00",
+      "status": 200,
+      "bytes": 7137,
+      "sha256": "e9f994e2fa34750411487e9fab82dbffd55dc1bb16efe9021906b92896229d45",
+      "bundled_capture": "docs/vendor/evaluation-harness.md",
+      "note": "Successful current source fetch/hash receipt; a bundled capture is identified only when byte-identical. /rules 404 was corrected by following the actual /guidelines link."
+    },
+    {
+      "name": "brief",
+      "url": "https://builderr.ai/starter-briefs/signalpost.md",
+      "retrieved_at": "2026-10-17T07:46:08.031323+00:00",
+      "status": 200,
+      "bytes": 10351,
+      "sha256": "924ff60e1dab437c63806846aa19eaa29d84d8e87132983c4e5d9f7336214c32",
+      "bundled_capture": "docs/vendor/starter-brief.md",
+      "note": "Successful current source fetch/hash receipt; a bundled capture is identified only when byte-identical. /rules 404 was corrected by following the actual /guidelines link."
+    },
+    {
+      "name": "sources",
+      "url": "https://builderr.ai/starter-briefs/signalpost-sources.md",
+      "retrieved_at": "2026-10-17T07:46:08.090791+00:00",
+      "status": 200,
+      "bytes": 2567,
+      "sha256": "f080470ab29d5c6da243d812e35d0ae0aa3d35f5871d62dfef90422df1b8f630",
+      "bundled_capture": "docs/vendor/source-policy.md",
+      "note": "Successful current source fetch/hash receipt; a bundled capture is identified only when byte-identical. /rules 404 was corrected by following the actual /guidelines link."
+    },
+    {
+      "name": "rules",
+      "url": "https://builderr.ai/rules",
+      "retrieved_at": "2026-10-17T07:46:08.189522+00:00",
+      "error": "HTTP Error 404: Not Found",
+      "bundled_capture": null,
+      "note": "Successful current source fetch/hash receipt; a bundled capture is identified only when byte-identical. /rules 404 was corrected by following the actual /guidelines link."
+    },
+    {
+      "name": "starter",
+      "url": "https://builderr.ai/signalpost-starter-kit.tar.gz",
+      "retrieved_at": "2026-10-17T07:46:08.247102+00:00",
+      "status": 200,
+      "bytes": 252373,
+      "sha256": "d48da9910ea7de07d2bf51ab265539a35fe07002a6c1ca5787df81316dfabbf6",
+      "bundled_capture": null,
+      "note": "Successful current source fetch/hash receipt; a bundled capture is identified only when byte-identical. /rules 404 was corrected by following the actual /guidelines link."
+    },
+    {
+      "name": "guidelines",
+      "url": "https://builderr.ai/guidelines",
+      "status": 200,
+      "bytes": 62591,
+      "sha256": "34f944f4c298a7ed96758fd976e15d1687ff737f6ee9f8e543b7d2d23c6fe4d8",
+      "bundled_capture": null,
+      "note": "Successful current source fetch/hash receipt; a bundled capture is identified only when byte-identical. /rules 404 was corrected by following the actual /guidelines link."
+    }
+  ],
+  "starter_source_comparison": {
+    "scripts/run_competition_batch.py": {
+      "official_sha256": "6a94af56290434181731ff61834cc09507a95aacb79ac655b8afb8ff60570962",
+      "repository_sha256": "6a94af56290434181731ff61834cc09507a95aacb79ac655b8afb8ff60570962",
+      "identical": true
+    },
+    "src/norway_company_agent/batch.py": {
+      "official_sha256": "645e4df1e079102c526322a33eb4549b1febf9855e601c2ab7a640077bfe9654",
+      "repository_sha256": "645e4df1e079102c526322a33eb4549b1febf9855e601c2ab7a640077bfe9654",
+      "identical": true
+    }
+  },
+  "starter_offline_run": {
+    "run_id": "submission-dry-run",
+    "started_at": "2026-10-17T07:50:22.577561Z",
+    "completed_at": "2026-10-17T07:50:22.579960Z",
+    "expected_count": 2,
+    "emitted_envelopes": 2,
+    "resumed_profiles": 0,
+    "profiles_fetched_this_run": 2,
+    "modules": [
+      "registry",
+      "accounting_obligation"
+    ],
+    "registry": {
+      "registry_snapshot_sha256": "43406d3af1ef2d7b44bbb9238ac518f3a7e801ecb3e8b0247c1cffcbc8875abe",
+      "registry_rows_scanned": 2,
+      "requested": 2,
+      "selected": 2
+    },
+    "operations": {
+      "requests": 0,
+      "bytes": 0,
+      "p50_ms": null,
+      "p95_ms": null
+    },
+    "validation": {
+      "passed": true,
+      "checks": {
+        "exact_expected_count": true,
+        "unique_organisation_numbers": true,
+        "all_entity_states_terminal": true,
+        "all_module_states_terminal": true,
+        "zero_silent_drops": true
+      },
+      "invalid_states": []
+    }
+  },
+  "documented_command": {
+    "source_sha": "64f69071b241614a1826c342ef65020db7a125d4",
+    "clean_clone": true,
+    "unfamiliar_cwd": true,
+    "pythonpath_unset": true,
+    "rows": 4,
+    "order_and_duplicates_preserved": true,
+    "unique_input_refs": true,
+    "terminal_states": [
+      "available",
+      "available",
+      "available",
+      "available"
+    ],
+    "json_strict_parse": true,
+    "stdout_json_report": true,
+    "stderr_bytes": 0,
+    "exit_code": 0,
+    "resume_exit_code": 0,
+    "physical_requests": 0,
+    "output_sha256": "73f2188e2214437431522396a70be0ae4b4b44285a116f299e5692a69916dfa6"
+  },
+  "independent_acceptance": {
+    "measurement_kind": "independent_process_json_http_acceptance",
+    "source_sha": "64f69071b241614a1826c342ef65020db7a125d4",
+    "dirty": false,
+    "official_schema_available": false,
+    "network_acquisition": false,
+    "real_data_sha256": "917c7cd2ba6b7bba3fb44d1b7327057b3f129b092137d5b477c08a1f47de2815",
+    "cases": {
+      "single": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "2f03913b5668cebf710ad88c2256d40b7df223b68c12636d2b06f42972652320"
+      },
+      "array": {
+        "status": "PASS",
+        "rows": 3,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "d626f9e545207d7377b2028bbfcc1e76dfc3d127f63980d54aa7c263b32dd94d"
+      },
+      "starter_wrapper": {
+        "status": "PASS",
+        "rows": 2,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "4924674485c89b277574b20cd860b62b6a081d614e0de2533ae457f29382811e"
+      },
+      "csv": {
+        "status": "PASS",
+        "rows": 2,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "d0e4fb1cd23de10f24c90703b75ebed185a0048c0c81d9740e50209e5eaa5363"
+      },
+      "malformed": {
+        "status": "PASS",
+        "rows": 4,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "failed",
+          "failed",
+          "failed"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "c61f42cffa54db664cd4727a174aa09e36fff63adf93c7f8974674a96ee3eeaf"
+      },
+      "resume": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "f4a7d3052e4f0db4c7a1ce2e8430fb471a417ef1dc0c51c8e66de4e90524bca2"
+      },
+      "baseline": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "1b162dd370ea1fe55bacb4dbb6ca53e9bd483b64750d7c59bbf56d1082d62b90"
+      },
+      "changed": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "917c7cd2ba6b7bba3fb44d1b7327057b3f129b092137d5b477c08a1f47de2815"
+      },
+      "repeated": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "df66c72a49bdfc732185859caaaa690cf7f07a1393f3c766269eb041c04b51e6"
+      },
+      "growing_batch": {
+        "status": "PASS",
+        "rows": 3,
+        "exit_code": 0,
+        "terminal_states": [
+          "available",
+          "available",
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "387d69a141809ce6221a9b6a1a8924c58a4036a27ef35d7f2ee1296892205d1a"
+      },
+      "subset_batch": {
+        "status": "PASS",
+        "rows": 1,
+        "exit_code": 0,
+        "terminal_states": [
+          "available"
+        ],
+        "stderr_bytes": 0,
+        "physical_requests": 0,
+        "output_sha256": "d128ea15fb9eba42ee09d39ae91907ddf9c953c2d88be36b19b343182afb09f5"
+      },
+      "missing_input": {
+        "status": "PASS",
+        "exit_code": 2
+      },
+      "http_controlled_records": {
+        "status": "PASS",
+        "number_search": "PASS",
+        "verify_supported_contradicted": "PASS",
+        "source_url_and_hash": "PASS",
+        "unknown_history": "PASS"
+      },
+      "mixed_invalid_input_dashboard": {
+        "status": "PASS",
+        "invalid_rows_visible": 2
+      },
+      "controlled_source_failures": {
+        "not_found": {
+          "status": "PASS",
+          "terminal_state": "not_available",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 0
+        },
+        "refused": {
+          "status": "PASS",
+          "terminal_state": "blocked",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 0
+        },
+        "timeout": {
+          "status": "PASS",
+          "terminal_state": "failed",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 0
+        },
+        "partial": {
+          "status": "PASS",
+          "terminal_state": "available",
+          "exit_code": 0,
+          "actual_http_requests": 0,
+          "controlled_transport": true,
+          "claims": 5
+        }
+      }
+    },
+    "passed": true
+  },
+  "growing_scale": {
+    "baseline1000": {
+      "passed": true,
+      "exit_code": 0,
+      "rows": 1000,
+      "state_companies": 1000,
+      "seconds": 5.135,
+      "physical_requests": 0,
+      "changes": 0,
+      "output_sha256": "551a440462be140574137f565a305e0c7af2e8b61cd625a6b89516e28ffc9851"
+    },
+    "expanded1100": {
+      "passed": true,
+      "exit_code": 0,
+      "rows": 1100,
+      "state_companies": 1100,
+      "seconds": 6.041,
+      "physical_requests": 0,
+      "changes": 1,
+      "output_sha256": "c9c37e453bfe0c94c8de46d10030e540baa40c743aa771fcc114412738dd1f1a"
+    },
+    "subset2": {
+      "passed": true,
+      "exit_code": 0,
+      "rows": 2,
+      "state_companies": 1100,
+      "seconds": 1.014,
+      "physical_requests": 0,
+      "changes": 0,
+      "output_sha256": "a04e0fb7be03c8501543061c550162abd8534b33f723101ba19989dad7dccfda"
+    },
+    "repeated1100": {
+      "passed": true,
+      "exit_code": 0,
+      "rows": 1100,
+      "state_companies": 1100,
+      "seconds": 6.245,
+      "physical_requests": 0,
+      "changes": 0,
+      "output_sha256": "7d860ad3292c1ccfc4c7b6d86d0bcd1b2e421aba43ccc33d5ab2249a044a054f"
+    }
+  },
+  "fresh_install": {
+    "status": "PASS after retry",
+    "python": "3.12.3",
+    "uv": "0.8.0",
+    "installed_distributions": 50,
+    "lock_sha256": "40d47bd127ba8673b19d03276d7aa9cd96d2a35bd04cfc226ef8f40d22506633",
+    "initial_uncached_failure": "PyPI dateparser wheel transport timeout after retries; log preserved outside repository",
+    "retry": "Declared frozen sync succeeded in empty checkout venv, using normal uv cache and UV_HTTP_TIMEOUT=120; no lock/dependency change"
+  },
+  "publication_scan": {
+    "scope": "all blobs reachable from all local refs, including origin branches and history; not remote reflogs/deleted GitHub objects",
+    "blob_count": 442,
+    "binary_blobs_skipped": 7,
+    "tracked_files": 223,
+    "suspicious_tracked_paths": [],
+    "findings": [],
+    "notes": "Pattern-based review; no secret values printed. Findings require manual contextual classification; this cannot prove absence of every possible secret."
+  },
+  "historical_100_report": {
+    "path": "docs/release/M12_POST_REPAIR_LIVE_ACCEPTANCE_2026-10-10.md",
+    "sha256": "5e822269b4d4271fdc577ebba7577ecd03f134f9650d46647e388308fba6efeb",
+    "raw_bundle_available": false,
+    "current_sha_live_revalidation": false
+  },
+  "new_live_company_requests": 0,
+  "paid_services": false,
+  "submission_status": "NOT_SUBMITTED",
+  "repository_visibility": "PRIVATE"
+}

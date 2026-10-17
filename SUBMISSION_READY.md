@@ -1,3 +1,15 @@
+# Current submission dry-run status — 2026-10-17
+
+Accepted product checkpoint: `64f69071b241614a1826c342ef65020db7a125d4`. The UI has owner acceptance and is frozen. The final package adds documentation/evidence only; its exact commit and CI are named in the owner handoff (`git rev-parse HEAD`).
+
+**Engineering dry run: see [current results](submission/DRY_RUN.md). External submission remains HOLD pending owner authorization, verified organizer access, contact completion and acceptance/clarification of the unpublished parser/handoff.** No submission, repository publication, access change or licence grant has been performed. The repository remains PRIVATE.
+
+Use the [artifact index](submission/ARTIFACTS.md), [run guide](submission/README.md), [self-contained historical 100-company report](submission/HISTORICAL_100_COMPANY_SMOKE.md), and [unsent submission draft](submission/DRAFT_SUBMISSION.md). Historical reports below are earlier checkpoints, not current package identifiers. Current approved live-test usage is 78/80; this dry run adds zero company-data requests. Coverage limits are disclosed; no official score or qualification is claimed.
+
+---
+
+# Historical status records (preserved)
+
 # Current final mission status — 2026-10-17
 
 **HOLD for external submission.** The repaired implementation is `4e5aacbb1d9793095e6c89eb06f56b496324c814`; the documentation package has its own final SHA and requires exact-SHA green CI, reported in the handoff. See [the current validation report](docs/release/FINAL_RELEASE_VALIDATION_2026-10-17.md), [machine-readable sample evidence](docs/release/FINAL_VALIDATION_2026-10-17.json), and [submission/demo instructions](submission/README.md).

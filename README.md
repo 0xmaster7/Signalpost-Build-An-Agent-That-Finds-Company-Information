@@ -1,5 +1,7 @@
 # Signalpost
 
+**Final submission dry run:** [results and remaining decisions](submission/DRY_RUN.md), [complete artifact index](submission/ARTIFACTS.md), and [unsent Builderr draft](submission/DRAFT_SUBMISSION.md). UI/backend design is frozen at the accepted `64f6907` checkpoint.
+
 Latest product UI review: [visual acceptance and integrity evidence](docs/ui-ux-acceptance-20261017/REPORT.md).
 
 Latest evaluator and growing-batch acceptance: [final report](docs/final-evaluator-acceptance-20261017/REPORT.md).
