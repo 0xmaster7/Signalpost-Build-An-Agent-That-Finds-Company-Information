@@ -1,0 +1,60 @@
+{
+  "kind": "saved-source OCR/parser regression, not live evaluation",
+  "physical_http_requests": 0,
+  "companies": [
+    {
+      "organisation_number": "930827088",
+      "financial_claims": 12,
+      "fte_claims": 1,
+      "unchanged": true,
+      "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/930827088/2025",
+      "pdf_sha256": "423e74bcc4b89c994e1c78667037243d3559323b81eb82d3b593231311b3027c"
+    },
+    {
+      "organisation_number": "920710514",
+      "financial_claims": 11,
+      "fte_claims": 1,
+      "unchanged": true,
+      "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/920710514/2025",
+      "pdf_sha256": "53593aed2956881e1bc9cd7e4c5fcbdd621c447d409036007478dc0435b7a62a"
+    },
+    {
+      "organisation_number": "952780093",
+      "financial_claims": 12,
+      "fte_claims": 0,
+      "unchanged": true,
+      "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/952780093/2025",
+      "pdf_sha256": "ea6a6bacb314f6347c75aa38a0c85569534bf914e6367b5376fea09c41089c1b"
+    },
+    {
+      "organisation_number": "993955299",
+      "financial_claims": 12,
+      "fte_claims": 1,
+      "unchanged": true,
+      "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/993955299/2025",
+      "pdf_sha256": "978e0879d0beeeea8e1b7fa817b969933fd212a3e8ffe2e679d3567db503ea11"
+    },
+    {
+      "organisation_number": "992936916",
+      "financial_claims": 14,
+      "fte_claims": 1,
+      "unchanged": true,
+      "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/992936916/2025",
+      "pdf_sha256": "c7971d758e1d706169c40acec5f6c63788f58d7fc40c546b2f376974a84e0b46"
+    },
+    {
+      "organisation_number": "924356715",
+      "financial_claims": 10,
+      "fte_claims": 0,
+      "unchanged": true,
+      "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi/924356715/2025",
+      "pdf_sha256": "7c40048cd982a7eba042487cb79b3a80b356cf4e702a58bded02a164a2992727"
+    }
+  ],
+  "financial_claims": 71,
+  "fte_claims": 4,
+  "baseline_commit": "a9d0bc8b4aad5d1d7baec58f2ad20aa4686315a6",
+  "parser_version": "official-filing-ocr-v2",
+  "method": "Fresh local OCR of six preserved final-run PDFs; baseline and updated reconciliation over identical OCR boxes and preserved official JSON records; financial metric/value dictionaries and workforce candidates equal for each company. No live source retrieval.",
+  "reference_commit": "169cc6b35851cd0336fb9d70b5617253354f0473"
+}

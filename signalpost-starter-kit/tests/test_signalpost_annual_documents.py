@@ -112,3 +112,92 @@ def test_extended_income_rows_require_json_and_correct_year():
     assert set(fields)<=got
     record['metrics'].pop('tax_expense')
     assert 'tax_expense' not in {c['metric'] for c in reconcile(pages,ORG,record)['financial']}
+
+
+def test_explicit_million_scale_and_ambiguous_units():
+    from signalpost.annual_accounts import _money_unit, lines
+    from decimal import Decimal
+    for unit, scale in [("NOK 1 000 000",1000000),("NOK 1.000.000",1000000),
+                        ("NOK 1000000",1000000),("NOK millioner",1000000),
+                        ("NOK 1 000",1000),("NOK Note",1),("TNOK",1000),("MNOK",1000000)]:
+        pages,record=sample()
+        pages[1]['words'][2]['text']='Belop i: '+unit
+        got=_money_unit(lines(pages[1]))
+        assert got is not None and got[:2]==('NOK',Decimal(scale))
+    for unit in ['NOK ukjent','NOK 1 000 000 000','TNOK millioner','MNOK tusen']:
+        pages,record=sample();pages[1]['words'][2]['text']='Belop i: '+unit
+        assert reconcile(pages,ORG,record)['financial']==[]
+    # Prove reconciliation uses the corrected scale rather than only the label.
+    pages,record=sample();pages[1]['words'][2]['text']='Belop i: NOK 1 000 000'
+    record['metrics']['revenue']=2000000;pages[1]['words'][6]['text']='2'
+    assert next(c for c in reconcile(pages,ORG,record)['financial'] if c['metric']=='revenue')['value']==2000000
+
+
+def test_explicit_workforce_variants_and_abstention():
+    for text in ['Gjennomsnittlig antall arsverk: 10,00',
+                 'Antall arsverk i regnskapsaret 2025 er 10,00',
+                 'Selskapet har hatt 10,00 arsverk', 'Tal pa aarsverk i rekneskapsaret: 10,00']:
+        pages,record=sample();pages[2]['words']=pages[2]['words'][:2]+[word(text,10,70,800)]
+        assert reconcile(pages,ORG,record)['workforce']['value']==10
+    for text in ['Antall ansatte: 10,00','Selskapet har ingen ansatte',
+                 'Antall arsverk i regnskapsaret 2024 er 10,00',
+                 'Konsernet har hatt 10,00 arsverk',
+                 'Gjennomsnittlig antall arsverk: 1O,00',
+                 'Antall arsverk i regnskapsaret 10,00 12,00']:
+        pages,record=sample();pages[2]['words']=pages[2]['words'][:2]+[word(text,10,70,800)]
+        assert reconcile(pages,ORG,record)['workforce'] is None
+    pages,record=sample();pages[2]['words'][-1]['y1']=300;pages[2]['words'][-1]['y2']=312
+    assert reconcile(pages,ORG,record)['workforce'] is None
+    pages,record=sample();pages[2]['words'].append(word('Konsern',10,50,100))
+    assert reconcile(pages,ORG,record)['workforce'] is None
+    pages,record=sample();pages[2]['words'][-1]['confidence']=.5
+    assert reconcile(pages,ORG,record)['workforce'] is None
+
+
+def test_ocr_queue_deadline_and_cache(monkeypatch):
+    import asyncio
+    import hashlib
+    from signalpost.annual_accounts import DocumentProcessor
+    async def check():
+        processor=DocumentProcessor()
+        await processor.slots.acquire();await processor.slots.acquire()
+        async def forbidden(*args,**kwargs):
+            raise AssertionError('expired queued request must not start a worker')
+        monkeypatch.setattr(asyncio,'create_subprocess_exec',forbidden)
+        try:
+            try:
+                await asyncio.wait_for(processor.ocr(b'pdf',.02),timeout=.5)
+            except TimeoutError:
+                pass
+            else:
+                raise AssertionError('queued request did not time out')
+        finally:
+            processor.slots.release();processor.slots.release()
+        assert processor.slots._value==2
+        processor.cache[hashlib.sha256(b'pdf').hexdigest()]=[{'page':1}]
+        assert await processor.ocr(b'pdf',.02)==([{'page':1}],True)
+    asyncio.run(check())
+
+
+def test_ocr_timeout_kills_worker_and_releases_slot(monkeypatch):
+    import asyncio
+    from signalpost.annual_accounts import DocumentProcessor
+    class Worker:
+        returncode=None
+        killed=False
+        async def communicate(self,body):
+            await asyncio.Event().wait()
+        def kill(self):
+            self.killed=True;self.returncode=-9
+        async def wait(self):
+            return self.returncode
+    async def check():
+        worker=Worker()
+        async def spawn(*args,**kwargs):return worker
+        monkeypatch.setattr(asyncio,'create_subprocess_exec',spawn)
+        processor=DocumentProcessor()
+        try:await processor.ocr(b'pdf',.02)
+        except TimeoutError:pass
+        else:raise AssertionError('worker did not time out')
+        assert worker.killed and processor.slots._value==2 and not processor.cache
+    asyncio.run(check())

@@ -168,7 +168,7 @@ class CoverageTests(unittest.TestCase):
 
 
 class RegisteredBusinessDescriptionTests(unittest.IsolatedAsyncioTestCase):
-    async def research(self, entity):
+    async def research(self, entity, *, retrieved_at=CUT):
         from signalpost.brreg import fetch_company
         class Registry:
             async def fetch(self, url, **kwargs):
@@ -177,7 +177,10 @@ class RegisteredBusinessDescriptionTests(unittest.IsolatedAsyncioTestCase):
                 elif "/regnskap/" in url: body = []
                 else: body = entity
                 return 200, {"Content-Type": "application/json"}, json.dumps(body).encode(), url, "ok"
-        return await fetch_company(ORG, Registry(), CUT)
+        # Fixture acquisition time must not depend on the machine's calendar.
+        with patch("signalpost.brreg.datetime", wraps=datetime) as clock:
+            clock.now.return_value = retrieved_at
+            return await fetch_company(ORG, Registry(), CUT)
 
     async def test_registered_arrays_are_complete_exact_source_values(self):
         # Authentic public source shapes; line breaks are not separate business events.
@@ -204,6 +207,13 @@ class RegisteredBusinessDescriptionTests(unittest.IsolatedAsyncioTestCase):
                 result = await self.research({**base, "aktivitet": value, "vedtektsfestetFormaal": value})
                 self.assertFalse(any(c.field_family == "business_description" for c in result.claims))
         result = await self.research({**base, "organisasjonsnummer": "987654321", "aktivitet": ["Rival business"]})
+        self.assertFalse(any(c.field_family == "business_description" for c in result.claims))
+
+    async def test_explicit_historical_cutoff_withholds_later_registry_text(self):
+        from datetime import timedelta
+        result = await self.research({"organisasjonsnummer": ORG, "navn": NAME,
+            "organisasjonsform": {"kode": "AS"}, "aktivitet": ["Veitransport av gods."]},
+            retrieved_at=CUT + timedelta(seconds=1))
         self.assertFalse(any(c.field_family == "business_description" for c in result.claims))
 
     async def test_sole_trader_description_does_not_reintroduce_registration_address(self):

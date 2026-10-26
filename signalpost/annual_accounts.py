@@ -22,7 +22,7 @@ from typing import Any
 from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot
 
 COPY_ROOT = "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi"
-PARSER_VERSION = "official-filing-ocr-v1"
+PARSER_VERSION = "official-filing-ocr-v2"
 MAX_PDF_BYTES = 25 * 1024 * 1024
 MAX_OCR_SECONDS = 90
 PAGE_PRIORITY = (0, 1, 4, 3, 5, 2, 6)
@@ -178,11 +178,19 @@ def _money_unit(rows: list[list[dict[str, Any]]]) -> tuple[str, Decimal, str] | 
             continue
         currency = "EUR" if m.group(1) == "eur" else "NOK"
         scale = Decimal(1000 if m.group(1) == "tnok" else 1000000 if m.group(1) == "mnok" else 1)
-        tail = text[m.end():]
-        if re.match(r"\s*(?:1[ .]?000|tusen)\b", tail):
-            scale = Decimal(1000)
-        elif re.match(r"\s*(?:million|1[ .]?000[ .]?000)\b", tail):
-            scale = Decimal(1000000)
+        tail = text[m.end():].strip()
+        # Parse the entire scale suffix: a thousands prefix must not consume a
+        # million, and unknown/contradictory annotations cannot prove units.
+        suffix = re.split(r"(?:^|\s+)(?:note|20\d{2})\b", tail, maxsplit=1)[0].strip()
+        scales = {"": scale, "tusen": Decimal(1000), "million": Decimal(1000000),
+                  "millioner": Decimal(1000000)}
+        if re.fullmatch(r"1(?:[ .]?000){1,2}", suffix):
+            explicit = Decimal(suffix.replace(" ", "").replace(".", ""))
+        else:
+            explicit = scales.get(suffix)
+        if explicit is None or (m.group(1) in {"tnok", "mnok"} and explicit != scale):
+            return None
+        scale = explicit
         found.append((currency, scale, span))
     return found[0] if found and len({x[:2] for x in found}) == 1 else None
 
@@ -235,24 +243,49 @@ def financial_candidates(page: dict[str, Any], org: str, record: dict[str, Any],
     return result
 
 
-def workforce_candidates(page: dict[str, Any], org: str, *, nonparent: bool) -> list[dict[str, Any]]:
+def workforce_candidates(page: dict[str, Any], org: str, *, nonparent: bool,
+                         year: str | None = None) -> list[dict[str, Any]]:
     if not _company_page(page, org, nonparent=nonparent, notes=True):
         return []
     rows = lines(page)
     found = []
+    # Independently implemented explicit FTE grammars. Whole-row matching avoids
+    # silently consuming a headcount, historical comparison or group statement.
+    measure = r"(?:arsverk|aarsverk)"
+    period = r"(?:regnskapsaret|rekneskapsaret|aret)"
+    value = r"(?P<value>\d+(?:[.,]\d{1,2})?)"
+    patterns = (
+        rf"(?:antall|tal pa|tall pa)\s+{measure}\s+i\s+{period}(?:\s+(?P<year>20\d{{2}}))?\s*(?:er|:|=)?\s*{value}",
+        rf"gjennomsnittlig\s+antall\s+{measure}(?:\s+i\s+{period})?(?:\s+(?P<year>20\d{{2}}))?\s*(?:er|:|=)?\s*{value}",
+        rf"(?:selskapet|foretaket|virksomheten)\s+har\s+(?:hatt\s+)?{value}\s+{measure}",
+    )
     for index, row in enumerate(rows):
-        text = fold(text_line(row))
-        if not re.search(r"(?:antall|tal pa)\s+(?:arsverk|aarsverk)\s+i\s+(?:regnskapsaret|rekneskapsaret)", text):
-            continue
-        tail = re.split(r"(?:regnskapsaret|rekneskapsaret)", text, maxsplit=1)[1].strip(" :=")
+        text = fold(text_line(row)).strip().rstrip(".")
+        match = next((m for pattern in patterns if (m := re.fullmatch(pattern, text))), None)
         value_row = row
-        if not tail and index + 1 < len(rows):
-            value_row = rows[index + 1]
-            tail = text_line(value_row)
-        value = decimal_number(tail, workforce=True)
-        if value is None or min(w["confidence"] for w in row + value_row) < 0.9:
+        if match is None and index + 1 < len(rows):
+            following = rows[index + 1]
+            # Only an immediately adjacent numeric row can complete a label.
+            gap = min(w["y1"] for w in following) - max(w["y2"] for w in row)
+            if 0 <= gap <= 2 * max(w["y2"] - w["y1"] for w in row):
+                joined = text + " " + fold(text_line(following)).strip()
+                match = next((m for pattern in patterns if (m := re.fullmatch(pattern, joined))), None)
+                if match:
+                    value_row = following
+        if match is None:
             continue
-        found.append({"value": float(value), "page": page["page"], "span": text_line(row) + " | " + text_line(value_row)})
+        stated_year = match.groupdict().get("year")
+        if stated_year and stated_year != year:
+            continue
+        # A nearby group heading must not turn group FTE into company FTE.
+        context = " ".join(text_line(r) for r in rows[max(2, index - 1):index + 1])
+        if re.search(r"\b(?:konsern|konsernet|group|datterselskap)\b", fold(context)):
+            continue
+        number = decimal_number(match.group("value"), workforce=True)
+        if number is None or min(w["confidence"] for w in row + value_row) < 0.9:
+            continue
+        span = text_line(row) if value_row is row else text_line(row) + " | " + text_line(value_row)
+        found.append({"value": float(number), "page": page["page"], "span": span})
     return found
 
 
@@ -272,7 +305,7 @@ def reconcile(pages: list[dict[str, Any]], org: str, record: dict[str, Any]) -> 
             conflicts.append(metric)
         elif candidates:
             accepted.append(candidates[0])
-    workforce = [item for page in pages for item in workforce_candidates(page, org, nonparent=nonparent)]
+    workforce = [item for page in pages for item in workforce_candidates(page, org, nonparent=nonparent, year=record["period_end"][:4])]
     workforce_hit = workforce[0] if workforce and len({item["value"] for item in workforce}) == 1 else None
     if workforce and workforce_hit is None:
         conflicts.append("full_time_equivalents")
@@ -316,23 +349,27 @@ class DocumentProcessor:
         digest = hashlib.sha256(body).hexdigest()
         if digest in self.cache:
             return self.cache[digest], True
-        async with self.slots:
-            env = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
-            process = await asyncio.create_subprocess_exec(sys.executable, "-m", "signalpost.annual_accounts", "--ocr-worker",
-                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]), env=env)
-            try:
-                output, error = await asyncio.wait_for(process.communicate(body), timeout=max(0.1, min(seconds, MAX_OCR_SECONDS)))
-                if process.returncode:
-                    raise RuntimeError("local_ocr_dependency_or_document_error: " + error.decode(errors="replace")[-220:])
-                pages = json.loads(output)
-                self.cache[digest] = pages
-                return pages, False
-            except BaseException:
-                if process.returncode is None:
-                    process.kill()
-                    await process.wait()
-                raise
+        # Queueing, worker startup and OCR share the caller's remaining budget.
+        async with asyncio.timeout(max(0.001, min(seconds, MAX_OCR_SECONDS))):
+            async with self.slots:
+                if digest in self.cache:
+                    return self.cache[digest], True
+                env = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+                process = await asyncio.create_subprocess_exec(sys.executable, "-m", "signalpost.annual_accounts", "--ocr-worker",
+                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]), env=env)
+                try:
+                    output, error = await asyncio.wait_for(process.communicate(body), timeout=max(0.1, min(seconds, MAX_OCR_SECONDS)))
+                    if process.returncode:
+                        raise RuntimeError("local_ocr_dependency_or_document_error: " + error.decode(errors="replace")[-220:])
+                    pages = json.loads(output)
+                    self.cache[digest] = pages
+                    return pages, False
+                except BaseException:
+                    if process.returncode is None:
+                        process.kill()
+                        await process.wait()
+                    raise
 
 
 async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, processor: DocumentProcessor) -> Any:

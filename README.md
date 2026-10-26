@@ -6,6 +6,8 @@ Signalpost researches Norwegian companies by organisation number and returns ord
 
 **Status:** the public `main` branch is the canonical release. The [latest measured release](docs/release/FINAL_CAPABILITY_INTEGRATION_2026-10-17.md) recovered 57 additional financial claims and registered workplace locations for 6/6 previously unseen companies. Website, jobs and news coverage remain limited. No official Builderr score or submission is claimed.
 
+**Current review (26 October 2026):** [audit, reference comparison and fixes](docs/release/CURRENT_AUDIT_2026-10-26.md). Additional explicit FTE statement formats, corrected million-scale parsing and bounded OCR queue time are covered by offline regressions. The measured live results above have not been rerun; external coverage remains limited.
+
 ## Install and run: two commands
 
 Clone this public repository and enter its directory, then run:
