@@ -364,7 +364,9 @@ def merge_prior_facts(current: CompanyState, previous: CompanyState | None) -> C
         family = claim.get("field_family")
         section = str(claim.get("section") or "")
         section_coverage = current.coverage.get(section, {})
-        if family == "role":
+        if claim.get("verification_rule_id") == "nav_exact_employer_job_v1":
+            conclusive = True
+        elif family == "role":
             conclusive = current.coverage.get("_roles", {}).get("complete", False)
         elif family == "workplace":
             conclusive = current.coverage.get("_workplaces", {}).get("complete", False)

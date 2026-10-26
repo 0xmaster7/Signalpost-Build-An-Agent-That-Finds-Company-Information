@@ -27,15 +27,18 @@ from signalpost.websites import PageRecord, _additional_evidence_snapshot_ids, _
 from run_m02_foundation_smoke import (_atomic_json, _preserve_run_bundle,
     _permitted_request_purposes, _run_preserving_failure, _validate_evaluator_rows)
 from signalpost.network import APPROVED_BRREG_REQUEST_PURPOSES
+from signalpost.nav import APPROVED_NAV_REQUEST_PURPOSES
+from signalpost.public_discovery import APPROVED_DISCOVERY_REQUEST_PURPOSES
 from signalpost.websites import APPROVED_EXTERNAL_CLAIM_FAMILIES, APPROVED_WEBSITE_REQUEST_PURPOSES
 
 
 class M09ReleaseInputMatrixTests(unittest.TestCase):
-    def test_smoke_purpose_allowlist_includes_only_approved_website_feed_path(self):
+    def test_smoke_purpose_allowlist_includes_only_approved_source_paths(self):
         base = _permitted_request_purposes(False)
         live = _permitted_request_purposes(True)
         self.assertEqual(base, set(APPROVED_BRREG_REQUEST_PURPOSES))
-        self.assertEqual(live, set(APPROVED_BRREG_REQUEST_PURPOSES | APPROVED_WEBSITE_REQUEST_PURPOSES))
+        self.assertEqual(live, set(APPROVED_BRREG_REQUEST_PURPOSES | APPROVED_WEBSITE_REQUEST_PURPOSES
+            | APPROVED_NAV_REQUEST_PURPOSES | APPROVED_DISCOVERY_REQUEST_PURPOSES))
         self.assertNotIn("feed", base)
         self.assertNotIn("search", live)
         self.assertNotIn("browser", live)

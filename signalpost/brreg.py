@@ -474,7 +474,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                         cache_mode="transient", rights_status=RIGHTS))
             observations["website_candidates"] = [{"raw": identity["website"], "source": "registry_live", "rights_status": "NLOD-2.0",
                 "source_url": entity_final, "content_sha256": entity_hash, "evidence_id": candidate_evidence_id,
-                "source_snapshot_id": candidate_source_id}]
+                "source_snapshot_id": candidate_source_id, "retrieved_at": entity_time.isoformat()}]
         contact_leads(entity, entity_final, entity_hash, entity_time, entity_status, "entity")
         identity_source_paths = {
             "organisation_number": "/organisasjonsnummer", "name": "/navn", "legal_form": "/organisasjonsform/kode",

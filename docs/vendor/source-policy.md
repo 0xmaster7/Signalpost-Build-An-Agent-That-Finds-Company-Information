@@ -34,6 +34,9 @@ Official data is the identity anchor. It does not, by itself, identify the publi
 - Group, parent, subsidiary, franchise and public-brand relationships must be labelled, not collapsed.
 - Every claim records source URL or source identifier, retrieval time, effective/reporting date where relevant, content hash and extraction method.
 - Missing, blocked and ambiguous are explicit states.
+- Registry-declared URLs are reference-only, never ownership or content proof; known shared roots use `shared_website`. An observed conflicting identity withholds the fallback.
+- NAV job metadata is permitted through the documented official feed, independently of company websites, with exact legal/workplace employer proof, current detail/expiry checks and no personal contacts. A bounded partial scan never proves zero jobs; unrefreshed NAV ads are not retained as current facts.
+- Wikidata may supply batch URL candidates only where its access policy permits; robots disallows are not bypassed.
 - Company-owned promotional copy may describe the business but cannot provide an independent sentiment claim.
 
 ## Restricted platforms and unofficial crawlers

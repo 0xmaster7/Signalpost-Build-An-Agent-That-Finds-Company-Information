@@ -81,6 +81,50 @@ sources:
       response_bodies: run_scoped
       ocr_cache: run_scoped_document_sha256
       retain_provenance: [source_url, retrieved_at, content_sha256, page_number, excerpt, reporting_period, source_snapshot]
+  nav_jobs:
+    name: NAV Arbeidsplassen official vacancy feed
+    hosts: [pam-stilling-feed.nav.no]
+    endpoints: ["/api/publicToken", "/api/v1/feed", "/api/v1/feed/{page}", "/api/v1/feedentry/{uuid}"]
+    acquisition:
+      mode: documented_public_get_with_runtime_public_token
+      gateway: signalpost.network.NetworkGateway
+      access_profile: nav_feed_api
+      robots:
+        enforce_explicit_rules: true
+        on_unreachable: allow_only_documented_nav_feed_paths
+      redirects: reject
+      time_seconds: 20
+      max_feed_pages: 4
+      max_detail_requests: 8
+      recent_window_days: 40
+      negative_coverage: false
+    rights:
+      reference: https://arbeidsplassen.nav.no/vilkar-api
+      basis: permitted_factual_metadata_analysis
+      attribution: NAV Arbeidsplassen, identified vacancy and retrieval date
+      dataset_mit_license: false
+    retention:
+      response_bodies: transient
+      tokens: memory_only
+      personal_contacts: discard
+      stale_open_ads: do_not_retain_on_refresh
+      retain_provenance: [source_url, retrieved_at, content_sha256, json_pointer, extraction_method, source_snapshot]
+  wikidata_candidates:
+    hosts: [query.wikidata.org]
+    acquisition:
+      mode: candidate_only_batch_sparql
+      gateway: signalpost.network.NetworkGateway
+      robots:
+        enforce_explicit_rules: true
+        on_unreachable: skip
+      max_companies: 200
+      time_seconds: 12
+    rights:
+      reference: https://www.wikidata.org/wiki/Wikidata:Licensing
+      license: CC0
+    retention:
+      response_bodies: transient
+      published_facts_without_ownership_proof: false
   builderr_frozen_registry:
     name: Builderr evaluator frozen registry snapshot
     hosts: []

@@ -2,6 +2,8 @@
 
 Signalpost researches Norwegian companies by organisation number and returns evidence-backed JSONL profiles.
 
+The [26 October discovery update](docs/release/PUBLIC_DISCOVERY_2026-10-26.md) adds bounded NAV jobs and registry URL-only references; the historical cohort measurements below have not been rerun.
+
 ## Live evaluation results
 
 Same six previously unseen Norwegian AS employers, selected before source outcomes; previous release `8076e1b` versus latest measured implementation `72e8c05`, retained in release `59cbada`.

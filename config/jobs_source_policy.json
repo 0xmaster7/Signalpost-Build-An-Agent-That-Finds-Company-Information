@@ -1,7 +1,9 @@
 {
   "version": 1,
   "approved_ats_hosts": [],
-  "approved_acquisition_modes": [],
+  "approved_acquisition_modes": ["official_nav_v1_feed"],
+  "official_feed_hosts": ["pam-stilling-feed.nav.no"],
+  "official_feed_terms": "https://arbeidsplassen.nav.no/vilkar-api",
   "external_activity_providers": [],
   "default_on_unlisted_origin": "skip_and_record",
   "employer_identity_required": true,

@@ -4,6 +4,7 @@ import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 import gzip
+import hashlib
 import http.client
 import ipaddress
 import json
@@ -55,6 +56,16 @@ def _brreg_document_api_url(url: str, purpose: str) -> bool:
         and parsed.hostname == "data.brreg.no" and parsed.port in {None, 443}
         and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
         and bool(_BRREG_COPY_PATH.fullmatch(parsed.path)))
+
+
+def _nav_api_url(url: str, purpose: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    paths = {"nav_public_access": r"/api/publicToken", "nav_feed": r"/api/v1/feed(?:/[A-Za-z0-9-]+)?",
+             "nav_job": r"/api/v1/feedentry/[A-Za-z0-9-]+"}
+    return (parsed.scheme == "https" and parsed.hostname == "pam-stilling-feed.nav.no"
+        and parsed.port in {None, 443} and not parsed.username and not parsed.password and not parsed.fragment
+        and purpose in paths and bool(re.fullmatch(paths[purpose], parsed.path))
+        and set(urllib.parse.parse_qs(parsed.query, keep_blank_values=True)) <= {"pageSize", "last"})
 
 
 def _brreg_structured_api_url(url: str, purpose: str) -> bool:
@@ -327,14 +338,19 @@ class NetworkGateway:
 
     async def fetch(self, url: str, *, purpose: str = "page", user_agent: str = "SignalpostBot/1.0 (+contact pending)",
                     max_bytes: int | None = None, use_robots: bool = True,
-                    allowed_hosts: set[str] | None = None, access_profile: str | None = None) -> tuple[int, dict[str, str], bytes, str, str]:
+                    allowed_hosts: set[str] | None = None, access_profile: str | None = None,
+                    api_headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes, str, str]:
         self.ledger.logical_requests += 1
         target = canonical_url(url)
+        if api_headers and (access_profile != "nav_feed_api" or not _nav_api_url(target, purpose)
+                or set(api_headers) - {"Authorization", "If-Modified-Since"}
+                or any("\r" in value or "\n" in value for value in api_headers.values())):
+            raise NetworkPolicyError("API headers are limited to the official NAV feed")
         if self.budget and not await self.budget.reserve_logical_request():
             return 0, {}, b"", target, "budget_exhausted"
         key = (target, purpose, user_agent, max_bytes or self.response_cap, use_robots,
                tuple(sorted(h.casefold() for h in allowed_hosts)) if allowed_hosts is not None else None,
-               access_profile, self.trusted_proxy,
+               access_profile, self.trusted_proxy, hashlib.sha256(json.dumps(api_headers or {}, sort_keys=True).encode()).hexdigest(),
                _REQUEST_COMPANY.get() if self.budget and self.budget.config.per_company_physical_limit is not None else None)
         existing = self._inflight.get(key)
         if existing is not None:
@@ -345,7 +361,7 @@ class NetworkGateway:
         try:
             result = await self._fetch_uncached(target, purpose=purpose, user_agent=user_agent,
                 max_bytes=max_bytes, use_robots=use_robots, allowed_hosts=allowed_hosts,
-                access_profile=access_profile)
+                access_profile=access_profile, api_headers=api_headers)
             future.set_result(result)
             return result
         except BaseException as exc:
@@ -361,12 +377,15 @@ class NetworkGateway:
 
     async def _fetch_uncached(self, url: str, *, purpose: str, user_agent: str = "SignalpostBot/1.0 (+contact pending)",
                     max_bytes: int | None = None, use_robots: bool = True,
-                    allowed_hosts: set[str] | None = None, access_profile: str | None = None) -> tuple[int, dict[str, str], bytes, str, str]:
+                    allowed_hosts: set[str] | None = None, access_profile: str | None = None,
+                    api_headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes, str, str]:
         target = canonical_url(url)
         if allowed_hosts is not None and (urllib.parse.urlsplit(target).hostname or "").casefold() not in {h.casefold() for h in allowed_hosts}:
             raise NetworkPolicyError("destination host is outside the caller's source allowlist")
-        if access_profile not in {None, "brreg_structured_api", "brreg_document_api"}:
+        if access_profile not in {None, "brreg_structured_api", "brreg_document_api", "nav_feed_api"}:
             raise NetworkPolicyError("unknown source access profile")
+        if access_profile == "nav_feed_api" and not _nav_api_url(target, purpose):
+            raise NetworkPolicyError("NAV API profile requires an exact official feed endpoint")
         if access_profile == "brreg_structured_api" and not _brreg_structured_api_url(target, purpose):
             raise NetworkPolicyError("BRREG structured API profile is limited to documented BRREG endpoints")
         if access_profile == "brreg_document_api" and not _brreg_document_api_url(target, purpose):
@@ -382,7 +401,7 @@ class NetworkGateway:
                 return 0, {}, b"", target, "budget_exhausted"
             if robots_state == "unusable":
                 return 0, {}, b"", target, "robots_unusable"
-            if robots_state == "unreachable" and access_profile not in {"brreg_structured_api", "brreg_document_api"}:
+            if robots_state == "unreachable" and access_profile not in {"brreg_structured_api", "brreg_document_api", "nav_feed_api"}:
                 return 0, {}, b"", target, "robots_unreachable"
         else:
             delay = None
@@ -422,10 +441,10 @@ class NetworkGateway:
                     response_recorded = False
                     try:
                         status, headers, body, _ = await asyncio.wait_for(
-                            self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity"}, self.timeout,
+                            self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}, self.timeout,
                                                    approved_ips=(ordered_ips[address_index % len(ordered_ips)],) if ordered_ips else None,
                                                    max_bytes=cap) if isinstance(self.transport, UrlLibTransport) else
-                            self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity"}, self.timeout),
+                            self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}, self.timeout),
                             timeout=self.timeout,
                         )
                         self._record(target, purpose, status, len(body), start, "received")
@@ -443,6 +462,8 @@ class NetworkGateway:
                             if access_profile == "brreg_document_api" and (
                                     not _brreg_document_api_url(target, purpose) or target != canonical_url(url)):
                                 raise NetworkPolicyError("BRREG document redirect left its exact permitted endpoint")
+                            if access_profile == "nav_feed_api" and target != canonical_url(url):
+                                raise NetworkPolicyError("NAV API redirects are not permitted")
                             self._assert_proxy_route(target)
                             validate_public_host(target, trusted_proxy=self.trusted_proxy)
                             if use_robots and purpose != "robots":
@@ -455,7 +476,7 @@ class NetworkGateway:
                                     return 0, {}, b"", target, "budget_exhausted"
                                 if robots_state == "unusable":
                                     return 0, {}, b"", target, "robots_unusable"
-                                if robots_state == "unreachable" and access_profile not in {"brreg_structured_api", "brreg_document_api"}:
+                                if robots_state == "unreachable" and access_profile not in {"brreg_structured_api", "brreg_document_api", "nav_feed_api"}:
                                     return 0, {}, b"", target, "robots_unreachable"
                             break
                         if status in {429, 503}:

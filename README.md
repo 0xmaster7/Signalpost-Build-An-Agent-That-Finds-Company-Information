@@ -8,6 +8,8 @@ Signalpost researches Norwegian companies by organisation number and returns ord
 
 **Current review (26 October 2026):** [audit, reference comparison and fixes](docs/release/CURRENT_AUDIT_2026-10-26.md). Additional explicit FTE statement formats, corrected million-scale parsing and bounded OCR queue time are covered by offline regressions. The measured live results above have not been rerun; external coverage remains limited.
 
+**Discovery update:** [independent NAV jobs and registry URL-only references](docs/release/PUBLIC_DISCOVERY_2026-10-26.md) no longer require website ownership to publish those specific facts. NAV coverage is a bounded partial scan, not proof of zero jobs. Batch Wikidata candidate discovery is implemented but currently blocked by the endpoint's robots policy; no access bypass or improved cohort coverage is claimed.
+
 ## Install and run: two commands
 
 Clone this public repository and enter its directory, then run:
@@ -19,7 +21,7 @@ Clone this public repository and enter its directory, then run:
 
 Prerequisites: **CPython 3.12+** (3.12 recommended), Linux with glibc or macOS on x86_64/arm64, and `curl` for the first setup. Setup downloads checksum-verified **uv 0.8.0**, creates `signalpost-starter-kit/.venv`, installs production dependencies from [uv.lock](signalpost-starter-kit/uv.lock), and checks the local PDF/OCR modules. Tools, caches and temporary installation files stay inside the checkout. Setup is safe to rerun; it does not install Python, modify shell profiles, use sudo or require Tesseract, Docker, API keys or paid services. Outbound HTTPS is needed for installation and live research. Set `SIGNALPOST_PYTHON=/path/to/python3.12` during setup if interpreter selection needs an override.
 
-`run.sh` performs **no installation**. By default it enables the real production evaluator's **live BRREG, official annual-account PDF/local OCR, and permitted website research** paths. Arguments and exit codes are preserved; relative input/output paths resolve from your current directory. From another directory, use `/absolute/path/to/checkout/run.sh ...`.
+`run.sh` performs **no installation**. By default it enables the real production evaluator's **live BRREG, official annual-account PDF/local OCR, independent NAV jobs, and permitted website research** paths. NAV and batch candidate discovery share the existing gateway, budgets and completion reserve; current public feeds are not used to reconstruct an explicit historical cutoff. Arguments and exit codes are preserved; relative input/output paths resolve from your current directory. From another directory, use `/absolute/path/to/checkout/run.sh ...`.
 
 The input contains company organisation numbers. The output is ordered JSONL with one terminal profile per input row; stdout is a separate machine-readable batch report and stderr contains diagnostics. State/checkpoint paths can be supplied with `--state-output` and `--checkpoint`. Current research limits and source/identity safeguards still apply.
 
@@ -48,13 +50,14 @@ Input → ordered batch/checkpoints → BRREG identity/records → bounded websi
 | [BRREG](signalpost/brreg.py) | Exact identity, registered activity/purpose, filings, official roles and workplaces |
 | [gateway](signalpost/network.py) | Physical accounting, pacing, public-IP and redirect checks, robots and response bounds |
 | [websites](signalpost/websites.py) | Candidate verification, permitted pages, linked profiles, structured jobs and dated activity |
+| [NAV](signalpost/nav.py), [batch discovery](signalpost/public_discovery.py) | Exact-employer jobs without websites; candidate-only batch discovery with access-policy gates |
 | [models](signalpost/models.py), [adapter](signalpost/adapter.py) | Claim/evidence/snapshot integrity and deterministic publication |
 | [history](signalpost/history.py), [synthesis](signalpost/synthesis.py) | Prior evidence, material changes and supported deterministic summaries |
 | [web app](signalpost/web.py) | Server-rendered saved-data Find, Profile, Compare, Verify and Changes |
 
 Seven sections cover identity/brand, accounts/history, leadership/workplaces, websites/owned profiles, hiring/activity, evidence/states, and refresh/changes. A present section does not mean every field is available.
 
-Website publication requires direct company ownership or permitted page-representation proof. Mentions/search results do not establish ownership; group and page-only scope remain separate. Hiring needs an actual employer-bound posting; activity needs a supported subject and date. Registered activity is not dated news.
+Verified website/content publication requires direct company ownership or permitted page-representation proof. `registry_declared_website_url` and `shared_website` are separate registry references, never verified ownership or content. Mentions/search results do not establish ownership; group and page-only scope remain separate. Hiring needs an actual employer-bound posting; activity needs a supported subject and date. Registered activity is not dated news.
 
 Financial figures require exact-entity period, currency, scope and **unit/scale** proof. Official annual-account PDF rows are reconciled with BRREG JSON; each supported value publishes independently, while ambiguous values remain withheld. Currency alone does not prove NOK versus NOK-thousands.
 

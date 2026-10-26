@@ -26,6 +26,8 @@ from signalpost.brreg import SUPPORTED_CURRENCY_CODES
 from signalpost.history import SOURCE_POLICY_VERSION, validate_artifact
 from signalpost.adapter import to_evaluator, validate_vendor_payload
 from signalpost.network import APPROVED_BRREG_REQUEST_PURPOSES
+from signalpost.nav import APPROVED_NAV_REQUEST_PURPOSES
+from signalpost.public_discovery import APPROVED_DISCOVERY_REQUEST_PURPOSES
 from signalpost.websites import APPROVED_EXTERNAL_CLAIM_FAMILIES, APPROVED_WEBSITE_REQUEST_PURPOSES
 import signalpost.run as run_module
 from signalpost.run import main
@@ -66,6 +68,8 @@ def _permitted_request_purposes(live_websites: bool) -> set[str]:
     purposes = set(APPROVED_BRREG_REQUEST_PURPOSES)
     if live_websites:
         purposes.update(APPROVED_WEBSITE_REQUEST_PURPOSES)
+        purposes.update(APPROVED_NAV_REQUEST_PURPOSES)
+        purposes.update(APPROVED_DISCOVERY_REQUEST_PURPOSES)
     return purposes
 
 

@@ -352,10 +352,14 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
 
             blocked = by_org["100000032"]
             self.assertEqual(blocked["sections"]["website_owned_profiles"]["attempt_outcome"], "robots_disallowed")
-            self.assertFalse(any(claim["section"] == "website_owned_profiles" for claim in blocked["claims"]))
+            self.assertEqual([claim["field"] for claim in blocked["claims"] if claim["section"] == "website_owned_profiles"],
+                ["registry_declared_website_url"])
+            self.assertFalse(any(claim["field_family"] == "owned_web" for claim in blocked["claims"]))
             outage = by_org["100000059"]
             self.assertEqual(outage["sections"]["website_owned_profiles"]["attempt_outcome"], "robots_unreachable")
-            self.assertFalse(any(claim["section"] == "website_owned_profiles" for claim in outage["claims"]))
+            self.assertEqual([claim["field"] for claim in outage["claims"] if claim["section"] == "website_owned_profiles"],
+                ["registry_declared_website_url"])
+            self.assertFalse(any(claim["field_family"] == "owned_web" for claim in outage["claims"]))
             enk = by_org["100000040"]
             self.assertNotIn("PRIVATE_FIXTURE_HOME_ADDRESS", json.dumps(enk, sort_keys=True))
             self.assertEqual(enk["sections"]["website_owned_profiles"]["attempt_outcome"], "not_attempted")

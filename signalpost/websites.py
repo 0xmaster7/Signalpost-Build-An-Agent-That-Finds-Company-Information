@@ -1814,11 +1814,11 @@ def _source_evidence(candidate: dict[str, Any], evidence: list[Evidence], snapsh
                          else "brreg_contact_domain_lead_v1" if candidate.get("source") in {"registry_email", "workplace_contact"}
                          else "brreg_website_candidate_v1")
     if not any(item.evidence_id == evidence_id for item in evidence):
-        evidence.append(Evidence(evidence_id=evidence_id, source_url=url, retrieved_at=datetime.now(timezone.utc),
+        evidence.append(Evidence(evidence_id=evidence_id, source_url=url, retrieved_at=candidate.get("retrieved_at") or datetime.now(timezone.utc),
             content_sha256=digest, extraction_method=extraction_method, json_pointer=candidate.get("json_pointer") or "/hjemmeside", source_class="official",
             subject_organisation_number=org, source_snapshot_ids=[source_id]))
     if not any(item.source_id == source_id for item in snapshots):
-        snapshots.append(SourceSnapshot(source_id=source_id, source_url=url, retrieved_at=datetime.now(timezone.utc),
+        snapshots.append(SourceSnapshot(source_id=source_id, source_url=url, retrieved_at=candidate.get("retrieved_at") or datetime.now(timezone.utc),
             content_sha256=candidate.get("source_snapshot_sha256") or digest, cache_mode="transient", rights_status=rights_status))
     return evidence_id
 
@@ -1828,6 +1828,40 @@ def _additional_evidence_snapshot_ids(evidence: list[Evidence], evidence_ids: li
     wanted = set(evidence_ids)
     return list(dict.fromkeys(snapshot_id for item in evidence if item.evidence_id in wanted
                               for snapshot_id in item.source_snapshot_ids))
+
+
+def _publish_registry_references(org: str, candidates: list[dict[str, Any]],
+                                 output: WebsiteResearchResult, shared_domains: set[str],
+                                 cutoff: datetime, allow_current: bool) -> None:
+    for candidate in candidates:
+        if candidate["kind"] != "website" or candidate["source"] != "registry_live":
+            continue
+        source = candidate["source_ref"]
+        observed = _date_value(source.get("retrieved_at"))
+        if not allow_current and (observed is None or observed > cutoff):
+            continue
+        if source.get("source_url") != f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}":
+            continue
+        rows = [row for row in output.audit["candidates"] if row.get("url") == candidate["url"]]
+        if any(row.get("decision") in {"accepted", "rejected_conflicting_identity", "redirect_or_url_policy_rejected", "blocked_source_rights"}
+               or "conflict" in str(row.get("review_reason", ""))
+               or row.get("host_mismatch_pages") for row in rows):
+            continue
+        evidence_id = _source_evidence(source, output.evidence, output.snapshots, org)
+        if not evidence_id:
+            continue
+        domain = registered_domain(urllib.parse.urlsplit(candidate["url"]).hostname or "")
+        field = "shared_website" if domain in shared_domains else "registry_declared_website_url"
+        digest = website_claim_value_digest(field, candidate["url"])
+        claim = Claim(claim_id=f"{org}:registry-url:{field}:{digest}", organisation_number=org,
+            section="website_owned_profiles", field_family="registry_web_reference", subject_id=org,
+            field=field, value=candidate["url"], state=PublicState.AVAILABLE, scope="legal_entity",
+            verification_rule_id="registry_url_declaration_only_v1", verification_score="1.0",
+            evidence_ids=[evidence_id], source_snapshot_ids=_additional_evidence_snapshot_ids(output.evidence, [evidence_id]))
+        if not any(existing.claim_id == claim.claim_id for existing in output.claims):
+            output.claims.append(claim)
+        for row in rows:
+            row["publication_tier"] = "shared_site" if field == "shared_website" else "registry_declared"
 
 
 def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidate: dict[str, Any],
@@ -1859,7 +1893,8 @@ def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidat
 async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, shared_domains: set[str] | None = None,
                            enable_keyless: bool = True, evidence_cutoff: datetime | None = None,
                            phase: str = "all", previous: WebsiteResearchResult | None = None,
-                           rights_decisions: dict[str, str] | None = None) -> WebsiteResearchResult:
+                           rights_decisions: dict[str, str] | None = None,
+                           allow_current_registry_references: bool = False) -> WebsiteResearchResult:
     """Fetch, verify, then shallowly research one target using the central gateway."""
     org = str(profile.get("organisation_number") or "")
     output = previous if previous is not None else WebsiteResearchResult()
@@ -2097,6 +2132,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             if not pages and candidate_row.get("host_mismatch_pages"):
                 assessment = {"decision": "ambiguous", "reason": "candidate_host_mismatch",
                     "proof": None, "proof_page": None, "target_page": None}
+            if assessment["decision"] in {"ambiguous", "rejected"}:
+                candidate_row["review_reason"] = assessment.get("reason")
             candidate_row["decision"] = assessment["decision"] if candidate_row["decision"] == "candidate" else candidate_row["decision"]
             if assessment["decision"] == "accepted":
                 candidate_row["proof"] = assessment["proof"]
@@ -2113,6 +2150,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 unresolved = True
             elif assessment["decision"] == "rejected":
                 candidate_row["decision"] = "rejected_conflicting_identity"
+        _publish_registry_references(org, candidates, output, shared_domains or set(), cutoff,
+            allow_current_registry_references or evidence_cutoff is None)
     else:
         saved = previous.phase_state
         candidates = saved["candidates"]
@@ -2146,7 +2185,12 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
         # Verification has established a candidate, but extraction/publication
         # still belongs to later global passes. Do not expose the untouched
         # default NOT_AVAILABLE state as if those passes had completed.
-        if unresolved:
+        if output.claims:
+            output.state = PublicState.AVAILABLE
+            output.attempt_outcome = ("robots_disallowed" if saw_robots_disallowed else
+                "robots_unreachable" if saw_robots_unreachable else "policy_skipped" if saw_policy_skip else
+                "budget_skipped" if saw_budget_skip else "registry_reference_only")
+        elif unresolved:
             output.state = PublicState.AMBIGUOUS
         elif saw_blocked:
             output.state = PublicState.BLOCKED

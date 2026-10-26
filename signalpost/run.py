@@ -497,6 +497,28 @@ def run(args: argparse.Namespace) -> int:
             unique = list(dict.fromkeys(r.organisation_number for r in rows
                                         if r.row_number not in prior_terminalized and len(r.organisation_number) == 9 and r.organisation_number.isdigit()))
             by_org = {}
+            nav_results_by_org = {}
+            nav_homepages = {}
+
+            async def nav_phase(targets):
+                from .nav import research_jobs
+                if run_budget.soft_expired or run_budget.reserve_active:
+                    scheduler_report["nav_jobs"] = {"state": "deadline_skipped", "negative_coverage": False}
+                    return {}, {}
+                if run_budget.physical_requests_remaining < max(12, len(unique) * 4) + 32:
+                    scheduler_report["nav_jobs"] = {"state": "budget_skipped", "negative_coverage": False,
+                        "reason": "preserve_existing_research_request_reserve"}
+                    return {}, {}
+                previous_claims = {org: state.claims for org, state in previous_artifact.companies.items()} if previous_artifact else {}
+                result, cancelled = await _run_before_completion_reserve(research_jobs(targets, gateway, cutoff,
+                    allow_current=cutoff_source == "run_start", previous_claims=previous_claims), run_budget)
+                if cancelled:
+                    scheduler_report["nav_jobs"] = {"state": "deadline_skipped", "negative_coverage": False}
+                    return {}, {}
+                observations, audit, homepages = result
+                scheduler_report["nav_jobs"] = audit
+                return observations, homepages
+
             if live_brreg:
                 scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
                 baseline_orgs = {org for org in unique if all(
@@ -557,6 +579,10 @@ def run(args: argparse.Namespace) -> int:
                 scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
                     "companies": scheduler.company_metrics,
                     "hard_deadline_cancelled": official_deadline_cancelled}
+                if live_websites:
+                    nav_targets = {envelope.organisation_number: envelope for envelope in baseline_saved.values()}
+                    nav_targets.update(by_org)
+                    nav_results_by_org, nav_homepages = await nav_phase(nav_targets)
                 # Foundation envelopes are checkpointed before optional CPU work.
                 # One current official copy supplies both workforce and per-row
                 # financial validation; the scheduler still guarantees completion.
@@ -589,7 +615,8 @@ def run(args: argparse.Namespace) -> int:
                 if row.row_number in baseline_saved:
                     envelope = baseline_saved[row.row_number]
                     live_by_org[row.organisation_number] = SimpleNamespace(
-                        observations=envelope.synthesis.get("brreg_observations", {}), claims=envelope.claims)
+                        observations=envelope.synthesis.get("brreg_observations", {}), claims=envelope.claims,
+                        evidence=envelope.evidence)
                     output.append(envelope)
                     continue
                 if live_brreg and row.organisation_number not in by_org:
@@ -606,11 +633,42 @@ def run(args: argparse.Namespace) -> int:
                 else:
                     envelope = _envelope(row, fixture, batch_id, cutoff, previous)
                 output.append(envelope)
+            if live_websites and not live_brreg:
+                nav_results_by_org, nav_homepages = await nav_phase({envelope.organisation_number: envelope for envelope in output
+                    if envelope.row_number not in prior_terminalized})
+            if live_websites:
+                for envelope in output:
+                    if envelope.row_number in prior_terminalized:
+                        continue
+                    envelope.sections["hiring_activity"].diagnostics.append("nav_jobs:partial_coverage_no_negative_assertion")
+                    result = nav_results_by_org.get(envelope.organisation_number)
+                    if not result:
+                        continue
+                    envelope.claims.extend(result.claims)
+                    _merge_website_provenance(envelope, result)
+                    for section_name in ("hiring_activity", "claims_evidence_states"):
+                        envelope.sections[section_name].claims.extend(result.claims)
+                        envelope.sections[section_name].state = PublicState.AVAILABLE
             if args.live_websites:
                 from .websites import WebsiteResearchResult, research_company, sanitize_registry_websites
                 # Discover shared roots across input entities before evaluating any one company.
                 profiles = {org: _website_profile(org, live_result=live_by_org.get(org), frozen=fixture.get(org),
                     frozen_sha=registry_hash, frozen_source_url=args.registry_source_url) for org in unique}
+                for org, candidates in nav_homepages.items():
+                    if org in profiles:
+                        profiles[org].setdefault("discovery_candidates", []).extend(candidates)
+                from .public_discovery import wikidata_candidates
+                if (cutoff_source == "run_start" and not run_budget.soft_expired and not run_budget.reserve_active
+                        and run_budget.physical_requests_remaining >= max(12, len(unique) * 4) + 4):
+                    discovery_result, discovery_cancelled = await _run_before_completion_reserve(
+                        wikidata_candidates(unique, gateway), run_budget)
+                    scheduler_report["wikidata_discovery"] = {"state": "deadline_skipped"} if discovery_cancelled else discovery_result[1]
+                    if not discovery_cancelled:
+                        for org, candidates in discovery_result[0].items():
+                            profiles[org].setdefault("discovery_candidates", []).extend(candidates)
+                else:
+                    scheduler_report["wikidata_discovery"] = {"state": "not_attempted",
+                        "reason": "historical_cutoff_or_existing_research_reserve"}
                 root_owners: dict[str, set[str]] = {}
                 for org, profile in profiles.items():
                     for candidate in profile.get("website_candidates", []):
@@ -626,7 +684,8 @@ def run(args: argparse.Namespace) -> int:
                         with request_company_scope(item.company):
                             return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
                                 enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
-                                phase=phase, previous=previous, rights_decisions=website_rights_decisions)
+                                phase=phase, previous=previous, rights_decisions=website_rights_decisions,
+                                allow_current_registry_references=cutoff_source == "run_start")
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:

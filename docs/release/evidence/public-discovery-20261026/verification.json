@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-26",
+  "baseline_commit": "99e7560e21f50236d3a8f692238ef27dea539c19",
+  "measurement_kind": "regression_and_bounded_source_contract_checks_not_company_benchmark",
+  "full_suite": {
+    "command": "PYTHONPATH=.. .venv/bin/python -m pytest -q",
+    "working_directory": "signalpost-starter-kit",
+    "passed": 542,
+    "subtests_passed": 237,
+    "seconds": 218.98,
+    "warnings": 1
+  },
+  "independent_functionality_acceptance": {
+    "script": "signalpost-starter-kit/scripts/validate_signalpost_functionality.py",
+    "passed": true,
+    "controlled_transport": true,
+    "actual_http_requests": 0
+  },
+  "isolated_production_environment": {
+    "first_setup": "passed",
+    "repeated_setup": "passed",
+    "locked_distribution_versions": "verified",
+    "offline_terminal_rows": 4,
+    "unrelated_cwd": true,
+    "failure_exit_code": 2,
+    "local_pdf_ocr": "SIGNALPOST2025",
+    "installation_during_run": false,
+    "tesseract_used": false,
+    "dependency_changes": false
+  },
+  "live_source_probe": {
+    "physical_requests": 5,
+    "nav_runtime_public_access_status": 200,
+    "nav_authenticated_feed_status": 200,
+    "nav_detail_status": 200,
+    "selected_detail_had_employer_orgnr": false,
+    "wikidata_outcome": "robots_disallowed",
+    "company_coverage_gain_measured": false
+  },
+  "fixture_production_runner": {
+    "nav_jobs_without_website": "passed",
+    "duplicate_and_invalid_input_cardinality": "passed",
+    "identical_refresh_material_changes": 0
+  },
+  "exact_commit_ci": "verify_separately_after_push"
+}
