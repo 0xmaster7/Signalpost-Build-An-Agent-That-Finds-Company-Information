@@ -1,0 +1,85 @@
+{
+  "versions": {
+    "ours": "455d97925b3bcd4e7c47a643da5e4328a8299f5d",
+    "arnav": "d2666383328c1779973af9d74b1d0d9b884b66e4"
+  },
+  "input_sha256": "acd65b35b1a87ef35c77fa673e4a44b63bd3718b339bc69adddc152889692076",
+  "companies": 100,
+  "population": "Active AS with at least one registered employee; no latest-filing-year or website/financial outcome filter",
+  "fixed_six": [
+    "920710514",
+    "924356715",
+    "930827088",
+    "952780093",
+    "992936916",
+    "993955299"
+  ],
+  "coverage_is_published_evidence_backed_observations_not_accuracy_or_proven_absence": true,
+  "financial_comparison_uses_declared_units_not_independently_proven_arnav_scale": true,
+  "evidence_complete_is_metadata_check_not_semantic_audit": true,
+  "providers": {
+    "ours": {
+      "companies_with_jobs": 0,
+      "distinct_jobs": 0,
+      "companies_with_verified_website": 0,
+      "companies_with_url_only_or_shared_reference": 0,
+      "companies_with_fte": 50,
+      "companies_with_positive_fte": 46,
+      "companies_with_financial_claims": 77,
+      "financial_claims_all_periods": 891,
+      "financial_claims_legal_entity": 891,
+      "financial_claims_group": 0,
+      "financial_claims_evidence_metadata_complete": 891,
+      "terminal_state_counts": {
+        "available": 100
+      },
+      "elapsed_seconds": 2222.116,
+      "financial_claims_latest_standalone_period": 891
+    },
+    "arnav": {
+      "companies_with_jobs": 3,
+      "distinct_jobs": 25,
+      "companies_with_verified_website": 25,
+      "companies_with_url_only_or_shared_reference": 7,
+      "companies_with_fte": 29,
+      "companies_with_positive_fte": 26,
+      "companies_with_financial_claims": 98,
+      "financial_claims_all_periods": 5579,
+      "financial_claims_legal_entity": 5483,
+      "financial_claims_group": 96,
+      "financial_claims_evidence_metadata_complete": 5579,
+      "terminal_state_counts": {
+        "available": 100
+      },
+      "elapsed_seconds": 811.057,
+      "financial_claims_latest_standalone_period": 1872
+    }
+  },
+  "financial_comparison": {
+    "only_arnav": 4845,
+    "equal_declared_dimensions": 734,
+    "only_ours": 157
+  },
+  "fte_comparison": {
+    "only_arnav": 12,
+    "only_ours": 33,
+    "equal_declared_dimensions": 17
+  },
+  "our_pipeline": {
+    "website_execution_states": {
+      "deadline_skipped": 100
+    },
+    "document_states": {
+      "available": 77,
+      "failed": 2,
+      "not_available": 1,
+      "no_document_record": 2,
+      "blocked": 18
+    },
+    "structured_api_unit_withheld_metric_attempts": 6295,
+    "new_source_contributions": {
+      "nav_jobs": 0,
+      "registry_url_only_or_shared": 0
+    }
+  }
+}

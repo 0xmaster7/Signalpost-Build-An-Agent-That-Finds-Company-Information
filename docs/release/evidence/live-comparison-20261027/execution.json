@@ -1,0 +1,81 @@
+{
+  "started_at_utc": "2026-10-26T19:08:25.926165+00:00",
+  "status": "completed",
+  "input_sha256": "acd65b35b1a87ef35c77fa673e4a44b63bd3718b339bc69adddc152889692076",
+  "sample_size": 100,
+  "order": [
+    "ours",
+    "arnav"
+  ],
+  "concurrent_runs": false,
+  "cold_research_caches": true,
+  "host": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "cpus": 2
+  },
+  "shared_request_cap": 2000,
+  "shared_wall_cap_seconds": 2700,
+  "shared_soft_seconds": 2214,
+  "external_safety_timeout_seconds": 3000,
+  "numerical_threads_per_process": 1,
+  "sampling_download_included_in_research_request_counts": false,
+  "sampling_source_requests": 1,
+  "versions": {
+    "ours": "455d97925b3bcd4e7c47a643da5e4328a8299f5d",
+    "arnav": "d2666383328c1779973af9d74b1d0d9b884b66e4"
+  },
+  "runs": {
+    "ours": {
+      "status": "completed",
+      "started_at_utc": "2026-10-26T19:08:25.928978+00:00",
+      "command": [
+        "/tmp/signalpost-live-baseline-20261027/run.sh",
+        "--input",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/selection/companies.jsonl",
+        "--output",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/ours/envelopes.jsonl",
+        "--state-output",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/ours/state.json",
+        "--checkpoint",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/ours/checkpoint.sqlite",
+        "--config",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/matched-budget.json"
+      ],
+      "working_directory": "/home/azureuser/projects/signalpost-live-comparison-20261027",
+      "pid": 49763,
+      "exit_code": 0,
+      "completed_at_utc": "2026-10-26T19:45:28.045363+00:00",
+      "elapsed_seconds": 2222.116,
+      "source_revision_after": "455d97925b3bcd4e7c47a643da5e4328a8299f5d",
+      "output_sha256": "5674c2e5e552392b1b39c1569b8232392631788e3a35db9571c0c2b8ec3b9717",
+      "terminal_rows_present": 100
+    },
+    "arnav": {
+      "status": "completed",
+      "started_at_utc": "2026-10-26T19:45:28.101914+00:00",
+      "command": [
+        "/tmp/arnav-live-benchmark-20261027/.venv/bin/python",
+        "-m",
+        "signalpost",
+        "--input",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/selection/companies.jsonl",
+        "--output-dir",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/arnav/out",
+        "--cache-dir",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/arnav/cache",
+        "--state-dir",
+        "/home/azureuser/projects/signalpost-live-comparison-20261027/arnav/state"
+      ],
+      "working_directory": "/tmp/arnav-live-benchmark-20261027",
+      "pid": 119332,
+      "exit_code": 0,
+      "completed_at_utc": "2026-10-26T19:58:59.159239+00:00",
+      "elapsed_seconds": 811.057,
+      "source_revision_after": "d2666383328c1779973af9d74b1d0d9b884b66e4",
+      "output_sha256": "6dccff04cbac8ce85fb5649f0130b89df8a3f1ec1cb59f1013a428c4a5579c6a",
+      "terminal_rows_present": 100
+    }
+  },
+  "completed_at_utc": "2026-10-26T19:58:59.168123+00:00"
+}

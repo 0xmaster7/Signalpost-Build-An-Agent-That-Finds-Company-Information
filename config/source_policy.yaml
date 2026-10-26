@@ -114,9 +114,13 @@ sources:
     acquisition:
       mode: candidate_only_batch_sparql
       gateway: signalpost.network.NetworkGateway
+      access_profile: wikidata_sparql_api
+      user_agent_contact: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/issues
+      api_policy_reference: https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy
       robots:
-        enforce_explicit_rules: true
-        on_unreachable: skip
+        applicability: not_company_website_crawling
+        exemption: exact_https_query.wikidata.org_sparql_endpoint_only
+      redirects: reject_changed_destination
       max_companies: 200
       time_seconds: 12
     rights:

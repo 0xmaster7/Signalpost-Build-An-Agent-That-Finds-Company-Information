@@ -1,8 +1,12 @@
 import asyncio
 import json
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-from signalpost.public_discovery import wikidata_candidates
+import pytest
+
+from signalpost.network import NetworkGateway, NetworkPolicyError
+from signalpost.public_discovery import WIKIDATA_USER_AGENT, wikidata_candidates
 from signalpost.websites import research_company
 
 
@@ -71,6 +75,84 @@ def test_wikidata_one_batch_request_candidate_only_and_bounded():
     assert audit["state"] == "completed"
     assert result[ORG][0]["source"] == "wikidata"
     assert not result[ORG][0].get("evidence_id")
+    assert gateway.calls[0][1]["access_profile"] == "wikidata_sparql_api"
+    assert gateway.calls[0][1]["user_agent"] == WIKIDATA_USER_AGENT
+
+
+def test_wikidata_api_skips_crawler_robots_but_company_websites_do_not():
+    class Transport:
+        calls = []
+
+        async def request(self, url, headers, timeout):
+            self.calls.append((url, headers))
+            return 200, {}, b'{"results":{"bindings":[]}}', url
+
+    transport = Transport()
+    gateway = NetworkGateway(transport=transport, retries=0)
+    with patch.object(gateway, "robots_decision", return_value=("disallowed", None)) as robots, \
+            patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)):
+        result, audit = asyncio.run(wikidata_candidates([ORG], gateway))
+        assert audit["state"] == "completed" and result == {}
+        robots.assert_not_called()
+        assert asyncio.run(gateway.fetch("https://company.example/"))[-1] == "robots_disallowed"
+        assert robots.call_count == 1
+    assert len(transport.calls) == 1 and gateway.ledger.physical_requests == 1
+    assert transport.calls[0][1]["User-Agent"] == WIKIDATA_USER_AGENT
+
+
+@pytest.mark.parametrize("url,purpose", [
+    ("http://query.wikidata.org/sparql?query=SELECT&format=json", "wikidata_batch_candidates"),
+    ("https://example.org/sparql?query=SELECT&format=json", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org:444/sparql?query=SELECT&format=json", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org/private?query=SELECT&format=json", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org/sparql?query=SELECT&query=OTHER&format=json", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org/sparql?query=SELECT&format=json&extra=yes", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org/sparql?query=&format=json", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org/sparql?query=SELECT", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org/sparql?query=SELECT&format=json#fragment", "wikidata_batch_candidates"),
+    ("https://user@query.wikidata.org/sparql?query=SELECT&format=json", "wikidata_batch_candidates"),
+    ("https://query.wikidata.org/sparql?query=SELECT&format=json", "page"),
+])
+def test_wikidata_profile_cannot_exempt_other_requests(url, purpose):
+    with pytest.raises(NetworkPolicyError):
+        asyncio.run(NetworkGateway().fetch(url, purpose=purpose, access_profile="wikidata_sparql_api"))
+
+
+def test_wikidata_api_preserves_public_host_validation_and_rejects_redirects():
+    class Transport:
+        calls = []
+
+        async def request(self, url, headers, timeout):
+            self.calls.append(url)
+            return 302, {"Location": "https://query.wikidata.org/private"}, b"", url
+
+    url = "https://query.wikidata.org/sparql?query=SELECT&format=json"
+    transport = Transport()
+    gateway = NetworkGateway(transport=transport, retries=0)
+    with patch("signalpost.network.validate_public_host", side_effect=NetworkPolicyError("private address")):
+        with pytest.raises(NetworkPolicyError):
+            asyncio.run(gateway.fetch(url, purpose="wikidata_batch_candidates", access_profile="wikidata_sparql_api"))
+    assert not transport.calls
+    with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)):
+        with pytest.raises(NetworkPolicyError):
+            asyncio.run(gateway.fetch(url, purpose="wikidata_batch_candidates", access_profile="wikidata_sparql_api"))
+    assert len(transport.calls) == 1
+
+
+def test_wikidata_api_refusal_is_not_retried_through_another_route():
+    class Transport:
+        calls = []
+
+        async def request(self, url, headers, timeout):
+            self.calls.append(url)
+            return 403, {}, b"Forbidden", url
+
+    transport = Transport()
+    gateway = NetworkGateway(transport=transport, retries=0)
+    with patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)):
+        result, audit = asyncio.run(wikidata_candidates([ORG], gateway))
+    assert result == {} and audit["state"] == "blocked" and audit["http_status"] == 403
+    assert len(transport.calls) == 1 and gateway.ledger.physical_requests == 1
 
 
 def test_wikidata_outage_never_fabricates_candidates():

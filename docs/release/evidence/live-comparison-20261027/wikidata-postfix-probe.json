@@ -1,0 +1,23 @@
+{
+  "audit": {
+    "state": "completed",
+    "requested_companies": 100,
+    "omitted_companies": 0,
+    "access_profile": "wikidata_sparql_api",
+    "user_agent": "Signalpost/1.0 (company-research; https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/issues)",
+    "outcome": "ok",
+    "http_status": 200,
+    "candidate_count": 4,
+    "response_sha256": "d02f8cc4d0b2be727140190251b37b58f631c9f1da865282d5ba7b93431ace31"
+  },
+  "companies_with_candidates": 4,
+  "physical_requests": 1,
+  "ledger": [
+    {
+      "purpose": "wikidata_batch_candidates",
+      "status": 200,
+      "outcome": "received",
+      "bytes": 1313
+    }
+  ]
+}

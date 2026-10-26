@@ -68,6 +68,20 @@ def _nav_api_url(url: str, purpose: str) -> bool:
         and set(urllib.parse.parse_qs(parsed.query, keep_blank_values=True)) <= {"pageSize", "last"})
 
 
+def _wikidata_api_url(url: str, purpose: str) -> bool:
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        parameters = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True)
+        return (purpose == "wikidata_batch_candidates" and parsed.scheme == "https"
+            and parsed.hostname == "query.wikidata.org" and parsed.port in {None, 443}
+            and not parsed.username and not parsed.password and not parsed.fragment
+            and parsed.path == "/sparql" and len(parameters) == 2
+            and {name for name, value in parameters} == {"query", "format"}
+            and dict(parameters)["format"] == "json" and bool(dict(parameters)["query"].strip()))
+    except ValueError:
+        return False
+
+
 def _brreg_structured_api_url(url: str, purpose: str) -> bool:
     """Constrain the robots-outage exception to documented BRREG API paths."""
     parsed = urllib.parse.urlsplit(url)
@@ -341,6 +355,8 @@ class NetworkGateway:
                     allowed_hosts: set[str] | None = None, access_profile: str | None = None,
                     api_headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes, str, str]:
         self.ledger.logical_requests += 1
+        if access_profile == "wikidata_sparql_api" and not _wikidata_api_url(url, purpose):
+            raise NetworkPolicyError("Wikidata API profile requires the exact documented SPARQL endpoint")
         target = canonical_url(url)
         if api_headers and (access_profile != "nav_feed_api" or not _nav_api_url(target, purpose)
                 or set(api_headers) - {"Authorization", "If-Modified-Since"}
@@ -382,8 +398,12 @@ class NetworkGateway:
         target = canonical_url(url)
         if allowed_hosts is not None and (urllib.parse.urlsplit(target).hostname or "").casefold() not in {h.casefold() for h in allowed_hosts}:
             raise NetworkPolicyError("destination host is outside the caller's source allowlist")
-        if access_profile not in {None, "brreg_structured_api", "brreg_document_api", "nav_feed_api"}:
+        if access_profile not in {None, "brreg_structured_api", "brreg_document_api", "nav_feed_api", "wikidata_sparql_api"}:
             raise NetworkPolicyError("unknown source access profile")
+        if access_profile == "wikidata_sparql_api":
+            if not _wikidata_api_url(url, purpose):
+                raise NetworkPolicyError("Wikidata API profile requires the exact documented SPARQL endpoint")
+            use_robots = False
         if access_profile == "nav_feed_api" and not _nav_api_url(target, purpose):
             raise NetworkPolicyError("NAV API profile requires an exact official feed endpoint")
         if access_profile == "brreg_structured_api" and not _brreg_structured_api_url(target, purpose):
@@ -464,6 +484,8 @@ class NetworkGateway:
                                 raise NetworkPolicyError("BRREG document redirect left its exact permitted endpoint")
                             if access_profile == "nav_feed_api" and target != canonical_url(url):
                                 raise NetworkPolicyError("NAV API redirects are not permitted")
+                            if access_profile == "wikidata_sparql_api" and target != canonical_url(url):
+                                raise NetworkPolicyError("Wikidata API redirects are not permitted")
                             self._assert_proxy_route(target)
                             validate_public_host(target, trusted_proxy=self.trusted_proxy)
                             if use_robots and purpose != "robots":

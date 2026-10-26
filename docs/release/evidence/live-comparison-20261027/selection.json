@@ -1,0 +1,824 @@
+{
+  "selected_at_utc": "2026-10-26T19:07:05.978083+00:00",
+  "seed": "0075a51039afb461b594df7f2f2b1fa072efd99f4abcad6cdcf5bc8d4402acee",
+  "method": "94 smallest independent seeded SHA256 ranks without replacement, plus six fixed companies; all 100 shuffled",
+  "population": "Active AS with at least one registered employee; no latest-filing-year or website/financial outcome filter",
+  "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv",
+  "source_file_sha256": "f2c8f55b47c0a203f91444b1280da00573a44067939da6f06900d559cbde1ece",
+  "source_bytes": 155147162,
+  "source_rows": 1179224,
+  "eligible_population": 60946,
+  "sample_size": 100,
+  "random_additions": 94,
+  "fixed_companies": [
+    "920710514",
+    "924356715",
+    "930827088",
+    "952780093",
+    "992936916",
+    "993955299"
+  ],
+  "input_sha256": "acd65b35b1a87ef35c77fa673e4a44b63bd3718b339bc69adddc152889692076",
+  "rows": [
+    {
+      "organisation_number": "937060092",
+      "name": "INDISKA NORGE AS",
+      "legal_form": "AS",
+      "registered_employees": 19,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "821194652",
+      "name": "MARIHØNÅ AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "912444899",
+      "name": "SUGAR SHOP AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "980170519",
+      "name": "KJELLS HYTTESERVICE AS",
+      "legal_form": "AS",
+      "registered_employees": 17,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "920365515",
+      "name": "BJØRVIKA BISTRO AS",
+      "legal_form": "AS",
+      "registered_employees": 35,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "998688957",
+      "name": "MANNDALEN BYGG AS",
+      "legal_form": "AS",
+      "registered_employees": 8,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "989811541",
+      "name": "SIGURD SIVERTSEN AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "976466306",
+      "name": "KAPITAL-STYRING AS",
+      "legal_form": "AS",
+      "registered_employees": 25,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "989748319",
+      "name": "PRIMA ASSISTANSE AS",
+      "legal_form": "AS",
+      "registered_employees": 2512,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "998617901",
+      "name": "FLEXCOM AS",
+      "legal_form": "AS",
+      "registered_employees": 33,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "911564092",
+      "name": "VISIT GEILO AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "926379046",
+      "name": "SKAGE HAGE OG MASKINER AS",
+      "legal_form": "AS",
+      "registered_employees": 10,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "930827088",
+      "name": "ROMERIKE BARNEHAGE - SOLHAUG AS",
+      "legal_form": "AS",
+      "registered_employees": 23,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": true
+    },
+    {
+      "organisation_number": "924356715",
+      "name": "TRAFIKKDRIFT AS",
+      "legal_form": "AS",
+      "registered_employees": 22,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": true
+    },
+    {
+      "organisation_number": "997397649",
+      "name": "ENTER REVISJON FINNMARK AS",
+      "legal_form": "AS",
+      "registered_employees": 11,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "979952228",
+      "name": "WITSØ MASKIN AS",
+      "legal_form": "AS",
+      "registered_employees": 13,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "998413281",
+      "name": "BARONA AS",
+      "legal_form": "AS",
+      "registered_employees": 153,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "934938836",
+      "name": "MIKKELS GLADMAT AS",
+      "legal_form": "AS",
+      "registered_employees": 27,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "917445060",
+      "name": "NORSKE TOG AS",
+      "legal_form": "AS",
+      "registered_employees": 95,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "934093054",
+      "name": "EM LOGISTIKK AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "882316092",
+      "name": "HAMAR PUKK OG GRUS AS",
+      "legal_form": "AS",
+      "registered_employees": 16,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "976537076",
+      "name": "PALLESEN SVEIS AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "915931987",
+      "name": "DANIEL MOLTU AS",
+      "legal_form": "AS",
+      "registered_employees": 27,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "831163542",
+      "name": "AMBR INSTITUTE AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "992936916",
+      "name": "KVISTE MASKIN AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": true
+    },
+    {
+      "organisation_number": "925995762",
+      "name": "NORWEGIAN MYCELIUM AS",
+      "legal_form": "AS",
+      "registered_employees": 10,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "952780093",
+      "name": "PAUL AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": true
+    },
+    {
+      "organisation_number": "936704719",
+      "name": "YY LECK TROMSØ AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "990598991",
+      "name": "NORGES TOPPIDRETTSGYMNAS BÆRUM AS",
+      "legal_form": "AS",
+      "registered_employees": 80,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "963915411",
+      "name": "AS KONGSVINGER RØRLEGGERSERVICE",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "998547113",
+      "name": "JORIDS LEFSEBAKERI AS",
+      "legal_form": "AS",
+      "registered_employees": 13,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "916251335",
+      "name": "HS MC-SENTER AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "914631408",
+      "name": "M VEST WATER AS",
+      "legal_form": "AS",
+      "registered_employees": 9,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "923799206",
+      "name": "TAKE AWAY MAT AS",
+      "legal_form": "AS",
+      "registered_employees": 11,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "916359667",
+      "name": "ACTIVEON AS",
+      "legal_form": "AS",
+      "registered_employees": 20,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "925733415",
+      "name": "MR. DAMASCY AS",
+      "legal_form": "AS",
+      "registered_employees": 12,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "997722094",
+      "name": "STEINMILJØ AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "921257953",
+      "name": "VICTORIA HOTELL FLORØ AS",
+      "legal_form": "AS",
+      "registered_employees": 36,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "932225999",
+      "name": "BUNADSMESTEREN AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "937322364",
+      "name": "MESNA BYGGSERVICE AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "940940842",
+      "name": "BILSKADESENTERET AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "922146179",
+      "name": "GUDMESTAD MASKIN AS",
+      "legal_form": "AS",
+      "registered_employees": 7,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "935834759",
+      "name": "SERVIX PLANTEDEKOR AS",
+      "legal_form": "AS",
+      "registered_employees": 24,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "979164920",
+      "name": "COCO & FRIENDS AS",
+      "legal_form": "AS",
+      "registered_employees": 28,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "991504125",
+      "name": "ADVOKATFIRMA OLAFSEN AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "988953202",
+      "name": "MR. ICEMAN AS",
+      "legal_form": "AS",
+      "registered_employees": 13,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "976934318",
+      "name": "BYGGMESTER ÅDNEKVAM AS",
+      "legal_form": "AS",
+      "registered_employees": 47,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "916652968",
+      "name": "SOLID BYGG STAVANGER AS",
+      "legal_form": "AS",
+      "registered_employees": 9,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "935821622",
+      "name": "MILJØMAL AS",
+      "legal_form": "AS",
+      "registered_employees": 8,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "924843810",
+      "name": "DENTALSTØP TANNTEKNIKK AS",
+      "legal_form": "AS",
+      "registered_employees": 19,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "928501892",
+      "name": "THE TAVERN AS",
+      "legal_form": "AS",
+      "registered_employees": 13,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "912156915",
+      "name": "ZIGNMEDIA AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "989389009",
+      "name": "CASA BYGG AS",
+      "legal_form": "AS",
+      "registered_employees": 7,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "923774688",
+      "name": "KBE MASKINUTLEIE AS",
+      "legal_form": "AS",
+      "registered_employees": 12,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "932687909",
+      "name": "MANDAL TRADING AS",
+      "legal_form": "AS",
+      "registered_employees": 11,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "915985203",
+      "name": "INTERSPORT FILEFJELL AS",
+      "legal_form": "AS",
+      "registered_employees": 9,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "931123920",
+      "name": "SAINT LAURENT NORWAY AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "941831753",
+      "name": "FOLLO AUTOCO AS",
+      "legal_form": "AS",
+      "registered_employees": 57,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "913542185",
+      "name": "RAHIM AHMADI AS",
+      "legal_form": "AS",
+      "registered_employees": 9,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "890397832",
+      "name": "FRYDENBØ FORWARD AS",
+      "legal_form": "AS",
+      "registered_employees": 99,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "931769944",
+      "name": "SICARO AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "975381781",
+      "name": "VECTURA AS",
+      "legal_form": "AS",
+      "registered_employees": 193,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "945748931",
+      "name": "DNV AS",
+      "legal_form": "AS",
+      "registered_employees": 2342,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "922043701",
+      "name": "UTSIKTEN VEST FUS BARNEHAGE AS",
+      "legal_form": "AS",
+      "registered_employees": 20,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "995871807",
+      "name": "HUSNES RØYR AS",
+      "legal_form": "AS",
+      "registered_employees": 9,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "936295630",
+      "name": "ADVOKATFIRMA STEG AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "918113843",
+      "name": "SKIPTVET BILSERVICE AS",
+      "legal_form": "AS",
+      "registered_employees": 7,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "926476149",
+      "name": "FANNESTRANDVEGEN 49B AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "994308777",
+      "name": "OPHUZ FRISØR AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "913015185",
+      "name": "PEBÅ AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "921153279",
+      "name": "CORE HOTEL TROMSØ AS",
+      "legal_form": "AS",
+      "registered_employees": 48,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "935588553",
+      "name": "METIS PRIVATISTSKOLE BERGEN AS",
+      "legal_form": "AS",
+      "registered_employees": 19,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "923614400",
+      "name": "THINTHAN ASIA FOOD AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "882692302",
+      "name": "BILTEMA NORGE AS",
+      "legal_form": "AS",
+      "registered_employees": 1845,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "928587894",
+      "name": "HUSFLIDEN AS",
+      "legal_form": "AS",
+      "registered_employees": 10,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "914970334",
+      "name": "CHARTER I NORD AS",
+      "legal_form": "AS",
+      "registered_employees": 14,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "985865108",
+      "name": "W-TEK AS",
+      "legal_form": "AS",
+      "registered_employees": 10,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "979573464",
+      "name": "CUROTECH AS",
+      "legal_form": "AS",
+      "registered_employees": 19,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "913543351",
+      "name": "OLASTUEN BYGG AS",
+      "legal_form": "AS",
+      "registered_employees": 15,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "991667873",
+      "name": "STEIGEN CONTRACTING AS",
+      "legal_form": "AS",
+      "registered_employees": 15,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "930181358",
+      "name": "INTERSOLIA AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "967149098",
+      "name": "FRYDENBØ BIL VPL AS",
+      "legal_form": "AS",
+      "registered_employees": 215,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "979956258",
+      "name": "KNOWLEDGEGROUP AS",
+      "legal_form": "AS",
+      "registered_employees": 15,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "989030760",
+      "name": "ROCK POCKET AS",
+      "legal_form": "AS",
+      "registered_employees": 7,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "920710514",
+      "name": "LAUVVERKET AS",
+      "legal_form": "AS",
+      "registered_employees": 10,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": true
+    },
+    {
+      "organisation_number": "914786703",
+      "name": "INNSTRANDA LEGESENTER AS",
+      "legal_form": "AS",
+      "registered_employees": 5,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "968091336",
+      "name": "TVEIT AS",
+      "legal_form": "AS",
+      "registered_employees": 12,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "996335291",
+      "name": "SKEIKAMPEN DAGLIGVARE AS",
+      "legal_form": "AS",
+      "registered_employees": 16,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "952151533",
+      "name": "STORETVEDT REGNSKAPSBYRÅ AS",
+      "legal_form": "AS",
+      "registered_employees": 14,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "958260563",
+      "name": "ETNE CONTAINERSERVICE AS",
+      "legal_form": "AS",
+      "registered_employees": 18,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "979684479",
+      "name": "GRØNHAUG RETAIL AS",
+      "legal_form": "AS",
+      "registered_employees": 190,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "971583061",
+      "name": "RØDVEN TRANSPORT AS",
+      "legal_form": "AS",
+      "registered_employees": 30,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "827442852",
+      "name": "MASKINSALG AS",
+      "legal_form": "AS",
+      "registered_employees": 8,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "937128274",
+      "name": "INGJERD ARNØY AS",
+      "legal_form": "AS",
+      "registered_employees": 10,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "817203752",
+      "name": "SULLAND RINGERIKE AS",
+      "legal_form": "AS",
+      "registered_employees": 48,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "914790514",
+      "name": "DOGAN DRIFT AS",
+      "legal_form": "AS",
+      "registered_employees": 6,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "890651372",
+      "name": "ANDVORD EIENDOM AS",
+      "legal_form": "AS",
+      "registered_employees": 7,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "993955299",
+      "name": "RISINGVEIEN MAT AS",
+      "legal_form": "AS",
+      "registered_employees": 31,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": true
+    },
+    {
+      "organisation_number": "886658702",
+      "name": "BDM ELEKTRO AS",
+      "legal_form": "AS",
+      "registered_employees": 12,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    },
+    {
+      "organisation_number": "998463548",
+      "name": "PULS OASEN AS",
+      "legal_form": "AS",
+      "registered_employees": 7,
+      "eligible_in_selection_frame": true,
+      "fixed_six_company_cohort": false
+    }
+  ]
+}

@@ -6,6 +6,10 @@ The [26 October discovery update](docs/release/PUBLIC_DISCOVERY_2026-10-26.md) a
 
 ## Live evaluation results
 
+The [27 October matched 100-employer benchmark](docs/release/LIVE_COMPARISON_2026-10-27.md) is the latest larger live measurement: Signalpost versus Arnav's unchanged repo on identical inputs, including the six-company cohort. Companies with verified-site claims: 0/25; jobs: 0/3; FTE: 50/29; financials: 77/98. Our OCR queue exhausted the optional website research window. Per-company CSV/JSONL and exact versions are included; these are coverage counts, not established accuracy.
+
+### Historical six-company measurement
+
 Same six previously unseen Norwegian AS employers, selected before source outcomes; previous release `8076e1b` versus latest measured implementation `72e8c05`, retained in release `59cbada`.
 
 | Metric | Previous | Latest |

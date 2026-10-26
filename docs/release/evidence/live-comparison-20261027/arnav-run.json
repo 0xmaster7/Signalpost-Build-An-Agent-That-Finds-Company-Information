@@ -1,0 +1,101 @@
+{
+  "run_id": "run-20261026T194528Z",
+  "agent": "signalpost-agent",
+  "agent_version": "3.0.0",
+  "provisional": false,
+  "started_at": "2026-10-26T19:45:28Z",
+  "completed_at": "2026-10-26T19:58:58Z",
+  "inputs": 100,
+  "emitted_envelopes": 100,
+  "operations": {
+    "max_requests": 2000,
+    "requests": 514,
+    "requests_by_source_class": {
+      "official_registry_bulk": 3,
+      "official_annual_accounts": 100,
+      "official_annual_account_copy": 32,
+      "official_jobs_feed": 104,
+      "open_data_wikidata": 1,
+      "company_website_robots": 106,
+      "directory_sitemap": 6,
+      "directory_page": 5,
+      "company_website": 146,
+      "company_website_feed": 11
+    },
+    "bytes": 433858285,
+    "elapsed_s": 810.4,
+    "third_party_cost_usd": 0.0
+  },
+  "registry_sources": {
+    "entities": {
+      "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv",
+      "path": "/home/azureuser/projects/signalpost-live-comparison-20261027/arnav/cache/enheter.csv.gz",
+      "origin": "downloaded",
+      "retrieved_at": "2026-10-26T19:49:16Z",
+      "sha256": "f2c8f55b47c0a203f91444b1280da00573a44067939da6f06900d559cbde1ece"
+    },
+    "subunits": {
+      "url": "https://data.brreg.no/enhetsregisteret/api/underenheter/lastned/csv",
+      "path": "/home/azureuser/projects/signalpost-live-comparison-20261027/arnav/cache/underenheter.csv.gz",
+      "origin": "downloaded",
+      "retrieved_at": "2026-10-26T19:50:56Z",
+      "sha256": "715cfb9d156797328e4223d738fb3a9bab8e614e8d8a98e3c04027ad6ffb492b"
+    },
+    "roles": {
+      "url": "https://data.brreg.no/enhetsregisteret/api/roller/totalbestand",
+      "path": "/home/azureuser/projects/signalpost-live-comparison-20261027/arnav/cache/roller.json.gz",
+      "origin": "downloaded",
+      "retrieved_at": "2026-10-26T19:54:04Z",
+      "sha256": "23467c625d436e9140e9be84a7f28bef23343e494c59ec6b9e5d67dfc63a3f9d"
+    }
+  },
+  "registry_errors": [],
+  "claim_states": {
+    "available": 9859,
+    "not_available": 335,
+    "ambiguous": 20,
+    "blocked": 2
+  },
+  "website_identity_outcomes": {
+    "dead_domain": 41,
+    "parked": 7,
+    "exact": 13,
+    "registry_declared": 2,
+    "blocked": 5,
+    "shared_site": 3,
+    "strong": 14,
+    "ambiguous": 12
+  },
+  "companies_with_verified_website": 29,
+  "validation": {
+    "passed": true,
+    "exact_one_envelope_per_input": true,
+    "unique_valid_organisations": 100
+  },
+  "models_and_apis": {
+    "llm": null,
+    "third_party_paid_apis": null,
+    "cost_usd": 0.0
+  },
+  "connectors": {
+    "workforce_annual_accounts_ocr": {
+      "backend": "rapidocr",
+      "planned": 98,
+      "downloaded": 32,
+      "accepted": 29,
+      "skipped_reason": null,
+      "elapsed_s": 288.6,
+      "processed": 32
+    },
+    "nav_job_feed": {
+      "loaded": true,
+      "days": 40,
+      "error": null,
+      "ads": 26506,
+      "pages": 78
+    },
+    "nav_confirmed_companies": 3,
+    "wikidata_entities": 5,
+    "directory_pages": 5
+  }
+}

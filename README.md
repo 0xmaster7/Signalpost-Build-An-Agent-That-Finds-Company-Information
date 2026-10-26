@@ -2,13 +2,15 @@
 
 **[Results — live evaluation and evidence](RESULTS.md)**
 
+**Latest live benchmark (27 October 2026):** [100 active AS employers, compared with Arnav's unchanged repository](docs/release/LIVE_COMPARISON_2026-10-27.md), with per-company CSV/JSONL. Signalpost / Arnav coverage: verified websites 0/25, jobs 0/3, FTE 50/29, financials 77/98. Our optional website phases were deadline-skipped behind OCR; the report separates coverage from accuracy and historical small-cohort claims.
+
 Signalpost researches Norwegian companies by organisation number and returns ordered, evidence-backed JSONL profiles. Its read-only dashboard lets users find saved companies, compare facts, verify propositions and inspect sources and history.
 
 **Status:** the public `main` branch is the canonical release. The [latest measured release](docs/release/FINAL_CAPABILITY_INTEGRATION_2026-10-17.md) recovered 57 additional financial claims and registered workplace locations for 6/6 previously unseen companies. Website, jobs and news coverage remain limited. No official Builderr score or submission is claimed.
 
 **Current review (26 October 2026):** [audit, reference comparison and fixes](docs/release/CURRENT_AUDIT_2026-10-26.md). Additional explicit FTE statement formats, corrected million-scale parsing and bounded OCR queue time are covered by offline regressions. The measured live results above have not been rerun; external coverage remains limited.
 
-**Discovery update:** [independent NAV jobs and registry URL-only references](docs/release/PUBLIC_DISCOVERY_2026-10-26.md) no longer require website ownership to publish those specific facts. NAV coverage is a bounded partial scan, not proof of zero jobs. Batch Wikidata candidate discovery is implemented but currently blocked by the endpoint's robots policy; no access bypass or improved cohort coverage is claimed.
+**Discovery update:** [independent NAV jobs and registry URL-only references](docs/release/PUBLIC_DISCOVERY_2026-10-26.md) no longer require website ownership to publish those specific facts. NAV coverage is a bounded partial scan, not proof of zero jobs. The [27 October Wikidata correction](docs/release/WIKIDATA_API_2026-10-27.md) separates the documented SPARQL API from company-site crawler robots and supplies a project/contact User-Agent. Results remain discovery candidates, not ownership proof; no post-fix coverage gain is claimed.
 
 ## Install and run: two commands
 

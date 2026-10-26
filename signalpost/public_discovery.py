@@ -13,12 +13,14 @@ from .websites import sanitize_registry_websites
 
 
 APPROVED_DISCOVERY_REQUEST_PURPOSES = frozenset({"wikidata_batch_candidates"})
+WIKIDATA_USER_AGENT = "Signalpost/1.0 (company-research; https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/issues)"
 
 
 async def wikidata_candidates(organisations: list[str], gateway: NetworkGateway) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     selected = list(dict.fromkeys(org for org in organisations if re.fullmatch(r"\d{9}", org)))[:200]
     audit: dict[str, Any] = {"state": "not_attempted", "requested_companies": len(selected),
-                             "omitted_companies": len(set(organisations)) - len(selected)}
+                             "omitted_companies": len(set(organisations)) - len(selected),
+                             "access_profile": "wikidata_sparql_api", "user_agent": WIKIDATA_USER_AGENT}
     result: dict[str, list[dict[str, Any]]] = {}
     if not selected:
         return result, audit
@@ -29,7 +31,8 @@ async def wikidata_candidates(organisations: list[str], gateway: NetworkGateway)
     try:
         async with asyncio.timeout(12):
             status, headers, body, final_url, outcome = await gateway.fetch(url,
-                purpose="wikidata_batch_candidates", allowed_hosts={"query.wikidata.org"}, max_bytes=1024 * 1024)
+                purpose="wikidata_batch_candidates", allowed_hosts={"query.wikidata.org"}, max_bytes=1024 * 1024,
+                access_profile="wikidata_sparql_api", user_agent=WIKIDATA_USER_AGENT)
         audit.update(state="blocked", outcome=outcome, http_status=status)
         if status != 200 or outcome != "ok":
             return result, audit
