@@ -93,7 +93,7 @@ def normalize(envelope, provider):
             multiplier = SCALES.get(str(unit).upper())
             journal = None
             if provider == "ours":
-                match = re.search(r":filing:([^:]+):", str(claim.get("subject_id", "")))
+                match = re.search(r":filing:(?:(?:legal_entity|group):)?([^:]+):", str(claim.get("subject_id", "")))
                 journal = match.group(1) if match else None
             else:
                 for ref in claim.get("evidence_ids", []):
@@ -104,7 +104,9 @@ def normalize(envelope, provider):
                 "period_start": start, "period_end": end, "scope": scope,
                 "filing_journal_number": journal,
                 "declared_currency_value": str(amount * multiplier) if multiplier is not None else None,
-                "unit_basis": "document_or_explicit_unit" if provider == "ours" else "currency_used_as_unit_unresolved_provider_scale_contract",
+                "unit_basis": ("company_pdf_calibrated_currency_assumption" if claim.get("unit_assumed_currency") else "document_or_explicit_unit") if provider == "ours" else "currency_used_as_unit_unresolved_provider_scale_contract",
+                "unit_assumed_currency": bool(claim.get("unit_assumed_currency", False)),
+                "unit_assumption_basis": claim.get("unit_assumption_basis"),
                 "evidence_metadata_complete": complete, "evidence": evidence_refs})
         if provider == "ours" and field == "full_time_equivalents":
             fte_value = number(value)
@@ -224,7 +226,8 @@ def pipeline(envelope):
         match = re.search(r"Financial metric ([A-Za-z_]+) was withheld", str(error.get("message", "")))
         withheld += bool(error.get("code") == "BRREG_FINANCIAL_UNIT_UNSUPPORTED" and match and match.group(1) in FINANCIAL)
     return {"structured_api_unit_withheld_metric_attempts": withheld, "structured_api_records": records,
-        "document": {key: document.get(key) for key in ("state", "reason", "pages_processed", "ocr_seconds", "processing_seconds", "financial_claims", "workforce_claims", "cache_hit") if key in document},
+        "document": {key: document.get(key) for key in ("state", "reason", "pages_processed", "ocr_seconds", "processing_seconds", "financial_claims", "workforce_claims", "cache_hit", "examined_pages", "strategy", "stopped_early", "fte_pages_examined", "financial_anchor_pages", "coverage_complete", "document_pages", "stop_reason") if key in document},
+        "financial_calibration": registry.get("financial_calibration", {}),
         "website_execution_state": website.get("execution_state"),
         "website_execution_reason": website.get("reason"),
         "website_crawl_state": website.get("crawl_state"),

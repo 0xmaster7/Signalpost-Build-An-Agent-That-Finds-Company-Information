@@ -47,6 +47,11 @@ sources:
         on_unreachable: allow_only_documented_structured_api_paths
       redirects: same_host_only
       user_agent_contact: pending_builderr_contact
+      missing_unit_policy: company_local_pdf_api_currency_assumption
+      calibration_nonzero_metrics: 2
+      unit_assumed_currency_flag: required
+      calibration_scope: legal_entity_reference_with_explicit_cross_period_and_group_assumptions
+      explicit_unit_conflict: withhold
     rights:
       license: NLOD-2.0
       reference: https://www.brreg.no/bruke-data-fra-bronnoysundregistrene/datasett-og-api/
@@ -72,6 +77,12 @@ sources:
       ocr_workers: 2
       ocr_timeout_seconds: 90
       ocr_pages: 7
+      fte_page_priority: [5, 4, 6, 3, 7, 2]
+      fte_stop: first_verified_company_statement_or_same_page_conflict
+      mandatory_identity_page: 1
+      separate_financial_anchor_pages: [2]
+      ocr_phase_share: 0.65
+      ocr_phase_max_seconds: 900
     rights:
       reference: https://data.brreg.no/regnskapsregisteret/regnskap/v3/api-docs
       basis: public_official_filing_factual_extraction
@@ -79,7 +90,7 @@ sources:
       document_republication: false
     retention:
       response_bodies: run_scoped
-      ocr_cache: run_scoped_document_sha256
+      ocr_cache: run_scoped_document_sha256_filing_context_strategy_and_page_coverage
       retain_provenance: [source_url, retrieved_at, content_sha256, page_number, excerpt, reporting_period, source_snapshot]
   nav_jobs:
     name: NAV Arbeidsplassen official vacancy feed
@@ -93,9 +104,12 @@ sources:
         enforce_explicit_rules: true
         on_unreachable: allow_only_documented_nav_feed_paths
       redirects: reject
-      time_seconds: 20
-      max_feed_pages: 4
-      max_detail_requests: 8
+      time_seconds: 120
+      max_feed_pages: 256
+      max_detail_requests: 4096
+      production_logical_request_cap: 512
+      index: once_per_batch_by_employer_orgnr
+      incomplete_index: explicit_partial_no_negative_assertion
       recent_window_days: 40
       negative_coverage: false
     rights:

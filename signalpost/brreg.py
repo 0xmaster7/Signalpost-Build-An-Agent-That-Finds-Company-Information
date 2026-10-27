@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 from .inputs import normalize_org_number
-from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot, SUPPORTED_FINANCIAL_UNITS
+from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot, SUPPORTED_FINANCIAL_UNITS, financial_dimensions_compatible
 from .network import NetworkGateway
 
 BASE = "https://data.brreg.no/enhetsregisteret/api"
@@ -217,6 +217,15 @@ def _unit_state(value: Any, *, present: bool) -> str:
     if not normalized:
         return "malformed"
     return "supported" if normalized in SUPPORTED_FINANCIAL_UNITS else "unsupported"
+
+
+def financial_record_subject(org: str, record: dict[str, Any]) -> str:
+    identity = {key: record.get(key) for key in ("record_id", "filing_id", "record_version",
+        "period_start", "period_end", "scope")}
+    identity["journalnr"] = record.get("raw", {}).get("journalnr")
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False,
+        separators=(",", ":")).encode()).hexdigest()[:20]
+    return f"{org}:accounts:{record.get('scope')}:{record.get('period_start')}:{record.get('period_end')}:{digest}"
 
 
 def role_records(body: Any) -> list[dict[str, Any]]:
@@ -559,7 +568,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             currency_valid = supported_currency(record.get("currency"))
             metadata_valid = (period_start is not None and period_end is not None and period_start <= period_end
                               and currency_valid and record.get("scope") in {"legal_entity", "group"})
-            if any(value is not None for key, value in record["metrics"].items() if not key.endswith("_unit")) and not metadata_valid:
+            if any(record["metrics"].get(metric) is not None for metric in METRICS) and not metadata_valid:
                 missing = []
                 if period_start is None or period_end is None or period_start > period_end: missing.append("period")
                 if not currency_valid: missing.append("currency")
@@ -567,13 +576,15 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                 errors.append(RunError(code="BRREG_FINANCIAL_METADATA_INCOMPLETE",
                     message="Financial metrics were withheld because source metadata is missing or invalid: " + ",".join(missing),
                     source_id="accounts_history"))
-            for metric, value in record["metrics"].items():
-                if metric.endswith("_unit") or metric.endswith("_unit_conflict") or value is None:
+            subject = financial_record_subject(org, record)
+            for metric in METRICS:
+                value = record["metrics"].get(metric)
+                if value is None:
                     continue
                 if not metadata_valid:
                     continue
                 unit = record["metrics"].get(metric + "_unit")
-                if not isinstance(unit, str) or unit.strip().upper() not in SUPPORTED_FINANCIAL_UNITS:
+                if not isinstance(unit, str) or not financial_dimensions_compatible(unit.strip().upper(), record["currency"]):
                     errors.append(RunError(code="BRREG_FINANCIAL_UNIT_UNSUPPORTED",
                         message=f"Financial metric {metric} was withheld because its source unit is missing or unsupported.",
                         source_id="accounts_history"))
@@ -583,7 +594,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                 metric_pointer = record_path + "/" + METRICS[metric]
                 if isinstance(raw_metric, dict) and isinstance(raw_metric.get("sum"), (int, float)):
                     metric_pointer += "/sum"
-                add_claim(metric, value, "accounts_history", "financial", org, record["scope"], account_final or accounts_url,
+                add_claim(metric, value, "accounts_history", "financial", subject, record["scope"], account_final or accounts_url,
                           account_time, raw, metric_pointer, "accounts", unit=unit.strip().upper(),
                           currency=record["currency"], start=record["period_start"], end=record["period_end"],
                           as_of=record["filing_timestamp"], source_hash=account_hash,
@@ -600,7 +611,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                         pointer = "/versjon" if record["raw"].get("versjon") else "/innsendingsId" if record["raw"].get("innsendingsId") else "/id"
                     else:
                         pointer = source_pointers[meta]
-                    add_claim(f"financial_record.{meta}", record[meta], "accounts_history", "financial_record_metadata", org,
+                    add_claim(f"financial_record.{meta}", record[meta], "accounts_history", "financial_record_metadata", subject,
                               record["scope"], account_final or accounts_url, account_time, raw, record_path + pointer, "accounts",
                               start=record["period_start"], end=record["period_end"], as_of=record["filing_timestamp"],
                               currency=record["currency"], source_hash=account_hash,

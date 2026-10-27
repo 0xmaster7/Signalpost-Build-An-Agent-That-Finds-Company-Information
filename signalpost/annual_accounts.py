@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -22,10 +23,11 @@ from typing import Any
 from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot
 
 COPY_ROOT = "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi"
-PARSER_VERSION = "official-filing-ocr-v2"
+PARSER_VERSION = "official-filing-ocr-v3"
 MAX_PDF_BYTES = 25 * 1024 * 1024
 MAX_OCR_SECONDS = 90
-PAGE_PRIORITY = (0, 1, 4, 3, 5, 2, 6)
+PAGE_PRIORITY = (4, 3, 5, 2, 6, 1)
+FTE_STRATEGY = "first_verified_company_fte_page_5_4_6_3_then_7_2"
 LABELS = {
     "sales_revenue": {'salgsinntekt', 'salgsinntekter'},
     "operating_costs": {'sum driftskostnader', 'sum kostnader'},
@@ -289,7 +291,26 @@ def workforce_candidates(page: dict[str, Any], org: str, *, nonparent: bool,
     return found
 
 
-def reconcile(pages: list[dict[str, Any]], org: str, record: dict[str, Any]) -> dict[str, Any]:
+def _first_workforce(pages: list[dict[str, Any]], org: str, record: dict[str, Any],
+                     nonparent: bool) -> tuple[dict[str, Any] | None, bool]:
+    for index in PAGE_PRIORITY:
+        page = next((p for p in pages if p["page"] == index + 1), None)
+        if page is None:
+            continue
+        candidates = workforce_candidates(page, org, nonparent=nonparent, year=record["period_end"][:4])
+        if candidates:
+            conflict = len({item["value"] for item in candidates}) != 1
+            return (None if conflict else candidates[0]), conflict
+    return None, False
+
+
+def reconcile(pages: list[dict[str, Any]], org: str, record: dict[str, Any], *,
+              workforce_strategy: str = "global_cross_page_consensus") -> dict[str, Any]:
+    """Legacy callers retain consensus; filing enrichment selects the first verified page.
+
+    First-page selection rejects conflicting statements on that page and makes
+    no assertion about later pages. Financial reconciliation remains per metric.
+    """
     cover = next((p for p in pages if p["page"] == 1), None)
     if not cover:
         return {"state": "blocked", "reason": "cover_not_processed", "financial": [], "workforce": None}
@@ -305,69 +326,147 @@ def reconcile(pages: list[dict[str, Any]], org: str, record: dict[str, Any]) -> 
             conflicts.append(metric)
         elif candidates:
             accepted.append(candidates[0])
-    workforce = [item for page in pages for item in workforce_candidates(page, org, nonparent=nonparent, year=record["period_end"][:4])]
-    workforce_hit = workforce[0] if workforce and len({item["value"] for item in workforce}) == 1 else None
-    if workforce and workforce_hit is None:
+    if workforce_strategy == FTE_STRATEGY:
+        workforce_hit, workforce_conflict = _first_workforce(pages, org, record, nonparent)
+    elif workforce_strategy == "global_cross_page_consensus":
+        workforce = [item for page in pages for item in workforce_candidates(page, org, nonparent=nonparent, year=record["period_end"][:4])]
+        workforce_hit = workforce[0] if workforce and len({item["value"] for item in workforce}) == 1 else None
+        workforce_conflict = bool(workforce and workforce_hit is None)
+    else:
+        raise ValueError("unknown workforce selection strategy")
+    if workforce_conflict:
         conflicts.append("full_time_equivalents")
     return {"state": "available" if accepted or workforce_hit else "not_available", "reason": "verified_document",
         "financial": accepted, "workforce": workforce_hit, "conflicts": conflicts}
 
 
-def _ocr_worker(pdf: bytes) -> list[dict[str, Any]]:
+class OCRPages(list):
+    """List-compatible OCR results with explicit, request-scoped page coverage."""
+    def __init__(self, pages: list[dict[str, Any]], coverage: dict[str, Any]):
+        super().__init__(pages)
+        self.coverage = coverage
+
+
+def _ocr_worker(pdf: bytes, org: str | None = None,
+                record: dict[str, Any] | None = None) -> list[dict[str, Any]] | dict[str, Any]:
+    """Verify the cover, stop FTE scanning on its first decision, then read page 2.
+
+    A same-page FTE conflict is a terminal abstention. Page 2 is a separate,
+    single-page financial anchor, never a reason to continue scanning notes.
+    Without filing context the legacy bounded seven-page extraction is retained.
+    """
     import numpy as np
     import pypdfium2 as pdfium
     from rapidocr_onnxruntime import RapidOCR
     engine = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
     document = pdfium.PdfDocument(pdf)
-    pages = []
-    for index in PAGE_PRIORITY:
-        if index >= len(document):
-            continue
+    pages: list[dict[str, Any]] = []
+    def read(index: int) -> dict[str, Any]:
         page = document[index]
-        bitmap = page.render(scale=1.1, grayscale=True)
-        image = bitmap.to_pil().convert("RGB")
-        output, _ = engine(np.asarray(image), use_cls=False)
-        words = []
-        for box, text, confidence in output or []:
-            words.append({"text": text, "confidence": float(confidence), "x1": min(p[0] for p in box),
-                "x2": max(p[0] for p in box), "y1": min(p[1] for p in box), "y2": max(p[1] for p in box)})
-        pages.append({"page": index + 1, "width": image.width, "height": image.height, "words": words})
-        image.close()
-        bitmap.close()
-        page.close()
-    document.close()
-    return pages
+        try:
+            bitmap = page.render(scale=1.1, grayscale=True)
+            try:
+                image = bitmap.to_pil().convert("RGB")
+                try:
+                    output, _ = engine(np.asarray(image), use_cls=False)
+                    words = [{"text": text, "confidence": float(confidence), "x1": min(p[0] for p in box),
+                        "x2": max(p[0] for p in box), "y1": min(p[1] for p in box), "y2": max(p[1] for p in box)}
+                        for box, text, confidence in output or []]
+                    result = {"page": index + 1, "width": image.width, "height": image.height, "words": words}
+                    pages.append(result)
+                    return result
+                finally:
+                    image.close()
+            finally:
+                bitmap.close()
+        finally:
+            page.close()
+    try:
+        if org is None or record is None:
+            for index in (0, 1, 4, 3, 5, 2, 6):
+                if index < len(document):
+                    read(index)
+            return pages
+        coverage = {"strategy": FTE_STRATEGY, "examined_pages": [], "fte_pages_examined": [],
+            "financial_anchor_pages": [], "document_pages": len(document), "stopped_early": False,
+            "coverage_complete": False, "stop_reason": "candidate_pages_exhausted"}
+        if len(document):
+            cover = read(0)
+            valid, reason, nonparent = verify_cover(cover, org, record)
+            if valid:
+                for index in PAGE_PRIORITY:
+                    if index >= len(document):
+                        continue
+                    page = read(index)
+                    coverage["fte_pages_examined"].append(index + 1)
+                    candidates = workforce_candidates(page, org, nonparent=nonparent, year=record["period_end"][:4])
+                    if candidates:
+                        coverage["stopped_early"] = any(i < len(document) for i in PAGE_PRIORITY[PAGE_PRIORITY.index(index) + 1:])
+                        coverage["stop_reason"] = "same_page_fte_conflict" if len({c["value"] for c in candidates}) > 1 else "first_verified_company_fte"
+                        break
+                if len(document) > 1:
+                    if not any(p["page"] == 2 for p in pages):
+                        read(1)
+                    coverage["financial_anchor_pages"] = [2]
+            else:
+                coverage.update(stop_reason=reason, stopped_early=len(document) > 1)
+        else:
+            coverage["stop_reason"] = "cover_not_processed"
+        coverage["examined_pages"] = [p["page"] for p in pages]
+        coverage["coverage_complete"] = len(pages) == len(document)
+        return {"pages": pages, "coverage": coverage}
+    finally:
+        document.close()
 
 
 class DocumentProcessor:
     """Two killable OCR subprocesses at most, with a run-scoped document-SHA cache."""
-    def __init__(self):
+    def __init__(self, seconds: float | None = None, *, deadline: float | None = None):
+        """Optional run budget uses an absolute time.monotonic deadline."""
         self.slots = asyncio.Semaphore(2)
         self.cache: dict[str, list[dict[str, Any]]] = {}
+        self.deadline = min(deadline if deadline is not None else math.inf,
+            time.monotonic() + seconds if seconds is not None else math.inf)
 
-    async def ocr(self, body: bytes, seconds: float) -> tuple[list[dict[str, Any]], bool]:
+    async def ocr(self, body: bytes, seconds: float, *, org: str | None = None,
+                  record: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], bool]:
         digest = hashlib.sha256(body).hexdigest()
-        if digest in self.cache:
-            return self.cache[digest], True
-        # Queueing, worker startup and OCR share the caller's remaining budget.
-        async with asyncio.timeout(max(0.001, min(seconds, MAX_OCR_SECONDS))):
+        context = None
+        if org is not None and record is not None:
+            context = {"org": org, "record": {"period_start": record["period_start"], "period_end": record["period_end"],
+                "currency": record["currency"], "metrics": record["metrics"], "raw": {"journalnr": record.get("raw", {}).get("journalnr")}}}
+        context_json = json.dumps(context, sort_keys=True, separators=(",", ":"))
+        cache_key = digest if context is None else digest + ":" + PARSER_VERSION + ":" + FTE_STRATEGY + ":" + hashlib.sha256(context_json.encode()).hexdigest()
+        if cache_key in self.cache:
+            return self.cache[cache_key], True
+        remaining = min(seconds, MAX_OCR_SECONDS, self.deadline - time.monotonic())
+        if remaining <= 0:
+            raise TimeoutError("ocr_deadline")
+        async with asyncio.timeout(remaining):
             async with self.slots:
-                if digest in self.cache:
-                    return self.cache[digest], True
+                if cache_key in self.cache:
+                    return self.cache[cache_key], True
                 env = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
-                process = await asyncio.create_subprocess_exec(sys.executable, "-m", "signalpost.annual_accounts", "--ocr-worker",
+                args = [sys.executable, "-m", "signalpost.annual_accounts", "--ocr-worker"]
+                if context is not None:
+                    args.append(context_json)
+                process = await asyncio.create_subprocess_exec(*args,
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                     cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]), env=env)
                 try:
-                    output, error = await asyncio.wait_for(process.communicate(body), timeout=max(0.1, min(seconds, MAX_OCR_SECONDS)))
+                    output, error = await process.communicate(body)
                     if process.returncode:
                         raise RuntimeError("local_ocr_dependency_or_document_error: " + error.decode(errors="replace")[-220:])
-                    pages = json.loads(output)
-                    self.cache[digest] = pages
+                    payload = json.loads(output)
+                    pages = OCRPages(payload["pages"], payload["coverage"]) if isinstance(payload, dict) else payload
+                    self.cache[cache_key] = pages
                     return pages, False
                 except BaseException:
                     if process.returncode is None:
-                        process.kill()
+                        try:
+                            process.kill()
+                        except ProcessLookupError:
+                            pass
                         await process.wait()
                     raise
 
@@ -376,7 +475,10 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
     """Attach only automatically verified document facts to the existing BRREG graph."""
     started = time.monotonic()
     audit = {"state": "not_available", "reason": "no_eligible_company_filing", "pages_processed": 0,
-        "ocr_seconds": 0.0, "processing_seconds": 0.0, "financial_claims": 0, "workforce_claims": 0, "cache_hit": False}
+        "ocr_seconds": 0.0, "processing_seconds": 0.0, "financial_claims": 0, "workforce_claims": 0, "cache_hit": False,
+        "examined_pages": [], "strategy": FTE_STRATEGY, "stopped_early": False,
+        "fte_pages_examined": [], "financial_anchor_pages": [], "coverage_complete": False,
+        "document_pages": None, "stop_reason": "not_started"}
     result.observations["annual_accounts_document"] = audit
     result.section_states["hiring_activity"] = PublicState.NOT_AVAILABLE
     eligible = [r for r in result.account_records if r.get("scope") == "legal_entity"
@@ -407,9 +509,15 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
             audit.update(state="blocked", reason="ocr_deadline")
             return result
         ocr_started = time.monotonic()
-        pages, cache_hit = await processor.ocr(body, seconds)
+        parameters = inspect.signature(processor.ocr).parameters
+        if "org" in parameters and "record" in parameters:
+            pages, cache_hit = await processor.ocr(body, seconds, org=org, record=record)
+        else:
+            pages, cache_hit = await processor.ocr(body, seconds)
         audit.update(ocr_seconds=round(time.monotonic() - ocr_started, 3), pages_processed=len(pages), cache_hit=cache_hit)
-        checked = reconcile(pages, org, record)
+        audit.update(examined_pages=[p["page"] for p in pages], stop_reason="legacy_ocr_coverage_unknown")
+        audit.update(getattr(pages, "coverage", {}))
+        checked = reconcile(pages, org, record, workforce_strategy=FTE_STRATEGY)
         audit.update(state=checked["state"], reason=checked["reason"])
         if checked.get("conflicts"):
             result.errors.append(RunError(code="ANNUAL_DOCUMENT_CLAIM_CONFLICT", message="Conflicting document candidates withheld: " + ", ".join(checked["conflicts"])))
@@ -484,9 +592,10 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
             result.errors.append(RunError(code="ANNUAL_DOCUMENT_" + audit["state"].upper(), message=audit["reason"]))
 
 
-if __name__ == "__main__" and sys.argv[1:] == ["--ocr-worker"]:
+if __name__ == "__main__" and sys.argv[1:2] == ["--ocr-worker"]:
     try:
-        print(json.dumps(_ocr_worker(sys.stdin.buffer.read(MAX_PDF_BYTES + 1)), ensure_ascii=False))
+        context = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+        print(json.dumps(_ocr_worker(sys.stdin.buffer.read(MAX_PDF_BYTES + 1), **context), ensure_ascii=False))
     except Exception as error:
         print(type(error).__name__ + ": " + str(error), file=sys.stderr)
         raise SystemExit(1)

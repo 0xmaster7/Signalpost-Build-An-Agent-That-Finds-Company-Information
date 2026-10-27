@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -53,6 +53,30 @@ class Evidence(StrictModel):
     source_snapshot_ids: list[str] = Field(default_factory=list)
 
 
+class FinancialUnitAssumption(StrictModel):
+    method: Literal["per_company_pdf_api_agreement"] = "per_company_pdf_api_agreement"
+    calibration_id: str
+    organisation_number: str
+    reference_subject_id: str
+    reference_period_start: datetime
+    reference_period_end: datetime
+    reference_scope: Literal["legal_entity"] = "legal_entity"
+    reference_filing_identity: dict[str, str]
+    reference_api_pointer_prefix: str
+    reference_api_snapshot_id: str
+    currency: str
+    api_value_multiplier: Literal[1] = 1
+    anchor_claim_ids: list[str] = Field(min_length=2)
+    anchor_metrics: list[str] = Field(min_length=2)
+    evidence_ids: list[str] = Field(min_length=1)
+    source_snapshot_ids: list[str] = Field(min_length=1)
+    same_period_as_reference: bool
+    same_scope_as_reference: bool
+    same_filing_as_reference: bool
+    target_pdf_validated: Literal[False] = False
+    documented_api_unit_contract: Literal[False] = False
+
+
 class Claim(StrictModel):
     claim_id: str
     organisation_number: str | None = None
@@ -64,6 +88,8 @@ class Claim(StrictModel):
     state: PublicState
     unit: str | None = None
     currency: str | None = None
+    unit_assumed_currency: bool = False
+    unit_assumption_basis: FinancialUnitAssumption | None = None
     period_start: datetime | None = None
     period_end: datetime | None = None
     as_of: datetime | None = None
@@ -85,6 +111,25 @@ class Claim(StrictModel):
                 raise ValueError("available claims require entity, section, family, subject, verification, and snapshot provenance")
         if self.scope is not None and self.scope not in {"legal_entity", "group", "unknown", "workplace", "person_role", "job", "event"}:
             raise ValueError("unsupported claim scope")
+        basis = self.unit_assumption_basis
+        if self.unit_assumed_currency:
+            if (basis is None or self.field_family != "financial" or self.unit != self.currency
+                    or self.verification_rule_id != "company_pdf_calibrated_currency_assumption_v1"
+                    or basis.organisation_number != self.organisation_number or basis.currency != self.currency):
+                raise ValueError("assumed currency units require a company calibration basis and an assumption verification rule")
+            if (basis.same_period_as_reference != (self.period_start == basis.reference_period_start
+                    and self.period_end == basis.reference_period_end)
+                    or basis.same_scope_as_reference != (self.scope == basis.reference_scope)
+                    or basis.same_filing_as_reference != (self.subject_id == basis.reference_subject_id)
+                    or len(set(basis.anchor_metrics)) < 2 or len(set(basis.anchor_claim_ids)) < 2
+                    or not basis.reference_filing_identity
+                    or not set(basis.evidence_ids) <= set(self.evidence_ids)
+                    or not set(basis.source_snapshot_ids) <= set(self.source_snapshot_ids)):
+                raise ValueError("assumed currency unit flags and evidence must match the calibration reference")
+        elif basis is not None:
+            raise ValueError("a currency unit assumption basis requires unit_assumed_currency")
+        elif self.verification_rule_id == "company_pdf_calibrated_currency_assumption_v1":
+            raise ValueError("company calibration verification requires unit_assumed_currency")
         return self
 
 
@@ -274,6 +319,8 @@ class Envelope(StrictModel):
                             or claim.period_start > claim.period_end
                             or claim.scope not in {"legal_entity", "group"}):
                         raise ValueError("available financial claims require supported unit, currency, period, and scope semantics")
+        from .financial_calibration import validate_company_unit_assumptions
+        validate_company_unit_assumptions(self.claims, self.evidence, self.source_snapshots, self.evidence_cutoff)
         return self
 
     @field_validator("organisation_number")

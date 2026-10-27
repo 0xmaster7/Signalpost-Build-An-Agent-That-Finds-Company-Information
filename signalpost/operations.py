@@ -31,6 +31,11 @@ class RunBudget:
     per_host_concurrency: int = 2
     per_company_physical_limit: int | None = None
     per_host_physical_limit: int | None = None
+    nav_seconds: float = 120
+    wikidata_seconds: float = 12
+    website_seconds: float = 480
+    ocr_seconds: float = 900
+    ocr_budget_share: float = 0.65
 
     def __post_init__(self) -> None:
         if (not all(math.isfinite(value) for value in
@@ -46,6 +51,10 @@ class RunBudget:
             raise ValueError("request and cost limits must be non-negative")
         if min(self.global_http_concurrency, self.per_host_concurrency) < 1:
             raise ValueError("global and per-host concurrency limits must be positive")
+        if (not all(math.isfinite(value) and value >= 0 for value in
+                    (self.nav_seconds, self.wikidata_seconds, self.website_seconds, self.ocr_seconds))
+                or not math.isfinite(self.ocr_budget_share) or not 0 <= self.ocr_budget_share <= 1):
+            raise ValueError("phase durations must be finite/non-negative and OCR share between zero and one")
 
     @classmethod
     def from_mapping(cls, values: dict[str, object] | None = None, *, environ: dict[str, str] | None = None, batch_rows: int = 0) -> "RunBudget":
@@ -70,6 +79,11 @@ class RunBudget:
             per_host_physical_limit=(int(environ["SIGNALPOST_PER_HOST_PHYSICAL_LIMIT"])
                 if "SIGNALPOST_PER_HOST_PHYSICAL_LIMIT" in environ else
                 int(values["per_host_physical_limit"]) if "per_host_physical_limit" in values else None),
+            nav_seconds=float(value("nav_seconds", "SIGNALPOST_NAV_SECONDS", 120)),
+            wikidata_seconds=float(value("wikidata_seconds", "SIGNALPOST_WIKIDATA_SECONDS", 12)),
+            website_seconds=float(value("website_seconds", "SIGNALPOST_WEBSITE_SECONDS", 480)),
+            ocr_seconds=float(value("ocr_seconds", "SIGNALPOST_OCR_SECONDS", 900)),
+            ocr_budget_share=float(value("ocr_budget_share", "SIGNALPOST_OCR_BUDGET_SHARE", 0.65)),
         )
 
 

@@ -893,7 +893,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
             {"id": "unknown-scope", "regnskapstype": "SPECIAL", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 13}},
             {"id": "malformed", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": "zero-ish"}},
             {"id": "valid-zero-v2", "versjon": 2, "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2023-01-01", "tilDato": "2023-12-31"}, "valuta": "NOK", "enhet": "NOK", "eiendeler": {"sumEiendeler": 0}},
-            {"id": "valid-eur", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2022-01-01", "tilDato": "2022-12-31"}, "valuta": "EUR", "enhet": "NOK", "eiendeler": {"sumEiendeler": 42}},
+            {"id": "valid-eur", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2022-01-01", "tilDato": "2022-12-31"}, "valuta": "EUR", "enhet": "EUR", "eiendeler": {"sumEiendeler": 42}},
             {"id": "unknown-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "QQQ", "eiendeler": {"sumEiendeler": 14}},
             {"id": "lowercase-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "nok", "eiendeler": {"sumEiendeler": 15}},
             {"id": "malformed-currency", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NO-K", "eiendeler": {"sumEiendeler": 16}},

@@ -22,7 +22,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--registry", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--no-fixed-cohort", action="store_true")
+    parser.add_argument("--exclude-input", type=Path, action="append", default=[])
     args = parser.parse_args()
+    fixed = set() if args.no_fixed_cohort else FIXED
+    excluded = set()
+    for filename in args.exclude_input:
+        for line in filename.read_text().splitlines():
+            if line.strip():
+                value = json.loads(line)
+                excluded.add(str(value["organisation_number"]))
+    if fixed & excluded:
+        raise SystemExit("Fixed cohort cannot also be excluded")
+    random_count = 100 - len(fixed)
     destination = args.output_dir
     destination.mkdir(parents=True, exist_ok=True)
     if (destination / "selection.json").exists() or (destination / "companies.jsonl").exists():
@@ -59,31 +71,32 @@ def main():
                     for key in ("konkurs", "underAvvikling", "underTvangsavviklingEllerTvangsopplosning")) or bool(record.get("slettedato"))
                 eligible = record["organisasjonsform.kode"] == "AS" and employees is not None and employees >= 1 and not inactive
                 public = {"organisation_number": org, "name": record["navn"], "legal_form": record["organisasjonsform.kode"],
-                    "registered_employees": employees, "eligible_in_selection_frame": eligible, "fixed_six_company_cohort": org in FIXED}
-                if org in FIXED:
+                    "registered_employees": employees, "eligible_in_selection_frame": eligible, "fixed_six_company_cohort": org in fixed}
+                if org in fixed:
                     fixed_rows[org] = public
                 if not eligible:
                     continue
                 population += 1
-                if org in FIXED:
+                if org in fixed or org in excluded:
                     continue
                 rank = int(hashlib.sha256((seed + ":" + org).encode()).hexdigest(), 16)
                 entry = (-rank, org, public)
-                if len(best) < 94:
+                if len(best) < random_count:
                     heapq.heappush(best, entry)
                 elif entry > best[0]:
                     heapq.heapreplace(best, entry)
-    if len(best) != 94 or set(fixed_rows) != FIXED:
+    if len(best) != random_count or set(fixed_rows) != fixed:
         raise SystemExit("Insufficient random population or fixed cohort missing from registry")
-    selected = [row for _, _, row in sorted(best, key=lambda entry: -entry[0])] + [fixed_rows[org] for org in sorted(FIXED)]
+    selected = [row for _, _, row in sorted(best, key=lambda entry: -entry[0])] + [fixed_rows[org] for org in sorted(fixed)]
     random.Random(int(seed, 16)).shuffle(selected)
     payload = "".join(json.dumps({"organisation_number": row["organisation_number"]}) + "\n" for row in selected)
     manifest = {"selected_at_utc": datetime.now(timezone.utc).isoformat(), "seed": seed,
-        "method": "94 smallest independent seeded SHA256 ranks without replacement, plus six fixed companies; all 100 shuffled",
+        "method": f"{random_count} smallest independent seeded SHA256 ranks without replacement, plus {len(fixed)} fixed companies; all 100 shuffled",
         "population": "Active AS with at least one registered employee; no latest-filing-year or website/financial outcome filter",
         "source_url": SOURCE, "source_file_sha256": digest.hexdigest(), "source_bytes": args.registry.stat().st_size,
         "source_rows": source_rows, "eligible_population": population, "sample_size": 100,
-        "random_additions": 94, "fixed_companies": sorted(FIXED),
+        "random_additions": random_count, "fixed_companies": sorted(fixed),
+        "excluded_organisation_numbers": sorted(excluded),
         "input_sha256": hashlib.sha256(payload.encode()).hexdigest(), "rows": selected}
     (destination / "companies.jsonl").write_text(payload, encoding="utf-8")
     (destination / "selection.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

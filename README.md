@@ -1,5 +1,7 @@
 # Signalpost
 
+**Research scheduling update:** [concurrent network/OCR phases, first-statement FTE and explicitly flagged financial calibration](docs/release/CONCURRENT_RESEARCH_2026-10-27.md). The [matched/holdout acceptance criteria](docs/release/PHASE_BUDGET_PREREGISTRATION_2026-10-27.md) are frozen before the new measurements; implementation changes alone are not evidence of improved coverage.
+
 **[Results — live evaluation and evidence](RESULTS.md)**
 
 **Latest live benchmark (27 October 2026):** [100 active AS employers, compared with Arnav's unchanged repository](docs/release/LIVE_COMPARISON_2026-10-27.md), with per-company CSV/JSONL. Signalpost / Arnav coverage: verified websites 0/25, jobs 0/3, FTE 50/29, financials 77/98. Our optional website phases were deadline-skipped behind OCR; the report separates coverage from accuracy and historical small-cohort claims.

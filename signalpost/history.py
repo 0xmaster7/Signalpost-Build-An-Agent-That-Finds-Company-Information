@@ -123,7 +123,7 @@ def observation_id(snapshot: dict[str, Any]) -> str:
 
 def claim_fingerprint(claim: dict[str, Any]) -> str:
     """Hash stable claim semantics; claim IDs and evidence ordering are not facts."""
-    return sha256_json({
+    semantics = {
         "organisation_number": claim.get("organisation_number"),
         "section": claim.get("section"),
         "field_family": claim.get("field_family"),
@@ -137,7 +137,11 @@ def claim_fingerprint(claim: dict[str, Any]) -> str:
         "period_end": claim.get("period_end"),
         "as_of": claim.get("as_of"),
         "scope": claim.get("scope"),
-    })
+    }
+    if claim.get("unit_assumed_currency") or claim.get("unit_assumption_basis") is not None:
+        semantics["unit_assumed_currency"] = claim.get("unit_assumed_currency", False)
+        semantics["unit_assumption_basis"] = claim.get("unit_assumption_basis")
+    return sha256_json(semantics)
 
 
 def _claim_key(claim: dict[str, Any]) -> str:
@@ -286,6 +290,11 @@ def validate_artifact(raw: Any) -> StateArtifact:
             snapshots = [SourceSnapshot.model_validate(item) for item in company.snapshots]
         except (ValidationError, TypeError, ValueError) as exc:
             raise PriorStateError(f"prior state claim or provenance structure is invalid ({type(exc).__name__})") from exc
+        from .financial_calibration import validate_company_unit_assumptions
+        try:
+            validate_company_unit_assumptions(claims, evidence, snapshots, company.cutoff)
+        except ValueError as exc:
+            raise PriorStateError("prior state company calibration provenance is invalid") from exc
         if any(claim.organisation_number != org for claim in claims):
             raise PriorStateError("prior state contains a claim for another organisation")
         evidence_by_id = {item.evidence_id: item for item in evidence}
