@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlsplit
 
 from .inputs import normalize_org_number
 from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot, SUPPORTED_FINANCIAL_UNITS, financial_dimensions_compatible
+from .identifiers import stable_claim_id
 from .network import NetworkGateway
 
 BASE = "https://data.brreg.no/enhetsregisteret/api"
@@ -451,7 +452,10 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         if not any(s.source_id == sid for s in snapshots):
             snapshots.append(SourceSnapshot(source_id=sid, source_url=url, retrieved_at=retrieved, content_sha256=digest,
                                             http_status=200, cache_mode="transient", rights_status=RIGHTS))
-        claims.append(Claim(claim_id=f"{org}:{section}:{len(claims)}", organisation_number=org, section=section,
+        identity = stable_claim_id(org, field, value, source=url + "#" + pointer, content_sha256=digest,
+            subject=subject, period_start=_date(start), period_end=_date(end), scope=scope,
+            unit=unit, currency=currency, as_of=_date(as_of))
+        claims.append(Claim(claim_id=identity, organisation_number=org, section=section,
                             field_family=family, subject_id=subject, field=field, value=value, state=PublicState.AVAILABLE,
                             unit=unit, currency=currency, period_start=_date(start), period_end=_date(end), as_of=_date(as_of),
                             scope=scope, verification_rule_id="brreg_exact_org_pointer_v1", verification_score="1.0",

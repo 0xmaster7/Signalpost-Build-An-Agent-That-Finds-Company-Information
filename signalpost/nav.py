@@ -69,7 +69,10 @@ def job_observation(org: str, payload: dict[str, Any], body: bytes, url: str,
                   "normalized_utc": published.isoformat(), "precision": "second"},
               "job_employer_organisation_number": employer["orgnr"]}
     for field, value in values.items():
-        result.claims.append(Claim(claim_id=f"{org}:nav:{vacancy}:{field}", organisation_number=org,
+        from .identifiers import stable_claim_id
+        identity = stable_claim_id(org, field, value, source=url, content_sha256=digest,
+            subject=f"nav:{vacancy}", scope="job", as_of=modified)
+        result.claims.append(Claim(claim_id=identity, organisation_number=org,
             section="hiring_activity", field_family="jobs", subject_id=f"nav:{vacancy}", field=field,
             value=value, state=PublicState.AVAILABLE, scope="job", as_of=modified,
             verification_rule_id="nav_exact_employer_job_v1", verification_score="1.0",

@@ -174,6 +174,7 @@ def synthesize(envelope: Envelope) -> dict[str, Any]:
         text = _sentence(claim)
         sentence = factual_sentences.setdefault(_fact_key(claim),
             {"text": text, "fact_ids": [], "evidence_ids": []})
+        sentence["text"] = min(sentence["text"], text)
         sentence["fact_ids"].append(claim.claim_id)
         sentence["evidence_ids"].extend(claim.evidence_ids)
     sentences = []

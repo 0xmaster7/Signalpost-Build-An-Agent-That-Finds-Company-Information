@@ -26,7 +26,7 @@ import trafilatura
 
 from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot
 from .network import NetworkGateway, NetworkPolicyError, registered_domain, robots_directives
-from .identifiers import canonical_product_heading, website_claim_value_digest
+from .identifiers import canonical_product_heading, website_claim_value_digest, stable_claim_id
 
 UA = "SignalpostResearchBot/1.0 (contact pending)"
 MAX_PAGE_BYTES = 2 * 1024 * 1024
@@ -1382,7 +1382,8 @@ def _make_claim(org: str, field: str, value: Any, page: PageRecord, evidence_id:
         eids.append(proof_evidence)
     page_key = _page_key(page)
     value_key = website_claim_value_digest(field, value)
-    return Claim(claim_id=f"{org}:web:{field}:{page_key[:12]}:{value_key}", organisation_number=org,
+    identity = stable_claim_id(org, field, value, source=page.final_url, content_sha256=page_key, scope=scope)
+    return Claim(claim_id=f"{identity}:{value_key}", organisation_number=org,
         section="website_owned_profiles", field_family="owned_web", subject_id=org, field=field,
         value=value, state=PublicState.AVAILABLE, scope=scope,
         verification_rule_id="audited_exact_site_identity_v1", verification_score="1.0",
@@ -1621,8 +1622,9 @@ def _approved_ats_hosts() -> set[str]:
 def _make_footprint_claim(org: str, field: str, value: Any, subject: str, scope: str,
                           page: PageRecord, evidence_id: str, proof_source: str, proof_evidence: str,
                           as_of: datetime | None = None) -> Claim:
-    key = hashlib.sha256((subject + "\0" + field).encode()).hexdigest()[:16]
-    return Claim(claim_id=f"{org}:footprint:{key}", organisation_number=org, section="hiring_activity",
+    key = stable_claim_id(org, field, value, source=page.final_url, content_sha256=_page_key(page),
+        subject=subject, scope=scope, as_of=as_of)
+    return Claim(claim_id=key, organisation_number=org, section="hiring_activity",
         field_family="jobs" if scope == "job" else "public_activity", subject_id=subject, field=field,
         value=value, state=PublicState.AVAILABLE, scope=scope, as_of=as_of,
         verification_rule_id="exact_company_owned_site_source_v1", verification_score="1.0",
@@ -2320,7 +2322,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                         continue
                     seen_profiles.add(social["url"])
                     eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator=_profile_locator(page, social["url"], org))
-                    _append_website_claim(output, Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
+                    _append_website_claim(output, Claim(claim_id=stable_claim_id(org, "company_owned_profile", social,
+                        source=page.final_url, content_sha256=_page_key(page)),
                         organisation_number=org, section="website_owned_profiles", field_family="owned_profile", subject_id=org,
                         field="company_owned_profile", value=social, state=PublicState.AVAILABLE, scope="legal_entity",
                         verification_rule_id="outbound_link_from_exact_verified_site_v1", verification_score="1.0",
@@ -2487,7 +2490,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                         if any(claim.field == "company_owned_profile" and claim.value == social for claim in output.claims):
                             continue
                         social_eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator=_profile_locator(page, social["url"], org))
-                        _append_website_claim(output, Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
+                        _append_website_claim(output, Claim(claim_id=stable_claim_id(org, "company_owned_profile", social,
+                            source=page.final_url, content_sha256=_page_key(page)),
                             organisation_number=org, section="website_owned_profiles", field_family="owned_profile", subject_id=org,
                             field="company_owned_profile", value=social, state=PublicState.AVAILABLE, scope="legal_entity",
                             verification_rule_id="outbound_link_from_exact_verified_site_v1", verification_score="1.0",

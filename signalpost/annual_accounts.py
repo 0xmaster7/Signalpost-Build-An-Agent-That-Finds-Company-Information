@@ -554,7 +554,10 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
             result.evidence.append(Evidence(evidence_id=json_eid, source_url=source["url"], retrieved_at=source["retrieved_at"],
                 content_sha256=source["content_sha256"], json_pointer=record["_source_prefix"] + "/" + METRICS[metric],
                 extraction_method="brreg_json_pointer_v1", subject_organisation_number=org, source_snapshot_ids=[json_sid]))
-            result.claims.append(Claim(claim_id=subject + ":document:" + metric, organisation_number=org,
+            from .identifiers import stable_claim_id
+            identity = stable_claim_id(org, metric, item["value"], source=final_url, content_sha256=digest,
+                subject=subject, period_start=start, period_end=end, unit=item["currency"], currency=item["currency"])
+            result.claims.append(Claim(claim_id=identity, organisation_number=org,
                 section="accounts_history", field_family="financial", subject_id=subject, field=metric, value=item["value"],
                 state=PublicState.AVAILABLE, unit=item["currency"], currency=item["currency"], period_start=start, period_end=end,
                 scope="legal_entity", verification_rule_id="official_pdf_json_row_reconciliation_v1", verification_score="1.0",
@@ -566,7 +569,10 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
             result.evidence.append(Evidence(evidence_id=eid, source_url=final_url, retrieved_at=retrieved,
                 content_sha256=digest, page_number=item["page"], excerpt=item["span"], extraction_method=PARSER_VERSION,
                 subject_organisation_number=org, source_snapshot_ids=[sid]))
-            result.claims.append(Claim(claim_id=subject + ":full_time_equivalents", organisation_number=org,
+            from .identifiers import stable_claim_id
+            identity = stable_claim_id(org, "full_time_equivalents", item["value"], source=final_url,
+                content_sha256=digest, subject=subject, period_start=start, period_end=end, unit="FTE")
+            result.claims.append(Claim(claim_id=identity, organisation_number=org,
                 section="hiring_activity", field_family="workforce", subject_id=subject, field="full_time_equivalents",
                 value=item["value"], state=PublicState.AVAILABLE, unit="FTE", period_start=start, period_end=end,
                 scope="legal_entity", verification_rule_id="official_company_fte_statement_v1", verification_score="1.0",

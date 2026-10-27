@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import uuid
+import copy
 from dataclasses import fields
 from types import SimpleNamespace
 from datetime import datetime, timezone
@@ -312,7 +313,7 @@ def _merge_optional_website_result(envelope: Envelope, result: Any) -> Envelope:
         envelope.errors.extend(result.errors)
         envelope.synthesis["website_research"] = result.audit
         return envelope.__class__.model_validate(envelope.model_dump())
-    except (ValueError, TypeError):
+    except Exception:
         retained = original.model_copy(deep=True)
         retained.errors.append(RunError(code="WEBSITE_PUBLICATION_GRAPH_REJECTED",
             message="Optional website claims failed publication validation; verified official facts were retained."))
@@ -521,6 +522,7 @@ def run(args: argparse.Namespace) -> int:
         checkpoint.connection.execute("DELETE FROM shells")
         checkpoint.connection.execute("DELETE FROM envelopes")
         checkpoint.connection.execute("DELETE FROM run_meta")
+        checkpoint.connection.execute("DELETE FROM phase_results")
         checkpoint.connection.executemany("INSERT INTO shells VALUES (?,?,?,?)",
             [(row.row_number, row.input_ref, row.organisation_number, "pending") for row in rows])
         checkpoint.set_meta("input_fingerprint", run_fingerprint)
@@ -542,9 +544,141 @@ def run(args: argparse.Namespace) -> int:
         async def enrich():
             unique = list(dict.fromkeys(r.organisation_number for r in rows
                                         if r.row_number not in prior_terminalized and len(r.organisation_number) == 9 and r.organisation_number.isdigit()))
-            by_org = {}
+            by_org = checkpoint.phase_results("official") if args.resume else {}
             nav_results_by_org = {}
             nav_homepages = {}
+            phase_metrics = {}
+            scheduler_report["optional_phases"] = phase_metrics
+            phase_cache = {name: checkpoint.phase_results(name) for name in
+                ("annual_documents", "website_verify", "website_shallow", "jobs_activity", "nav_apply", "nav_batch", "wiki_batch")}
+
+            def record_phase(name, state, seconds=0.0):
+                metric = phase_metrics.setdefault(name, {})
+                for key in ("ran", "skipped", "deadline_skipped", "failed", "ineligible", "not_attempted"):
+                    metric.setdefault(key, 0)
+                metric["worker_seconds"] = metric.get("worker_seconds", 0.0) + seconds
+                metric.setdefault("wall_seconds", 0.0)
+                metric["ran" if state in {"completed", "failed"} else "skipped"] += 1
+                if state != "completed":
+                    metric[state] = metric.get(state, 0) + 1
+
+            def base_envelope(row):
+                result = phase_cache["annual_documents"].get(row.organisation_number, by_org.get(row.organisation_number))
+                if live_brreg and result is not None:
+                    envelope = _live_envelope(row, result, batch_id, cutoff, previous,
+                        frozen_match=row.organisation_number in fixture)
+                    if args.registry_snapshot:
+                        envelope = _attach_frozen_baseline(envelope, fixture.get(row.organisation_number), registry_hash,
+                            cutoff, args.registry_snapshot_as_of, args.registry_source_url)
+                    return envelope
+                return baseline_saved.get(row.row_number, _envelope(row, fixture, batch_id, cutoff, previous)).model_copy(deep=True)
+
+            def compose(row):
+                envelope = base_envelope(row)
+                nav = phase_cache["nav_apply"].get(row.organisation_number)
+                if nav is not None:
+                    envelope = apply_nav(envelope, nav)
+                for phase in ("jobs_activity", "website_shallow", "website_verify"):
+                    result = phase_cache[phase].get(row.organisation_number)
+                    if result is not None:
+                        envelope = _merge_optional_website_result(envelope, result)
+                        break
+                for phase in ("nav_batch", "wiki_batch"):
+                    batch = phase_cache[phase].get("batch")
+                    if batch:
+                        section = "hiring_activity" if phase == "nav_batch" else "website_owned_profiles"
+                        envelope.sections[section].diagnostics.append(f"{phase}:{batch['state']}")
+                    if batch and batch["state"] == "failed":
+                        envelope.errors.append(RunError(code=phase.upper() + "_UNEXPECTED_FAILURE",
+                            message=batch["reason"], retryable=True))
+                return envelope
+
+            def apply_nav(envelope, result):
+                original = envelope
+                envelope = envelope.model_copy(deep=True)
+                try:
+                    envelope.sections["hiring_activity"].diagnostics.append("nav_jobs:partial_coverage_no_negative_assertion")
+                    envelope.claims.extend(result.claims)
+                    envelope.errors.extend(result.errors)
+                    _merge_website_provenance(envelope, result)
+                    for name in ("hiring_activity", "claims_evidence_states"):
+                        envelope.sections[name].claims.extend(result.claims)
+                        if result.claims:
+                            envelope.sections[name].state = PublicState.AVAILABLE
+                    return Envelope.model_validate(envelope.model_dump())
+                except Exception as exc:
+                    retained = original.model_copy(deep=True)
+                    retained.errors.append(RunError(code="NAV_APPLICATION_UNEXPECTED_FAILURE",
+                        message=f"Optional NAV application failed: {type(exc).__name__}.", retryable=True))
+                    return retained
+
+            def persist_phase(name, org, value):
+                target_rows = [row for row in rows_by_org.get(org, ()) if row.row_number not in prior_terminalized]
+                if name == "nav_apply":
+                    errors = [error for row in target_rows for error in apply_nav(base_envelope(row), value).errors
+                        if error.code == "NAV_APPLICATION_UNEXPECTED_FAILURE"]
+                    if errors:
+                        from .websites import WebsiteResearchResult
+                        value = WebsiteResearchResult(errors=errors[:1], attempt_outcome="failed",
+                            audit={"execution_state": "failed", "reason": "nav_application_failed"})
+                phase_cache[name][org] = value
+                try:
+                    envelopes = [compose(row) for row in target_rows]
+                    if name.startswith("website_") or name == "jobs_activity":
+                        if any(error.code == "WEBSITE_PUBLICATION_GRAPH_REJECTED" for envelope in envelopes for error in envelope.errors):
+                            raise ValueError("optional website publication graph rejected")
+                    checkpoint.validate_phase_update(envelopes)
+                except Exception as exc:
+                    error = RunError(code=name.upper() + "_PUBLICATION_GRAPH_REJECTED",
+                        message=f"Optional {name} result rejected: {type(exc).__name__}.", retryable=True)
+                    if name == "annual_documents":
+                        value = copy.deepcopy(by_org[org])
+                        value.errors.append(error)
+                        value.observations["annual_accounts_document"] = {"state": "failed", "reason": "publication_graph_rejected"}
+                    else:
+                        from .websites import WebsiteResearchResult
+                        order = ("website_verify", "website_shallow", "jobs_activity")
+                        preceding = order[:order.index(name)] if name in order else ()
+                        prior = next((phase_cache[phase][org] for phase in reversed(preceding) if org in phase_cache[phase]), None)
+                        value = copy.deepcopy(prior) if prior else WebsiteResearchResult()
+                        value.errors.append(error)
+                        value.attempt_outcome = "failed"
+                        value.audit.update(execution_state="failed", reason="publication_graph_rejected")
+                    phase_cache[name][org] = value
+                    envelopes = [compose(row) for row in target_rows]
+                    phase_metrics.setdefault(name, {})["failed"] = phase_metrics.get(name, {}).get("failed", 0) + 1
+                checkpoint.save_phase(name, org, value, envelopes)
+
+            async def batch_phase(name, action):
+                saved = phase_cache[name].get("batch")
+                if saved is not None:
+                    label = "nav_jobs" if name == "nav_batch" else "wikidata_discovery"
+                    scheduler_report[label] = saved.get("report", {"state": saved["state"]})
+                    record_phase(name, "not_attempted")
+                    return saved["value"]
+                started = time.monotonic()
+                try:
+                    value = await action()
+                    report = scheduler_report.get("nav_jobs" if name == "nav_batch" else "wikidata_discovery", {})
+                    state = report.get("state", "completed")
+                    state = state if state in {"deadline_skipped", "budget_skipped", "not_attempted"} else "completed"
+                    saved = {"state": state, "value": value, "report": report}
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    saved = {"state": "failed", "reason": f"Optional {name} failed: {type(exc).__name__}.",
+                             "value": ({}, {}) if name == "nav_batch" else {}}
+                    saved["report"] = {"state": "failed", "reason": saved["reason"]}
+                    if name == "nav_batch":
+                        saved["report"]["negative_coverage"] = False
+                    scheduler_report["nav_jobs" if name == "nav_batch" else "wikidata_discovery"] = saved["report"]
+                elapsed = time.monotonic() - started
+                record_phase(name, saved["state"], elapsed)
+                phase_metrics[name]["wall_seconds"] = elapsed
+                phase_cache[name]["batch"] = saved
+                checkpoint.save_phase(name, "batch", saved, [compose(row) for row in rows
+                    if row.row_number not in prior_terminalized])
+                return saved["value"]
 
             async def nav_phase(targets):
                 from .nav import research_jobs
@@ -571,9 +705,7 @@ def run(args: argparse.Namespace) -> int:
 
             if live_brreg:
                 scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
-                baseline_orgs = {org for org in unique if all(
-                    row.row_number in baseline_saved or row.row_number in prior_terminalized
-                    for row in rows if row.organisation_number == org)}
+                baseline_orgs = set(by_org)
                 works = [Opportunity(key=org, company=org, pass_name="official_foundation",
                                      expected_company_family_gain=3, expected_atomic_claim_gain=4,
                                      expected_requests=4.02, expected_seconds=2.888, sequence=index)
@@ -595,8 +727,7 @@ def run(args: argparse.Namespace) -> int:
                                 if args.registry_snapshot:
                                     envelope = _attach_frozen_baseline(envelope, baseline, registry_hash, cutoff,
                                         args.registry_snapshot_as_of, args.registry_source_url)
-                                checkpoint.put(envelope)
-                                checkpoint.set_shell_state(row.row_number, "baseline_done")
+                                checkpoint.save_phase("official", item.company, result, [envelope])
                             future.set_result(None)
                         except BaseException as exc:
                             future.set_exception(exc)
@@ -621,8 +752,10 @@ def run(args: argparse.Namespace) -> int:
                     await completed_queue.put((item, result, future))
                     await future
                 try:
-                    by_org, official_deadline_cancelled = await _run_before_completion_reserve(
+                    fresh_by_org, official_deadline_cancelled = await _run_before_completion_reserve(
                         scheduler.run(works, official, on_complete=checkpoint_completed), run_budget)
+                    by_org.update(checkpoint.phase_results("official"))
+                    by_org.update(fresh_by_org)
                 finally:
                     await completed_queue.put(None)
                     await checkpoint_task
@@ -631,6 +764,8 @@ def run(args: argparse.Namespace) -> int:
                     "hard_deadline_cancelled": official_deadline_cancelled}
             live_by_org.update(by_org)
             for saved in baseline_saved.values():
+                if saved.organisation_number in live_by_org:
+                    continue
                 live_by_org[saved.organisation_number] = SimpleNamespace(
                     observations=saved.synthesis.get("brreg_observations", {}),
                     claims=saved.claims, evidence=saved.evidence)
@@ -657,7 +792,23 @@ def run(args: argparse.Namespace) -> int:
 
             if live_websites:
                 (nav_results_by_org, nav_homepages), wikidata_by_org = await asyncio.gather(
-                    nav_phase(nav_targets), wikidata_phase())
+                    batch_phase("nav_batch", lambda: nav_phase(nav_targets)),
+                    batch_phase("wiki_batch", wikidata_phase))
+                for org, result in nav_results_by_org.items():
+                    if org not in phase_cache["nav_apply"]:
+                        started = time.monotonic()
+                        persist_phase("nav_apply", org, result)
+                        elapsed = time.monotonic() - started
+                        record_phase("nav_apply", "failed" if any(error.code == "NAV_APPLICATION_UNEXPECTED_FAILURE"
+                            for row in rows_by_org.get(org, ()) for error in compose(row).errors) else "completed",
+                            elapsed)
+                        phase_metrics["nav_apply"]["wall_seconds"] += elapsed
+                    else:
+                        record_phase("nav_apply", "not_attempted")
+                for org in unique:
+                    if org not in nav_results_by_org:
+                        upstream = phase_cache["nav_batch"].get("batch", {}).get("state")
+                        record_phase("nav_apply", "ineligible" if upstream == "completed" else "not_attempted")
             available_research = max(0.0, min(budget.soft_seconds - run_budget.elapsed,
                 budget.hard_seconds - run_budget.elapsed - budget.completion_reserve_seconds))
             ocr_allocation = min(budget.ocr_seconds, available_research * budget.ocr_budget_share)
@@ -667,6 +818,8 @@ def run(args: argparse.Namespace) -> int:
 
             async def document_phase():
                 if not live_brreg:
+                    for org in unique:
+                        record_phase("annual_documents", "not_attempted")
                     return
                 from .annual_accounts import DocumentProcessor, enrich_company
                 processor = DocumentProcessor(seconds=ocr_allocation)
@@ -676,26 +829,63 @@ def run(args: argparse.Namespace) -> int:
                     expected_requests=1, expected_seconds=30, sequence=index)
                     for index, (org, result) in enumerate(by_org.items()) if getattr(result, "account_records", [])]
                 async def annual_document(item: Opportunity):
-                    with request_company_scope(item.company):
-                        result = await enrich_company(by_org[item.company], item.company, gateway, cutoff, processor)
-                        from .financial_calibration import calibrate_company_financials
-                        calibrate_company_financials(result, item.company, cutoff)
-                        return result
+                    started = time.monotonic()
+                    state = "completed"
+                    try:
+                        with request_company_scope(item.company):
+                            result = await enrich_company(copy.deepcopy(by_org[item.company]), item.company, gateway, cutoff, processor)
+                            from .financial_calibration import calibrate_company_financials
+                            calibrate_company_financials(result, item.company, cutoff)
+                            validate_batch_publication_graph([_live_envelope(row, result, batch_id, cutoff, previous,
+                                frozen_match=item.company in fixture) for row in rows_by_org[item.company]])
+                            return result
+                    except asyncio.CancelledError:
+                        state = "deadline_skipped"
+                        raise
+                    except Exception as exc:
+                        state = "failed"
+                        result = copy.deepcopy(by_org[item.company])
+                        result.errors.append(RunError(code="OCR_ENRICHMENT_UNEXPECTED_FAILURE",
+                            message=f"Optional annual document action failed: {type(exc).__name__}.", retryable=True))
+                        result.observations["annual_accounts_document"] = {"state": "failed", "reason": type(exc).__name__}
+                        raise OpportunityFailed(result)
+                    finally:
+                        if state != "deadline_skipped":
+                            record_phase("annual_documents", state, time.monotonic() - started)
+                for org, result in by_org.items():
+                    if org in phase_cache["annual_documents"]:
+                        record_phase("annual_documents", "not_attempted")
+                    elif not getattr(result, "account_records", []):
+                        record_phase("annual_documents", "ineligible")
+                document_works = [item for item in document_works if item.company not in phase_cache["annual_documents"]]
                 for item in document_works:
                     by_org[item.company].section_states["hiring_activity"] = PublicState.BLOCKED
                     by_org[item.company].observations["annual_accounts_document"] = {"state": "blocked", "reason": "document_not_scheduled"}
                 gateway.set_rate_limit("data.brreg.no", 1 / 2.1)
+                document_started = time.monotonic()
                 document_results, document_cancelled = await _run_source_phase(
                     document_scheduler.run(document_works, annual_document,
-                        permitted=lambda item: not run_budget.soft_expired and not run_budget.reserve_active),
+                        permitted=lambda item: not run_budget.soft_expired and not run_budget.reserve_active,
+                        on_complete=lambda item, value: persist_phase("annual_documents", item.company, value)),
                     run_budget, ocr_allocation)
+                phase_metrics.setdefault("annual_documents", {})["wall_seconds"] = time.monotonic() - document_started
                 by_org.update(document_results)
+                for item in document_works:
+                    if item.company not in phase_cache["annual_documents"]:
+                        result = copy.deepcopy(by_org[item.company])
+                        result.observations["annual_accounts_document"] = {"state": "deadline_skipped",
+                            "reason": "phase_deadline_or_completion_reserve"}
+                        persist_phase("annual_documents", item.company, result)
+                        record_phase("annual_documents", "deadline_skipped")
                 gateway.set_rate_limit("data.brreg.no", 3.0)
                 scheduler_report["annual_documents"] = {"passes": document_scheduler.metrics,
                     "companies": document_scheduler.company_metrics, "hard_deadline_cancelled": document_cancelled}
 
             async def website_phase():
                 if not live_websites:
+                    for name in ("website_verify", "website_shallow", "jobs_activity", "nav_batch", "wiki_batch", "nav_apply"):
+                        for org in unique:
+                            record_phase(name, "not_attempted")
                     return {}
                 from .websites import WebsiteResearchResult, research_company, sanitize_registry_websites
                 # Discover shared roots across input entities before evaluating any one company.
@@ -719,20 +909,29 @@ def run(args: argparse.Namespace) -> int:
                 shared_roots = {root for root, owners in root_owners.items() if len(owners) > 1}
                 scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
                 async def website(item: Opportunity, phase: str, previous: WebsiteResearchResult | None = None):
+                    started = time.monotonic()
+                    state = "completed"
                     try:
                         with request_company_scope(item.company):
                             return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
                                 enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
-                                phase=phase, previous=previous, rights_decisions=website_rights_decisions,
+                                phase=phase, previous=copy.deepcopy(previous), rights_decisions=website_rights_decisions,
                                 allow_current_registry_references=cutoff_source == "run_start")
                     except asyncio.CancelledError:
+                        state = "deadline_skipped"
                         raise
                     except Exception as exc:
-                        raise OpportunityFailed(WebsiteResearchResult(state=PublicState.FAILED,
-                            hiring_activity_state=PublicState.FAILED,
-                            errors=[RunError(code="WEBSITE_RESEARCH_UNEXPECTED_FAILURE",
-                                message=f"Optional website action failed: {type(exc).__name__}.", retryable=True)],
-                            audit={"execution_state": "failed", "claims": []}))
+                        state = "failed"
+                        result = copy.deepcopy(previous) if previous else WebsiteResearchResult()
+                        result.state = PublicState.FAILED
+                        result.attempt_outcome = "failed"
+                        result.errors.append(RunError(code="WEBSITE_RESEARCH_UNEXPECTED_FAILURE",
+                            message=f"Optional website {phase} action failed: {type(exc).__name__}.", retryable=True))
+                        result.audit.update(execution_state="failed", reason=f"{phase}_unexpected_failure")
+                        raise OpportunityFailed(result)
+                    finally:
+                        if state != "deadline_skipped":
+                            record_phase(item.pass_name, state, time.monotonic() - started)
                 def website_permitted(item: Opportunity) -> bool:
                     # The jobs/activity pass only extracts the pages saved by
                     # shallow research. HTTP exhaustion must not discard those
@@ -744,32 +943,43 @@ def run(args: argparse.Namespace) -> int:
                 verify_works = [Opportunity(key=org, company=org, pass_name="website_verify",
                     expected_company_family_gain=0.15, expected_atomic_claim_gain=0.2,
                     identity_risk=0.05, expected_requests=0.2, expected_seconds=0.15, sequence=index)
-                    for index, org in enumerate(profiles)]
-                verified_by_org = {}
+                    for index, org in enumerate(profiles) if org not in phase_cache["website_verify"]]
+                verified_by_org = dict(phase_cache["website_verify"])
+                def completed(name, target, item, value):
+                    target[item.company] = value
+                    persist_phase(name, item.company, value)
+                verify_started = time.monotonic()
                 _, verify_deadline_cancelled = await _run_source_phase(
                     scheduler.run(verify_works, lambda item: website(item, "verify"), permitted=website_permitted,
-                        on_complete=lambda item, value: verified_by_org.__setitem__(item.company, value)),
+                        on_complete=lambda item, value: completed("website_verify", verified_by_org, item, value)),
                     run_budget, website_deadline - time.monotonic())
+                phase_metrics.setdefault("website_verify", {})["wall_seconds"] = time.monotonic() - verify_started
                 shallow_works = [Opportunity(key=org, company=org, pass_name="website_shallow",
                     expected_company_family_gain=0.3, expected_atomic_claim_gain=1.0,
                     identity_risk=0.02, expected_requests=0.2, expected_seconds=0.15, sequence=index)
                     for index, org in enumerate(profiles) if org in verified_by_org
-                    and verified_by_org[org].phase_state.get("accepted_pages")]
-                shallow_by_org = {}
+                    and verified_by_org[org].phase_state.get("accepted_pages")
+                    and verified_by_org[org].attempt_outcome != "failed" and org not in phase_cache["website_shallow"]]
+                shallow_by_org = dict(phase_cache["website_shallow"])
+                shallow_started = time.monotonic()
                 _, shallow_deadline_cancelled = await _run_source_phase(
                     scheduler.run(shallow_works, lambda item: website(item, "shallow", verified_by_org[item.company]), permitted=website_permitted,
-                        on_complete=lambda item, value: shallow_by_org.__setitem__(item.company, value)),
+                        on_complete=lambda item, value: completed("website_shallow", shallow_by_org, item, value)),
                     run_budget, website_deadline - time.monotonic())
+                phase_metrics.setdefault("website_shallow", {})["wall_seconds"] = time.monotonic() - shallow_started
                 activity_works = [Opportunity(key=org, company=org, pass_name="jobs_activity",
                     expected_company_family_gain=0.1, expected_atomic_claim_gain=0.5,
                     identity_risk=0.04, expected_requests=0.0, expected_seconds=0.1, sequence=index)
                     for index, org in enumerate(profiles) if org in shallow_by_org
-                    and shallow_by_org[org].phase_state.get("accepted_pages")]
-                activity_by_org = {}
+                    and shallow_by_org[org].phase_state.get("accepted_pages")
+                    and shallow_by_org[org].attempt_outcome != "failed" and org not in phase_cache["jobs_activity"]]
+                activity_by_org = dict(phase_cache["jobs_activity"])
+                activity_started = time.monotonic()
                 _, activity_deadline_cancelled = await _run_source_phase(
                     scheduler.run(activity_works, lambda item: website(item, "jobs", shallow_by_org[item.company]), permitted=website_permitted,
-                        on_complete=lambda item, value: activity_by_org.__setitem__(item.company, value)),
+                        on_complete=lambda item, value: completed("jobs_activity", activity_by_org, item, value)),
                     run_budget, website_deadline - time.monotonic())
+                phase_metrics.setdefault("jobs_activity", {})["wall_seconds"] = time.monotonic() - activity_started
                 scheduler_report["website_opportunity_passes"] = {"passes": scheduler.metrics,
                     "companies": scheduler.company_metrics,
                     "hard_deadline_cancelled": {"website_verify": verify_deadline_cancelled,
@@ -778,68 +988,26 @@ def run(args: argparse.Namespace) -> int:
                         "jobs_activity": len(activity_by_org)}}
                 by_website_org = {org: activity_by_org.get(org, shallow_by_org.get(org, verified_by_org.get(org)))
                     for org in set(verified_by_org) | set(shallow_by_org) | set(activity_by_org)}
+                for name, works, results in (("website_verify", verify_works, verified_by_org),
+                        ("website_shallow", shallow_works, shallow_by_org), ("jobs_activity", activity_works, activity_by_org)):
+                    scheduled = {item.company for item in works}
+                    for org in profiles:
+                        if org not in scheduled:
+                            record_phase(name, "not_attempted" if org in results else "ineligible")
+                        elif org not in results:
+                            state = "deadline_skipped" if time.monotonic() >= website_deadline or run_budget.soft_expired or run_budget.reserve_active else "budget_skipped"
+                            record_phase(name, state)
+                            prior = by_website_org.get(org)
+                            result = copy.deepcopy(prior) if prior else WebsiteResearchResult(state=None, hiring_activity_state=None)
+                            result.attempt_outcome = state
+                            result.audit.update(execution_state=state, reason="phase_deadline_or_request_budget")
+                            persist_phase(name, org, result)
+                            by_website_org[org] = result
                 return by_website_org
 
             _, by_website_org = await asyncio.gather(document_phase(), website_phase())
-            output = []
-            for row in rows:
-                if row.row_number in prior_terminalized:
-                    output.append(prior_terminalized[row.row_number])
-                    continue
-                if row.row_number in baseline_saved:
-                    envelope = baseline_saved[row.row_number]
-                    live_by_org[row.organisation_number] = SimpleNamespace(
-                        observations=envelope.synthesis.get("brreg_observations", {}), claims=envelope.claims,
-                        evidence=envelope.evidence)
-                    output.append(envelope)
-                    continue
-                if live_brreg and row.organisation_number not in by_org:
-                    output.append(_envelope(row, {}, batch_id, cutoff, previous))
-                    continue
-                baseline = fixture.get(row.organisation_number)
-                if live_brreg:
-                    result = by_org[row.organisation_number]
-                    envelope = _live_envelope(row, result, batch_id, cutoff, previous, frozen_match=baseline is not None)
-                    live_by_org[row.organisation_number] = result
-                    if args.registry_snapshot:
-                        envelope = _attach_frozen_baseline(envelope, baseline, registry_hash, cutoff,
-                                                           args.registry_snapshot_as_of, args.registry_source_url)
-                else:
-                    envelope = _envelope(row, fixture, batch_id, cutoff, previous)
-                output.append(envelope)
-            if live_websites:
-                for envelope in output:
-                    if envelope.row_number in prior_terminalized:
-                        continue
-                    envelope.sections["hiring_activity"].diagnostics.append("nav_jobs:partial_coverage_no_negative_assertion")
-                    result = nav_results_by_org.get(envelope.organisation_number)
-                    if not result:
-                        continue
-                    envelope.claims.extend(result.claims)
-                    _merge_website_provenance(envelope, result)
-                    for section_name in ("hiring_activity", "claims_evidence_states"):
-                        envelope.sections[section_name].claims.extend(result.claims)
-                        envelope.sections[section_name].state = PublicState.AVAILABLE
-            if args.live_websites:
-                for output_index, envelope in enumerate(output):
-                    if envelope.row_number in prior_terminalized:
-                        continue
-                    result = by_website_org.get(envelope.organisation_number)
-                    if not result:
-                        outcome = "deadline_skipped" if (run_budget.soft_expired or run_budget.reserve_active) else "budget_skipped"
-                        envelope.synthesis["website_research"] = {"execution_state": outcome,
-                            "reason": "soft_deadline_or_completion_reserve" if outcome == "deadline_skipped" else "request_budget_exhausted", "claims": []}
-                        envelope.sections["website_owned_profiles"].state = None
-                        envelope.sections["website_owned_profiles"].attempt_outcome = outcome
-                        if not envelope.sections["hiring_activity"].claims:
-                            envelope.sections["hiring_activity"].state = None
-                            envelope.sections["hiring_activity"].attempt_outcome = outcome
-                        envelope.sections["website_owned_profiles"].diagnostics.append(
-                            "scheduler_execution_state:budget_skipped")
-                        envelope.sections["hiring_activity"].diagnostics.append(
-                            "scheduler_execution_state:budget_skipped")
-                        continue
-                    output[output_index] = _merge_optional_website_result(envelope, result)
+            output = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized
+                      else compose(row) for row in rows]
             for envelope in output:
                 checkpoint.put(envelope)
                 checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import math
@@ -11,12 +12,67 @@ import sqlite3
 import tempfile
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable, TypeVar
 
 from .models import Envelope
+
+
+def _checkpoint_encode(value: object) -> object:
+    from pydantic import BaseModel
+    from .models import PublicState
+    if isinstance(value, PublicState):
+        return {"$state": value.value}
+    if isinstance(value, BaseModel):
+        return {"$model": type(value).__name__, "value": value.model_dump(mode="json")}
+    if is_dataclass(value) and not isinstance(value, type):
+        return {"$record": type(value).__name__, "value": {
+            field.name: _checkpoint_encode(getattr(value, field.name)) for field in fields(value)}}
+    if isinstance(value, bytes):
+        return {"$bytes": base64.b64encode(value).decode("ascii")}
+    if isinstance(value, datetime):
+        return {"$datetime": value.isoformat()}
+    if isinstance(value, Decimal):
+        return {"$decimal": str(value)}
+    if isinstance(value, (set, tuple)):
+        return {"$collection": type(value).__name__, "value": [_checkpoint_encode(item) for item in value]}
+    if isinstance(value, list):
+        return [_checkpoint_encode(item) for item in value]
+    if isinstance(value, dict):
+        return {"$mapping": [[key, _checkpoint_encode(item)] for key, item in value.items()]}
+    return value
+
+
+def _checkpoint_decode(value: object) -> object:
+    from . import models
+    from .brreg import BrregResult
+    from .websites import PageRecord, WebsiteResearchResult
+    if isinstance(value, list):
+        return [_checkpoint_decode(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if "$mapping" in value:
+        return {key: _checkpoint_decode(item) for key, item in value["$mapping"]}
+    if "$model" in value:
+        allowed = {name: getattr(models, name) for name in ("Claim", "Evidence", "SourceSnapshot", "RunError")}
+        return allowed[value["$model"]].model_validate(value["value"])
+    if "$state" in value:
+        return models.PublicState(value["$state"])
+    if "$record" in value:
+        allowed = {cls.__name__: cls for cls in (BrregResult, PageRecord, WebsiteResearchResult)}
+        return allowed[value["$record"]](**_checkpoint_decode(value["value"]))
+    if "$bytes" in value:
+        return base64.b64decode(value["$bytes"])
+    if "$datetime" in value:
+        return datetime.fromisoformat(value["$datetime"])
+    if "$decimal" in value:
+        return Decimal(value["$decimal"])
+    if "$collection" in value:
+        return {"set": set, "tuple": tuple}[value["$collection"]](_checkpoint_decode(value["value"]))
+    return {key: _checkpoint_decode(item) for key, item in value.items()}
 
 
 @dataclass(frozen=True)
@@ -194,6 +250,7 @@ class Budget:
 
 class CheckpointStore:
     def __init__(self, path: str | Path):
+        self._identity_graphs = None
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path)
@@ -202,6 +259,7 @@ class CheckpointStore:
         self.connection.execute("CREATE TABLE IF NOT EXISTS envelopes (row_number INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
         self.connection.execute("CREATE TABLE IF NOT EXISTS run_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.connection.execute("CREATE TABLE IF NOT EXISTS shells (row_number INTEGER PRIMARY KEY, input_ref TEXT, organisation_number TEXT, execution_state TEXT)")
+        self.connection.execute("CREATE TABLE IF NOT EXISTS phase_results (phase TEXT, company TEXT, payload TEXT NOT NULL, PRIMARY KEY(phase,company))")
         self.connection.commit()
 
     def set_meta(self, key: str, value: str) -> None:
@@ -236,6 +294,48 @@ class CheckpointStore:
     def put(self, envelope: Envelope) -> None:
         self.connection.execute("INSERT OR REPLACE INTO envelopes(row_number,payload) VALUES (?,?)", (envelope.row_number, envelope.model_dump_json()))
         self.connection.commit()
+        self._identity_graphs = None
+
+    def validate_phase_update(self, envelopes: Iterable[Envelope]) -> dict:
+        def signatures(payload):
+            sources = {}
+            for item in payload["source_snapshots"]:
+                sources[item["source_id"]] = {key: value for key, value in item.items() if key != "retrieved_at"}
+            return {"evidence": {item["evidence_id"]: item for item in payload["evidence"]}, "snapshots": sources}
+        if self._identity_graphs is None:
+            self._identity_graphs = {row: signatures(json.loads(payload)) for row, payload in
+                self.connection.execute("SELECT row_number,payload FROM envelopes")}
+        updated = dict(self._identity_graphs)
+        for envelope in envelopes:
+            updated[envelope.row_number] = signatures(envelope.model_dump(mode="json"))
+        for kind in ("evidence", "snapshots"):
+            seen = {}
+            for graph in updated.values():
+                for identifier, signature in graph[kind].items():
+                    if identifier in seen and seen[identifier] != signature:
+                        raise ValueError(f"conflicting {kind} identifier across envelopes: {identifier}")
+                    seen[identifier] = signature
+        return updated
+
+    def phase_results(self, phase: str) -> dict[str, object]:
+        return {company: _checkpoint_decode(json.loads(payload)) for company, payload in
+                self.connection.execute("SELECT company,payload FROM phase_results WHERE phase=?", (phase,))}
+
+    def save_phase(self, phase: str, company: str, result: object,
+                   envelopes: Iterable[Envelope] = ()) -> None:
+        from .models import validate_batch_publication_graph
+        envelopes = list(envelopes)
+        validate_batch_publication_graph(envelopes)
+        identity_graphs = self.validate_phase_update(envelopes)
+        payload = json.dumps(_checkpoint_encode(result), ensure_ascii=False)
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO phase_results VALUES (?,?,?)", (phase, company, payload))
+            for envelope in envelopes:
+                self.connection.execute("INSERT OR REPLACE INTO envelopes VALUES (?,?)",
+                                        (envelope.row_number, envelope.model_dump_json()))
+                self.connection.execute("UPDATE shells SET execution_state='baseline_done' WHERE row_number=?",
+                                        (envelope.row_number,))
+        self._identity_graphs = identity_graphs
 
     def rows(self) -> list[Envelope]:
         return [Envelope.model_validate_json(row[0]) for row in self.connection.execute("SELECT payload FROM envelopes ORDER BY row_number")]
