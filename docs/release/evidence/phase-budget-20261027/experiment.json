@@ -1,0 +1,74 @@
+{
+  "status": "completed",
+  "started_at_utc": "2026-10-27T15:32:05.402134+00:00",
+  "source_sha": "d3aa87937f4589df88a3834a676fb95daba2a1ba",
+  "preregistration_sha256": "3c4750f5175e7cc40a3b93289b4f603c6402d6d61d53298f865cc341f18c1c5a",
+  "configuration_sha256": "9d44162146dfc74fee9e927eaeb8ec9fdd4eabc5613d1bda6fef68bda12bff6b",
+  "cohort_order": [
+    "matched",
+    "holdout"
+  ],
+  "implementation_changes_between_runs": false,
+  "cold_research_caches": true,
+  "concurrent_cohorts": false,
+  "pass_criteria": {
+    "companies_with_verified_website": 20,
+    "companies_with_financial_claims": 95,
+    "companies_with_fte": 50,
+    "maximum_elapsed_seconds": 1200,
+    "terminal_envelopes": 100
+  },
+  "input_hashes": {
+    "matched": "acd65b35b1a87ef35c77fa673e4a44b63bd3718b339bc69adddc152889692076",
+    "holdout": "2d75e5728b753cecfd8a2e7adf9df0d8d8e89fa83e8ea7855be4cbf962c3a9f4"
+  },
+  "runs": {
+    "matched": {
+      "status": "completed",
+      "started_at_utc": "2026-10-27T15:32:05.450825+00:00",
+      "command": [
+        "/tmp/signalpost-phase-budget-release-20261027/run.sh",
+        "--input",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/matched/companies.jsonl",
+        "--output",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/matched/envelopes.jsonl",
+        "--state-output",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/matched/state.json",
+        "--checkpoint",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/matched/checkpoint.sqlite",
+        "--config",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/matched-budget.json"
+      ],
+      "pid": 2144101,
+      "exit_code": 0,
+      "elapsed_seconds": 1190.614,
+      "completed_at_utc": "2026-10-27T15:51:56.064949+00:00",
+      "source_sha_after": "d3aa87937f4589df88a3834a676fb95daba2a1ba",
+      "output_sha256": "305c7f5cbb03f9da698e937e9248a0939e28e2ba1529ba7459e70a1e428703c7",
+      "terminal_rows": 100
+    },
+    "holdout": {
+      "status": "failed",
+      "started_at_utc": "2026-10-27T15:51:56.329321+00:00",
+      "command": [
+        "/tmp/signalpost-phase-budget-release-20261027/run.sh",
+        "--input",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/holdout/companies.jsonl",
+        "--output",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/holdout/envelopes.jsonl",
+        "--state-output",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/holdout/state.json",
+        "--checkpoint",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/holdout/checkpoint.sqlite",
+        "--config",
+        "/home/azureuser/projects/signalpost-phase-budget-20261027/matched-budget.json"
+      ],
+      "pid": 2180696,
+      "exit_code": 1,
+      "elapsed_seconds": 1175.312,
+      "completed_at_utc": "2026-10-27T16:11:31.641573+00:00",
+      "source_sha_after": "d3aa87937f4589df88a3834a676fb95daba2a1ba"
+    }
+  },
+  "completed_at_utc": "2026-10-27T16:11:31.643650+00:00"
+}

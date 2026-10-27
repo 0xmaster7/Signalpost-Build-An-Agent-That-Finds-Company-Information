@@ -290,6 +290,39 @@ def _cutoff_datetime(value: str) -> datetime | None:
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
 
+def _merge_optional_website_result(envelope: Envelope, result: Any) -> Envelope:
+    original = envelope
+    envelope = envelope.model_copy(deep=True)
+    try:
+        envelope.claims.extend(result.claims)
+        _merge_website_provenance(envelope, result)
+        website_claims = [claim for claim in result.claims if claim.section == "website_owned_profiles"]
+        footprint_claims = [claim for claim in result.claims if claim.section == "hiring_activity"]
+        section = envelope.sections["website_owned_profiles"]
+        section.claims.extend(website_claims)
+        section.state = result.state if not website_claims else PublicState.AVAILABLE
+        section.attempt_outcome = result.attempt_outcome or ("completed" if result.phase_state.get("accepted_pages") else None)
+        hiring = envelope.sections["hiring_activity"]
+        hiring.claims.extend(footprint_claims)
+        hiring.state = PublicState.AVAILABLE if hiring.claims else result.hiring_activity_state
+        hiring.attempt_outcome = result.hiring_attempt_outcome or result.attempt_outcome
+        envelope.sections["claims_evidence_states"].claims.extend(result.claims)
+        if result.claims:
+            envelope.sections["claims_evidence_states"].state = PublicState.AVAILABLE
+        envelope.errors.extend(result.errors)
+        envelope.synthesis["website_research"] = result.audit
+        return envelope.__class__.model_validate(envelope.model_dump())
+    except (ValueError, TypeError):
+        retained = original.model_copy(deep=True)
+        retained.errors.append(RunError(code="WEBSITE_PUBLICATION_GRAPH_REJECTED",
+            message="Optional website claims failed publication validation; verified official facts were retained."))
+        retained.sections["website_owned_profiles"].state = PublicState.FAILED
+        retained.sections["website_owned_profiles"].attempt_outcome = "failed"
+        retained.synthesis["website_research"] = {"execution_state": "failed",
+            "reason": "optional_publication_graph_rejected", "claims": []}
+        return retained
+
+
 async def _run_before_completion_reserve(awaitable: Any, budget: Budget) -> tuple[Any, bool]:
     """Cancel active source work before the hard deadline's atomic-output reserve."""
     remaining = max(0.0, budget.config.hard_seconds - budget.elapsed - budget.config.completion_reserve_seconds)
@@ -788,7 +821,7 @@ def run(args: argparse.Namespace) -> int:
                         envelope.sections[section_name].claims.extend(result.claims)
                         envelope.sections[section_name].state = PublicState.AVAILABLE
             if args.live_websites:
-                for envelope in output:
+                for output_index, envelope in enumerate(output):
                     if envelope.row_number in prior_terminalized:
                         continue
                     result = by_website_org.get(envelope.organisation_number)
@@ -806,24 +839,7 @@ def run(args: argparse.Namespace) -> int:
                         envelope.sections["hiring_activity"].diagnostics.append(
                             "scheduler_execution_state:budget_skipped")
                         continue
-                    envelope.claims.extend(result.claims)
-                    _merge_website_provenance(envelope, result)
-                    website_claims = [claim for claim in result.claims if claim.section == "website_owned_profiles"]
-                    footprint_claims = [claim for claim in result.claims if claim.section == "hiring_activity"]
-                    section = envelope.sections["website_owned_profiles"]
-                    section.claims.extend(website_claims)
-                    section.state = result.state if not website_claims else PublicState.AVAILABLE
-                    section.attempt_outcome = result.attempt_outcome or ("completed" if result.phase_state.get("accepted_pages") else None)
-                    hiring = envelope.sections["hiring_activity"]
-                    hiring.claims.extend(footprint_claims)
-                    hiring.state = PublicState.AVAILABLE if hiring.claims else result.hiring_activity_state
-                    hiring.attempt_outcome = result.hiring_attempt_outcome or result.attempt_outcome
-                    envelope.sections["claims_evidence_states"].claims.extend(result.claims)
-                    if result.claims:
-                        envelope.sections["claims_evidence_states"].state = PublicState.AVAILABLE
-                    envelope.errors.extend(result.errors)
-                    envelope.synthesis["website_research"] = result.audit
-                    envelope.__class__.model_validate(envelope.model_dump())
+                    output[output_index] = _merge_optional_website_result(envelope, result)
             for envelope in output:
                 checkpoint.put(envelope)
                 checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))

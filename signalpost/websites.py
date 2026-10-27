@@ -289,6 +289,19 @@ class WebsiteResearchResult:
     phase_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
+def _append_website_claim(output: WebsiteResearchResult, claim: Claim) -> None:
+    existing = next((item for item in output.claims if item.claim_id == claim.claim_id), None)
+    if existing is None:
+        output.claims.append(claim)
+        return
+    excluded = {"value", "evidence_ids", "source_snapshot_ids"}
+    if (existing.model_dump(mode="json", exclude=excluded) != claim.model_dump(mode="json", exclude=excluded)
+            or website_claim_value_digest(existing.field, existing.value) != website_claim_value_digest(claim.field, claim.value)):
+        raise ValueError("website claim identifier collision with conflicting semantics")
+    existing.evidence_ids = list(dict.fromkeys([*existing.evidence_ids, *claim.evidence_ids]))
+    existing.source_snapshot_ids = list(dict.fromkeys([*existing.source_snapshot_ids, *claim.source_snapshot_ids]))
+
+
 def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: bytes, final_url: str) -> PageRecord | None:
     content_type = next((value for key, value in headers.items() if key.casefold() == "content-type"), "")
     if status < 200 or status >= 300 or "html" not in content_type.casefold() or len(body) > MAX_PAGE_BYTES:
@@ -1859,7 +1872,7 @@ def _publish_registry_references(org: str, candidates: list[dict[str, Any]],
             verification_rule_id="registry_url_declaration_only_v1", verification_score="1.0",
             evidence_ids=[evidence_id], source_snapshot_ids=_additional_evidence_snapshot_ids(output.evidence, [evidence_id]))
         if not any(existing.claim_id == claim.claim_id for existing in output.claims):
-            output.claims.append(claim)
+            _append_website_claim(output, claim)
         for row in rows:
             row["publication_tier"] = "shared_site" if field == "shared_website" else "registry_declared"
 
@@ -2243,11 +2256,11 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             candidate_snapshot_ids = _additional_evidence_snapshot_ids(output.evidence, [source_candidate_id] if source_candidate_id else [])
             claim_provenance = {"evidence_ids": all_eids, "proof_source": proof_source,
                 "evidence_source_snapshot_ids": candidate_snapshot_ids}
-            output.claims.append(_make_claim(org, "verified_website_url", proof_page.final_url, proof_page,
+            _append_website_claim(output, _make_claim(org, "verified_website_url", proof_page.final_url, proof_page,
                 all_eids[0], **claim_provenance))
             page_only = proof.get("method", "").startswith("shared_page_")
             if not page_only:
-                output.claims.append(_make_claim(org, "verified_website_domain", domain, proof_page,
+                _append_website_claim(output, _make_claim(org, "verified_website_domain", domain, proof_page,
                     all_eids[0], **claim_provenance))
             candidate_row["proof_record_id"] = proof_digest
             candidate_row["proof_evidence_id"] = proof_evidence
@@ -2275,7 +2288,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 if corroborating_headings:
                     brand_evidence.append(_public_evidence(proof_page, output.snapshots, output.evidence,
                         org=org, excerpt=brand, locator="/html/body//h1|h2|h3"))
-                output.claims.append(_make_claim(org, "public_brand", brand, proof_page, eid,
+                _append_website_claim(output, _make_claim(org, "public_brand", brand, proof_page, eid,
                     evidence_ids=brand_evidence, proof_source=proof_source, proof_evidence=proof_evidence))
                 output.audit["website_claim_families"].append("public_brand")
             claim_pages = pages if not proof.get("shared_domain") else [proof_page]
@@ -2284,7 +2297,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             if description:
                 source_page = next(page for page in claim_pages if page.description == description)
                 eid = _public_evidence(source_page, output.snapshots, output.evidence, org=org, excerpt=description, locator="/html/head/meta[name=description]/@content")
-                output.claims.append(_make_claim(org, "website_description", description[:500], source_page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
+                _append_website_claim(output, _make_claim(org, "website_description", description[:500], source_page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
                 output.audit["website_claim_families"].append("website_description")
             product_headings: list[tuple[str, PageRecord]] = []
             for page in claim_pages:
@@ -2296,7 +2309,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             product_headings = _dedupe_product_headings(product_headings)
             for heading, page in product_headings[:20]:
                 eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=heading, locator="/html/body//h1|h2|h3")
-                output.claims.append(_make_claim(org, "product_or_service_heading", heading[:180], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
+                _append_website_claim(output, _make_claim(org, "product_or_service_heading", heading[:180], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
                 output.audit["website_claim_families"].append("product_or_service_heading")
             seen_profiles: set[str] = set()
             for page in claim_pages:
@@ -2307,7 +2320,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                         continue
                     seen_profiles.add(social["url"])
                     eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator=_profile_locator(page, social["url"], org))
-                    output.claims.append(Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
+                    _append_website_claim(output, Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
                         organisation_number=org, section="website_owned_profiles", field_family="owned_profile", subject_id=org,
                         field="company_owned_profile", value=social, state=PublicState.AVAILABLE, scope="legal_entity",
                         verification_rule_id="outbound_link_from_exact_verified_site_v1", verification_score="1.0",
@@ -2461,20 +2474,20 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     if deep_page_verified and page.description and len(page.description.strip()) >= 30 and not re.search(
                         r"(?i)\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|(?<!\d)(?:\+47\s?)?\d{8}(?!\d)|(?<!\d)\d{11}(?!\d)", page.description):
                         eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=page.description, locator="/html/head/meta[name=description]/@content")
-                        output.claims.append(_make_claim(org, "website_description", page.description[:500], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
+                        _append_website_claim(output, _make_claim(org, "website_description", page.description[:500], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
                         output.audit["website_claim_families"].append("website_description")
                     if deep_page_verified and kind == "products":
                         for heading, _page in _dedupe_product_headings([(heading, page) for heading in page.headings]):
                             if len(heading) < 4:
                                 continue
                             eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=heading, locator="/html/body//h1|h2|h3")
-                            output.claims.append(_make_claim(org, "product_or_service_heading", heading[:180], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
+                            _append_website_claim(output, _make_claim(org, "product_or_service_heading", heading[:180], page, eid, proof_source=proof_source, proof_evidence=proof_evidence))
                             output.audit["website_claim_families"].append("product_or_service_heading")
                     for social in (_profile_links(page, org) if deep_page_verified else []):
                         if any(claim.field == "company_owned_profile" and claim.value == social for claim in output.claims):
                             continue
                         social_eid = _public_evidence(page, output.snapshots, output.evidence, org=org, excerpt=social["url"], locator=_profile_locator(page, social["url"], org))
-                        output.claims.append(Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
+                        _append_website_claim(output, Claim(claim_id=f"{org}:web-profile:{hashlib.sha256(social['url'].encode()).hexdigest()[:12]}",
                             organisation_number=org, section="website_owned_profiles", field_family="owned_profile", subject_id=org,
                             field="company_owned_profile", value=social, state=PublicState.AVAILABLE, scope="legal_entity",
                             verification_rule_id="outbound_link_from_exact_verified_site_v1", verification_score="1.0",
@@ -2575,7 +2588,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                         continue
                     emitted_subjects.add((subject, field_name))
                     if isinstance(value, datetime): value = value.isoformat()
-                    output.claims.append(_make_footprint_claim(org, field_name, value, subject, "job", page,
+                    _append_website_claim(output, _make_footprint_claim(org, field_name, value, subject, "job", page,
                                                                evidence_id, proof_source, proof_evidence,
                                                                job["posting_date"] if field_name == "posting_date" else (job["deadline"] if field_name == "application_deadline" else None)))
                     output.audit["jobs"]["published"] += 1
@@ -2591,7 +2604,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     if value is None or (subject, field_name) in emitted_subjects:
                         continue
                     emitted_subjects.add((subject, field_name))
-                    output.claims.append(_make_footprint_claim(org, field_name, value, subject, "event", page,
+                    _append_website_claim(output, _make_footprint_claim(org, field_name, value, subject, "event", page,
                                                                evidence_id, proof_source, proof_evidence,
                                                                activity["published"] if field_name == "source_published_at" else None))
                     output.audit["activity"]["published"] += 1
@@ -2637,7 +2650,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     if value is None or (subject, field_name) in emitted_subjects:
                         continue
                     emitted_subjects.add((subject, field_name))
-                    output.claims.append(_make_footprint_claim(org, field_name, value, subject, "event", feed_page,
+                    _append_website_claim(output, _make_footprint_claim(org, field_name, value, subject, "event", feed_page,
                                                                feed_evidence, proof_source, proof_evidence,
                                                                activity["published"] if field_name == "source_published_at" else None))
                     output.audit["activity"]["published"] += 1

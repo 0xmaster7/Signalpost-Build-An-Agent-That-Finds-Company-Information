@@ -1,6 +1,6 @@
 # Concurrent research and calibrated units — 27 October 2026
 
-This treatment follows the [preregistered experiment](PHASE_BUDGET_PREREGISTRATION_2026-10-27.md). New coverage claims are withheld until its matched and holdout runs finish.
+This treatment follows the [preregistered experiment](PHASE_BUDGET_PREREGISTRATION_2026-10-27.md). **[Measured results](PHASE_BUDGET_RESULTS_2026-10-27.md): matched coverage gates failed; the fresh holdout failed publication with no final envelopes.** NAV remained partial. Implementation and offline tests are not evidence that the live targets were met.
 
 ## Execution
 

@@ -1,0 +1,19 @@
+{
+  "source_sha": "d3aa87937f4589df88a3834a676fb95daba2a1ba",
+  "input_sha256": "2d75e5728b753cecfd8a2e7adf9df0d8d8e89fa83e8ea7855be4cbf962c3a9f4",
+  "execution_failed": true,
+  "exit_code": 1,
+  "elapsed_seconds": 1175.312,
+  "row_number": 41,
+  "organisation_number": "974396904",
+  "stage": "optional_website_publication_merge",
+  "validation_error": "claim identifiers must be unique within an envelope",
+  "final_output_present": false,
+  "foundation_checkpoint_rows": 100,
+  "foundation_execution_state": "baseline_done",
+  "optional_results_checkpointed": false,
+  "optional_coverage": null,
+  "optional_results_recoverable": false,
+  "rerun_performed": false,
+  "post_run_fix_validation": "offline_regressions_only_not_a_holdout_pass"
+}

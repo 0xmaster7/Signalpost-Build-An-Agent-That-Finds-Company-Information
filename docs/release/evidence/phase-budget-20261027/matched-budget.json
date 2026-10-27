@@ -1,0 +1,8 @@
+{
+  "budget": {
+    "hard_seconds": 2700,
+    "soft_seconds": 2214,
+    "completion_reserve_seconds": 486,
+    "physical_request_limit": 2000
+  }
+}
