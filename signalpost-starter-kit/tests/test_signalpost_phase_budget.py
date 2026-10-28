@@ -64,6 +64,9 @@ def test_production_runs_batch_sources_before_concurrent_ocr_and_websites(tmp_pa
         calls.append("nav")
         return {}, {"state": "complete", "negative_coverage": False}, {}
 
+    async def financial(result, *args, **kwargs):
+        return result
+
     async def wikidata(*args, **kwargs):
         calls.append("wikidata")
         return {}, {"state": "completed"}
@@ -88,6 +91,7 @@ def test_production_runs_batch_sources_before_concurrent_ocr_and_websites(tmp_pa
         "completion_reserve_seconds": 1, "nav_seconds": 0.3, "wikidata_seconds": 0.3,
         "website_seconds": 0.3, "ocr_seconds": 0.3}}))
     with patch.object(run, "fetch_company", official), \
+            patch.object(run, "fetch_financial_statements", financial), \
             patch("signalpost.nav.research_jobs", nav), \
             patch("signalpost.public_discovery.wikidata_candidates", wikidata), \
             patch("signalpost.annual_accounts.enrich_company", document), \

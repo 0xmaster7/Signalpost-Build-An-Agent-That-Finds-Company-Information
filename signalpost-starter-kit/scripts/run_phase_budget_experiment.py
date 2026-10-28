@@ -47,6 +47,8 @@ def main():
     parser.add_argument("--repository", required=True, type=Path)
     parser.add_argument("--matched-input", required=True, type=Path)
     parser.add_argument("--holdout-selection", required=True, type=Path)
+    parser.add_argument("--preregistration", type=Path)
+    parser.add_argument("--record-http", action="store_true")
     args = parser.parse_args()
     root, repository = args.root.resolve(), args.repository.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -62,14 +64,18 @@ def main():
     if subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=repository).strip():
         raise ValueError("Treatment checkout has tracked modifications")
     source_sha = revision(repository)
-    preregistration = repository / "docs/release/PHASE_BUDGET_PREREGISTRATION_2026-10-27.md"
+    preregistration = args.preregistration or repository / "docs/release/PHASE_BUDGET_PREREGISTRATION_2026-10-27.md"
     config = root / "matched-budget.json"
     write(config, {"budget": {"hard_seconds": 2700, "soft_seconds": 2214,
-        "completion_reserve_seconds": 486, "physical_request_limit": 2000}})
+        "completion_reserve_seconds": 486, "physical_request_limit": 2000,
+        "financial_seconds": 180, "financial_requests_per_company": 1,
+        "nav_seconds": 360, "wikidata_seconds": 12, "website_seconds": 480,
+        "ocr_seconds": 900, "ocr_budget_share": 0.65}})
     manifest = {"status": "running", "started_at_utc": utc(), "source_sha": source_sha,
         "preregistration_sha256": digest(preregistration), "configuration_sha256": digest(config),
         "cohort_order": ["matched", "holdout"], "implementation_changes_between_runs": False,
-        "cold_research_caches": True, "concurrent_cohorts": False,
+        "cold_research_caches": True, "cold_ocr_caches": True, "concurrent_cohorts": False,
+        "http_recording": args.record_http,
         "pass_criteria": {"companies_with_verified_website": 20, "companies_with_financial_claims": 95,
             "companies_with_fte": 50, "maximum_elapsed_seconds": 1200, "terminal_envelopes": 100},
         "input_hashes": {"matched": MATCHED_HASH, "holdout": digest(holdout_input)}, "runs": {}}
@@ -90,12 +96,15 @@ def main():
         command = [str(repository / "run.sh"), "--input", str(source_copy),
             "--output", str(destination / "envelopes.jsonl"), "--state-output", str(destination / "state.json"),
             "--checkpoint", str(destination / "checkpoint.sqlite"), "--config", str(config)]
+        if args.record_http:
+            command.extend(["--record-http", str(destination / "http-capture")])
         record = {"status": "running", "started_at_utc": utc(), "command": command}
         manifest["runs"][name] = record
         write(manifest_file, manifest)
         environment = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": str(home), "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8", "TZ": "UTC", "PYTHONNOUSERSITE": "1", "OMP_NUM_THREADS": "1",
-            "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+            "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
+            "SIGNALPOST_OCR_CACHE": str(destination / "ocr-cache")}
         started = time.monotonic()
         with (destination / "stdout.log").open("wb") as stdout, (destination / "stderr.log").open("wb") as stderr:
             process = subprocess.Popen(["/usr/bin/time", "-v", "-o", str(destination / "resources.txt"), *command],

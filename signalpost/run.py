@@ -327,6 +327,8 @@ def _merge_optional_website_result(envelope: Envelope, result: Any) -> Envelope:
 async def _run_before_completion_reserve(awaitable: Any, budget: Budget, reserved_seconds: float = 0) -> tuple[Any, bool]:
     """Cancel active source work before the hard deadline's atomic-output reserve."""
     remaining = max(0.0, budget.config.hard_seconds - budget.elapsed - budget.config.completion_reserve_seconds - reserved_seconds)
+    if reserved_seconds:
+        remaining = min(remaining, max(0.0, budget.config.soft_seconds - budget.elapsed - reserved_seconds))
     if remaining <= 0:
         if hasattr(awaitable, "close"):
             awaitable.close()
@@ -353,10 +355,23 @@ async def _run_source_phase(awaitable: Any, budget: Budget, seconds: float) -> t
 def run(args: argparse.Namespace) -> int:
     run_started = time.monotonic()
     run_start_utc = datetime.now(timezone.utc)
+    replay_metadata = None
+    if getattr(args, "replay_http", None):
+        from .recording import HttpRecording, ReplayError
+        replay_metadata = HttpRecording(args.replay_http, replay=True).metadata["run"]
+        try:
+            run_start_utc = datetime.fromisoformat(replay_metadata["run_started_at"])
+            if run_start_utc.tzinfo is None:
+                raise ValueError("missing timezone")
+        except (KeyError, TypeError, ValueError):
+            raise ReplayError("capture has no valid original run clock") from None
     input_path = Path(args.input) if args.input else _find_default_input()
     if not input_path or not input_path.exists():
         print("No input file found; provide --input or create signalpost_input.jsonl", file=sys.stderr)
         return 2
+    input_sha256 = hashlib.sha256(input_path.read_bytes()).hexdigest()
+    if replay_metadata is not None and replay_metadata.get("input_sha256") != input_sha256:
+        raise ReplayError("replay input bytes do not match the captured input")
     rows = load_input(input_path, args.format)
     # The row set is fully parsed before any network-capable component is constructed.
     if not rows:
@@ -374,6 +389,9 @@ def run(args: argparse.Namespace) -> int:
     read_only_paths = [Path(input_path), *[Path(value) for value in
         (args.registry_snapshot, args.config, args.previous_state) if value]]
     resolved_outputs = [path.resolve() for path in (output_path, state_output_path, checkpoint_path, marker_path)]
+    capture_directory = getattr(args, "replay_http", None) or getattr(args, "record_http", None)
+    if capture_directory and any(path.is_relative_to(Path(capture_directory).resolve()) for path in resolved_outputs):
+        raise ValueError("output/state/checkpoint paths must stay outside the private HTTP capture")
     resolved_reads = [path.resolve() for path in read_only_paths]
     if len(set(resolved_outputs)) != len(resolved_outputs) or set(resolved_outputs) & set(resolved_reads):
         raise ValueError("output, state, checkpoint, and publication marker must not alias each other or read-only input/config/state artifacts")
@@ -416,6 +434,12 @@ def run(args: argparse.Namespace) -> int:
     run_budget = Budget(budget, started_at=run_started)
     cutoff_value = args.evidence_cutoff or config_values.get("evidence_cutoff")
     cutoff_source = "evaluator" if args.evidence_cutoff else "config" if cutoff_value else "run_start"
+    if replay_metadata is not None:
+        recorded_cutoff = replay_metadata.get("cutoff")
+        if not recorded_cutoff or (cutoff_value and _cutoff_datetime(str(cutoff_value)) != _cutoff_datetime(recorded_cutoff)):
+            raise ReplayError("replay cutoff does not match the captured cutoff")
+        cutoff_value = recorded_cutoff
+        cutoff_source = replay_metadata.get("cutoff_source", "run_start")
     if args.resume and not cutoff_value and checkpoint_path.exists():
         resume_store = CheckpointStore(checkpoint_path)
         saved_cutoff = resume_store.get_meta("effective_cutoff")
@@ -449,10 +473,15 @@ def run(args: argparse.Namespace) -> int:
             "per_company_physical_limit": budget.per_company_physical_limit,
             "per_host_physical_limit": budget.per_host_physical_limit},
     }
+    if replay_metadata is not None and replay_metadata.get("request_configuration") != effective_config_identity:
+        raise ReplayError("replay request configuration differs from the capture")
     # History compatibility describes evidence semantics, not the amount of work
     # this run can attempt. The full operational identity remains in the separate
     # checkpoint fingerprint below, so a changed batch/budget cannot resume it.
     legacy_config_fingerprint = sha256_json(effective_config_identity)
+    legacy_without_finance = {**effective_config_identity, "budget": {key: value
+        for key, value in effective_config_identity["budget"].items()
+        if key not in {"financial_seconds", "financial_requests_per_company"}}}
     history_identity = dict(effective_config_identity)
     history_identity.pop("budget")
     runtime_identity = dict(config_values)
@@ -471,7 +500,7 @@ def run(args: argparse.Namespace) -> int:
     previous_ref = ("sha256:" + hashlib.sha256(canonical_json(previous_artifact.model_dump(mode="json"))).hexdigest()
                     if previous_artifact else None)
     if previous_artifact and previous_artifact.configuration_fingerprint != config_fingerprint:
-        if previous_artifact.configuration_fingerprint == legacy_config_fingerprint:
+        if previous_artifact.configuration_fingerprint in {legacy_config_fingerprint, sha256_json(legacy_without_finance)}:
             # Migrate only an exactly matching legacy identity; an opaque old hash
             # cannot prove compatibility after a budget change. Keep the original
             # artifact reference and all provenance/observation bytes intact.
@@ -542,7 +571,13 @@ def run(args: argparse.Namespace) -> int:
     if live_brreg or live_websites:
         gateway = NetworkGateway(timeout=20, retries=1, budget=run_budget,
                                  trusted_proxy=args.network_policy == "trusted-proxy",
-                                 global_concurrency=budget.global_http_concurrency)
+                                 global_concurrency=budget.global_http_concurrency,
+                                 record_http=getattr(args, "record_http", None),
+                                 replay_http=getattr(args, "replay_http", None),
+                                 run_metadata={"run_started_at": run_start_utc.isoformat(),
+                                     "cutoff": cutoff.isoformat(), "cutoff_source": cutoff_source,
+                                     "input_sha256": input_sha256,
+                                     "request_configuration": effective_config_identity})
         if live_brreg:
             gateway.set_rate_limit("data.brreg.no", 3.0)
         async def enrich():
@@ -710,6 +745,8 @@ def run(args: argparse.Namespace) -> int:
                 return observations, homepages
 
             if live_brreg:
+                financial_allocation = min(budget.financial_seconds,
+                    max(0.0, budget.soft_seconds - run_budget.elapsed) * 0.25)
                 finance_pending = [org for org in unique if org not in phase_cache["financial_statements"]]
                 run_budget.financial_request_reserve = len(finance_pending) * budget.financial_requests_per_company
                 run_budget.financial_logical_reserve = len(finance_pending)
@@ -764,7 +801,7 @@ def run(args: argparse.Namespace) -> int:
                 try:
                     fresh_by_org, official_deadline_cancelled = await _run_before_completion_reserve(
                         scheduler.run(works, official, on_complete=checkpoint_completed), run_budget,
-                        reserved_seconds=budget.financial_seconds if finance_pending else 0)
+                        reserved_seconds=financial_allocation if finance_pending else 0)
                     by_org.update(checkpoint.phase_results("official"))
                     by_org.update(fresh_by_org)
                 finally:
@@ -779,9 +816,9 @@ def run(args: argparse.Namespace) -> int:
                         by_org[org] = BrregResult(claims=[], evidence=[], snapshots=[],
                             errors=[RunError(code="BRREG_FOUNDATION_DEADLINE_SKIPPED",
                                 message="Official foundation did not finish before the financial reserve.", retryable=True)],
-                            section_states={name: PublicState.NOT_AVAILABLE for name in
+                            section_states={name: PublicState.FAILED for name in
                                 ("identity_brand", "accounts_history", "leadership_workplaces")},
-                            terminal_state=PublicState.NOT_AVAILABLE, observations={})
+                            terminal_state=PublicState.FAILED, observations={})
                 from .operations import financial_request_scope
                 finance_scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
                 finance_works = [Opportunity(key=org, company=org, pass_name="financial_statements",
@@ -818,10 +855,11 @@ def run(args: argparse.Namespace) -> int:
                 if financial_retries is not None:
                     gateway.retries = 0
                 try:
-                    await asyncio.wait_for(_run_before_completion_reserve(
-                        finance_scheduler.run(finance_works, financial_statement,
-                            on_complete=lambda item, value: persist_phase("financial_statements", item.company, value)),
-                        run_budget), timeout=budget.financial_seconds)
+                    if financial_allocation > 0:
+                        await asyncio.wait_for(_run_before_completion_reserve(
+                            finance_scheduler.run(finance_works, financial_statement,
+                                on_complete=lambda item, value: persist_phase("financial_statements", item.company, value)),
+                            run_budget), timeout=financial_allocation)
                 except asyncio.TimeoutError:
                     pass
                 except Exception as exc:
@@ -918,7 +956,8 @@ def run(args: argparse.Namespace) -> int:
                         record_phase("annual_documents", "not_attempted")
                     return
                 from .annual_accounts import DocumentProcessor, enrich_company
-                processor = DocumentProcessor(seconds=ocr_allocation)
+                processor = DocumentProcessor(seconds=ocr_allocation,
+                    **({"cache_only": True} if getattr(args, "replay_http", None) else {}))
                 document_scheduler = OpportunityScheduler(concurrency=2)
                 document_works = [Opportunity(key=org, company=org, pass_name="annual_documents",
                     expected_company_family_gain=2, expected_atomic_claim_gain=4,
@@ -968,6 +1007,7 @@ def run(args: argparse.Namespace) -> int:
                         on_complete=lambda item, value: persist_phase("annual_documents", item.company, value)),
                     run_budget, ocr_allocation)
                 phase_metrics.setdefault("annual_documents", {})["wall_seconds"] = time.monotonic() - document_started
+                scheduler_report["ocr_replay_misses"] = getattr(processor, "cache_misses", 0)
                 by_org.update(document_results)
                 for item in document_works:
                     if item.company not in phase_cache["annual_documents"]:
@@ -1132,6 +1172,14 @@ def run(args: argparse.Namespace) -> int:
         envelopes = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized else
                      _envelope(row, fixture, batch_id, cutoff, previous, registry_as_of=args.registry_snapshot_as_of,
                                registry_source_url=args.registry_source_url) for row in rows]
+    if getattr(args, "replay_http", None) and gateway is not None and (
+            gateway.replay_misses or gateway.replay_failures or scheduler_report.get("ocr_replay_misses", 0)):
+        checkpoint.close()
+        print(json.dumps({"event": "replay_failed", "http_misses": gateway.replay_misses,
+            "http_failures": gateway.replay_failures,
+            "ocr_misses": scheduler_report.get("ocr_replay_misses", 0),
+            "reason": "incomplete_or_invalid_capture_no_live_fallback"}), file=sys.stderr)
+        return 1
     for envelope in envelopes:
         envelope.synthesis["evidence_cutoff"] = cutoff.isoformat()
         envelope.synthesis["evidence_cutoff_source"] = cutoff_source
@@ -1213,6 +1261,8 @@ def run(args: argparse.Namespace) -> int:
                                     physical_requests_by_company=run_budget.requests_by_company,
                                     physical_request_outcomes=ledger_outcomes,
                                     scheduler_passes=scheduler_report,
+                                    research_mode="replay" if getattr(args, "replay_http", None) else "live" if gateway else "offline",
+                                    actual_network_requests=0 if getattr(args, "replay_http", None) else (gateway.ledger.physical_requests if gateway else 0),
                                     coalesced_requests=(getattr(gateway, "coalesced_requests", 0) if gateway else 0),
                                     runtime_seconds=round(time.monotonic() - run_started, 3),
                                     output_cardinality=len(envelopes),
@@ -1242,6 +1292,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-output")
     parser.add_argument("--checkpoint", help="Internal SQLite checkpoint/resume file (separate from canonical state output)")
     parser.add_argument("--resume", action="store_true", help="Resume matching rows from the SQLite state checkpoint")
+    capture = parser.add_mutually_exclusive_group()
+    capture.add_argument("--record-http", help="Write a new private HTTP/PDF capture directory")
+    capture.add_argument("--replay-http", help="Strict offline replay from a private capture and warm OCR cache")
     parser.add_argument("--config", help="Reserved for the versioned runtime configuration")
     parser.add_argument("--evidence-cutoff", default=os.environ.get("SIGNALPOST_EVIDENCE_CUTOFF"))
     parser.add_argument("--network-policy", choices=("direct", "trusted-proxy"), default=os.environ.get("SIGNALPOST_NETWORK_POLICY", "direct"))
@@ -1249,7 +1302,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--live-websites", action="store_true", help="Discover and verify website candidates through the centralized gateway")
     parser.add_argument("--no-keyless-websites", action="store_true", help="Disable bounded distinctive-name .no discovery")
     parser.add_argument("--batch-id")
-    return run(parser.parse_args(argv))
+    from .recording import ReplayError
+    try:
+        return run(parser.parse_args(argv))
+    except ReplayError as exc:
+        print(f"Replay/capture error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

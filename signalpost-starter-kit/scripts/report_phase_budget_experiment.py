@@ -86,7 +86,12 @@ def main():
             ("companies_with_verified_website", "companies_with_financial_claims", "companies_with_fte")}
         gates["runtime"] = metrics["elapsed_seconds"] <= execution["pass_criteria"]["maximum_elapsed_seconds"]
         gates["cardinality"] = len(rows) == execution["pass_criteria"]["terminal_envelopes"]
-        summary["cohorts"][name] = {"metrics": metrics, "gates": gates, "pass": all(gates.values())}
+        batch_report = json.loads((root / "stdout.log").read_text().splitlines()[-1])
+        phases = batch_report.get("scheduler_passes", {})
+        summary["cohorts"][name] = {"metrics": metrics, "gates": gates, "pass": all(gates.values()),
+            "phase_status_counts_and_timings": phases.get("optional_phases", {}),
+            "official_foundation": {key: value for key, value in phases.get("official_foundation", {}).items() if key != "companies"},
+            "nav_window": phases.get("nav_jobs", {}), "wikidata": phases.get("wikidata_discovery", {})}
         encoded = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows).encode()
         with gzip.GzipFile(filename=str(args.output_dir / (name + "-per-company.jsonl.gz")), mode="wb", mtime=0) as compressed:
             compressed.write(encoded)

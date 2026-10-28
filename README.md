@@ -31,6 +31,8 @@ The input contains company organisation numbers. The output is ordered JSONL wit
 
 An explicit `--registry-snapshot PATH` preserves the canonical CLI's offline mode unless you also supply `--live-brreg --live-websites`. For advanced direct Python, refresh, resume, configuration and dashboard commands, see the [submission guide](submission/README.md). The underlying production launcher remains `signalpost-starter-kit/run_signalpost.py`.
 
+For a private HTTP/PDF capture, add `--record-http .signalpost-recordings/run1`. To rerun the pipeline offline, use the same input/configuration and warm OCR cache with `--replay-http .signalpost-recordings/run1`, choosing separate output, state and checkpoint paths. Replay never contacts sources or silently starts OCR on a cache miss; incomplete captures fail explicitly. Captures contain raw source material and may include NAV's public token: **never publish or commit them**. See the [ordered reliability/finance audit](docs/release/RELIABILITY_FINANCE_AUDIT_2026-10-28.md). Offline checks alone do not establish improved live coverage.
+
 Input:
 
 ~~~json

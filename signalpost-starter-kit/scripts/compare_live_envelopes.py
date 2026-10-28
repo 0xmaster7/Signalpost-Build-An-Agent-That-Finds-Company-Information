@@ -95,6 +95,12 @@ def normalize(envelope, provider):
             if provider == "ours":
                 match = re.search(r":filing:(?:(?:legal_entity|group):)?([^:]+):", str(claim.get("subject_id", "")))
                 journal = match.group(1) if match else None
+                if journal is None:
+                    basis = claim.get("unit_assumption_basis") or {}
+                    journal = basis.get("filing_identity", {}).get("journalnr")
+                if journal is None:
+                    journal = next((item.get("value") for item in claims if item.get("subject_id") == claim.get("subject_id")
+                        and item.get("field") == "financial_record.journalnr"), None)
             else:
                 for ref in claim.get("evidence_ids", []):
                     match = re.search(r"journalnr=([^;\s]+)", str(evidence.get(ref, {}).get("claim_span", "")))
@@ -104,7 +110,8 @@ def normalize(envelope, provider):
                 "period_start": start, "period_end": end, "scope": scope,
                 "filing_journal_number": journal,
                 "declared_currency_value": str(amount * multiplier) if multiplier is not None else None,
-                "unit_basis": ("company_pdf_calibrated_currency_assumption" if claim.get("unit_assumed_currency") else "document_or_explicit_unit") if provider == "ours" else "currency_used_as_unit_unresolved_provider_scale_contract",
+                "unit_basis": ((claim.get("unit_assumption_basis") or {}).get("method", "unspecified_currency_assumption")
+                    if claim.get("unit_assumed_currency") else "document_or_explicit_unit") if provider == "ours" else "currency_used_as_unit_unresolved_provider_scale_contract",
                 "unit_assumed_currency": bool(claim.get("unit_assumed_currency", False)),
                 "unit_assumption_basis": claim.get("unit_assumption_basis"),
                 "evidence_metadata_complete": complete, "evidence": evidence_refs})

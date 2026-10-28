@@ -21,7 +21,7 @@ def isolated_research_environment(monkeypatch, tmp_path):
 
     def lookup(host, *args, **kwargs):
         if not local_host(host):
-            raise OSError("public DNS is forbidden in unit tests; supply a source fixture")
+            raise socket.gaierror("public DNS is forbidden in unit tests; supply a source fixture")
         return original_lookup(host, *args, **kwargs)
 
     def connect(connection, address):

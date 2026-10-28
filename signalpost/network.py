@@ -4,7 +4,6 @@ import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 import gzip
-import hashlib
 import http.client
 import ipaddress
 import json
@@ -24,9 +23,11 @@ from html.parser import HTMLParser
 from tldextract import TLDExtract
 
 from .operations import Budget
+from .recording import HttpRecording
 
 
 _REQUEST_COMPANY: ContextVar[str | None] = ContextVar("signalpost_request_company", default=None)
+_HTTP_OBSERVED_AT: ContextVar[datetime | None] = ContextVar("signalpost_http_observed_at", default=None)
 
 
 @contextmanager
@@ -311,11 +312,28 @@ def classify_response(status: int, headers: dict[str, str], body: bytes) -> str:
 
 
 class NetworkGateway:
+    """Apply identical source policy to live HTTP and private offline captures.
+
+    Only exact BRREG/NAV API profiles tolerate unreachable robots; explicit
+    disallows still win. The exact Wikidata SPARQL profile skips robots.
+    Replay requires the same request settings and exact If-Modified-Since.
+    Captures preserve retrieval timestamps and must stay outside Git. Complete
+    pipeline replay also requires the persistent OCR cache to be warm.
+    """
+
     def __init__(self, transport: Transport | None = None, *, timeout: float = 15, retries: int = 1,
                  redirect_limit: int = 5, response_cap: int = 2 * 1024 * 1024,
                  trusted_proxy: bool = False, proxy_url: str | None = None,
-                 budget: Budget | None = None, global_concurrency: int | None = None):
-        self.transport = transport or UrlLibTransport(proxy_url=proxy_url, trust_env=trusted_proxy)
+                 budget: Budget | None = None, global_concurrency: int | None = None,
+                 record_http: str | None = None, replay_http: str | None = None,
+                 run_metadata: dict[str, Any] | None = None):
+        if record_http is not None and replay_http is not None:
+            raise ValueError("record_http and replay_http are mutually exclusive")
+        self.http_recording = (HttpRecording(replay_http or record_http, replay=replay_http is not None,
+                                            run_metadata=run_metadata)
+                               if replay_http is not None or record_http is not None else None)
+        self.replay_mode = replay_http is not None
+        self.transport = transport if self.replay_mode else transport or UrlLibTransport(proxy_url=proxy_url, trust_env=trusted_proxy)
         self.timeout = timeout
         self.retries = retries
         self.redirect_limit = redirect_limit
@@ -343,6 +361,74 @@ class NetworkGateway:
         self._rate_adjustments: dict[str, int] = {}
         self._host_successes: dict[str, int] = {}
 
+    @property
+    def replay_misses(self) -> int:
+        return self.http_recording.misses if self.http_recording else 0
+
+    @property
+    def observed_at(self) -> datetime:
+        return _HTTP_OBSERVED_AT.get() or datetime.now(timezone.utc)
+
+    @property
+    def replay_failures(self) -> int:
+        return self.http_recording.failures if self.http_recording else 0
+
+    def _validate_host(self, url: str) -> tuple[str, ...] | None:
+        return validate_public_host(url, trusted_proxy=self.replay_mode or self.trusted_proxy)
+
+    def _assert_recordable_url(self, url: str) -> None:
+        if self.http_recording and any(
+                re.search(r"(?i)(token|authorization|password|secret|api[_-]?key|credential)", name)
+                for name, value in urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query, keep_blank_values=True)):
+            raise NetworkPolicyError("credential-bearing query parameters cannot be recorded or replayed")
+
+    async def _http_request(self, target: str, *, purpose: str, user_agent: str, cap: int,
+                            use_robots: bool, allowed_hosts: set[str] | None, access_profile: str | None,
+                            api_headers: dict[str, str] | None,
+                            approved_ips: tuple[str, ...] | None) -> tuple[int, dict[str, str], bytes, str]:
+        self._assert_recordable_url(target)
+        request = {"url": target, "purpose": purpose, "user_agent": user_agent, "max_bytes": cap,
+                   "use_robots": use_robots, "access_profile": access_profile,
+                   "allowed_hosts": sorted(h.casefold() for h in allowed_hosts) if allowed_hosts is not None else None,
+                   "if_modified_since": (api_headers or {}).get("If-Modified-Since"),
+                   "retries": self.retries, "redirect_limit": self.redirect_limit,
+                   "trusted_proxy": self.trusted_proxy, "timeout": self.timeout}
+        if self.replay_mode:
+            captured = self.http_recording.load(request)
+            _HTTP_OBSERVED_AT.set(datetime.fromisoformat(captured["retrieved_at"]))
+            try:
+                if any(not _public_ip(ip) for ip in captured["approved_ips"] or []):
+                    raise ValueError("non-public recorded address")
+                response = captured["response"]
+                if response is not None:
+                    self._validate_host(canonical_url(response["final_url"]))
+            except ValueError:
+                self.http_recording._fail("recorded destination violates host policy")
+            if captured["outcome"] == "timeout":
+                raise asyncio.TimeoutError()
+            if captured["outcome"] == "transport_error":
+                raise OSError("recorded transport failure")
+            return response["status"], response["headers"], response["body"], response["final_url"]
+        start = time.monotonic()
+        headers = {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}
+        try:
+            response = await asyncio.wait_for(
+                self.transport.request(target, headers, self.timeout, approved_ips=approved_ips, max_bytes=cap)
+                if isinstance(self.transport, UrlLibTransport) else
+                self.transport.request(target, headers, self.timeout), timeout=self.timeout)
+        except (asyncio.CancelledError, asyncio.TimeoutError, OSError, urllib.error.URLError) as exc:
+            if self.http_recording:
+                outcome = ("cancelled" if isinstance(exc, asyncio.CancelledError) else
+                           "timeout" if isinstance(exc, asyncio.TimeoutError) else "transport_error")
+                self.http_recording.save(request, response=None, outcome=outcome, approved_ips=approved_ips,
+                                         elapsed_ms=(time.monotonic() - start) * 1000)
+            raise
+        if self.http_recording:
+            self.http_recording.save(request, response=response, outcome="received", approved_ips=approved_ips,
+                                     elapsed_ms=(time.monotonic() - start) * 1000)
+        _HTTP_OBSERVED_AT.set(datetime.now(timezone.utc))
+        return response
+
     def set_rate_limit(self, host: str, requests_per_second: float) -> None:
         if requests_per_second <= 0:
             raise ValueError("requests_per_second must be positive")
@@ -358,6 +444,9 @@ class NetworkGateway:
         if access_profile == "wikidata_sparql_api" and not _wikidata_api_url(url, purpose):
             raise NetworkPolicyError("Wikidata API profile requires the exact documented SPARQL endpoint")
         target = canonical_url(url)
+        self._assert_recordable_url(target)
+        if self.replay_mode:
+            self._validate_host(target)
         if api_headers and (access_profile != "nav_feed_api" or not _nav_api_url(target, purpose)
                 or set(api_headers) - {"Authorization", "If-Modified-Since"}
                 or any("\r" in value or "\n" in value for value in api_headers.values())):
@@ -366,7 +455,7 @@ class NetworkGateway:
             return 0, {}, b"", target, "budget_exhausted"
         key = (target, purpose, user_agent, max_bytes or self.response_cap, use_robots,
                tuple(sorted(h.casefold() for h in allowed_hosts)) if allowed_hosts is not None else None,
-               access_profile, self.trusted_proxy, hashlib.sha256(json.dumps(api_headers or {}, sort_keys=True).encode()).hexdigest(),
+               access_profile, self.trusted_proxy, (api_headers or {}).get("If-Modified-Since"),
                _REQUEST_COMPANY.get() if self.budget and self.budget.config.per_company_physical_limit is not None else None)
         existing = self._inflight.get(key)
         if existing is not None:
@@ -431,7 +520,7 @@ class NetworkGateway:
             if target in redirects_seen:
                 return 0, {}, b"", target, "redirect_loop"
             redirects_seen.add(target)
-            approved_ips = validate_public_host(target, trusted_proxy=self.trusted_proxy)
+            approved_ips = self._validate_host(target)
             # Prefer IPv4 on hosts where IPv6 is unreachable. Each failed
             # address consumes a separately paced, budgeted, logged retry;
             # the transport must not fan out below the request ledger.
@@ -460,13 +549,10 @@ class NetworkGateway:
                     outcome = "transport_error"
                     response_recorded = False
                     try:
-                        status, headers, body, _ = await asyncio.wait_for(
-                            self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}, self.timeout,
-                                                   approved_ips=(ordered_ips[address_index % len(ordered_ips)],) if ordered_ips else None,
-                                                   max_bytes=cap) if isinstance(self.transport, UrlLibTransport) else
-                            self.transport.request(target, {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}, self.timeout),
-                            timeout=self.timeout,
-                        )
+                        status, headers, body, _ = await self._http_request(
+                            target, purpose=purpose, user_agent=user_agent, cap=cap, use_robots=use_robots,
+                            allowed_hosts=allowed_hosts, access_profile=access_profile, api_headers=api_headers,
+                            approved_ips=(ordered_ips[address_index % len(ordered_ips)],) if ordered_ips else None)
                         self._record(target, purpose, status, len(body), start, "received")
                         response_recorded = True
                         location = headers.get("Location") or headers.get("location")
@@ -487,7 +573,7 @@ class NetworkGateway:
                             if access_profile == "wikidata_sparql_api" and target != canonical_url(url):
                                 raise NetworkPolicyError("Wikidata API redirects are not permitted")
                             self._assert_proxy_route(target)
-                            validate_public_host(target, trusted_proxy=self.trusted_proxy)
+                            self._validate_host(target)
                             if use_robots and purpose != "robots":
                                 robots_state, delay = await self.robots_decision(target, user_agent, allowed_hosts=allowed_hosts)
                                 if robots_state == "disallowed":
@@ -513,7 +599,8 @@ class NetworkGateway:
                                     wait_seconds = min(60.0, max(0.0, retry_at.timestamp() - time.time()))
                                 except (TypeError, ValueError, OverflowError):
                                     wait_seconds = min(1.0 * (attempt + 1), 5.0)
-                            await asyncio.sleep(wait_seconds)
+                            if not self.replay_mode:
+                                await asyncio.sleep(wait_seconds)
                             continue
                         if len(body) > cap:
                             return status, headers, b"", target, "response_too_large"
@@ -545,7 +632,8 @@ class NetworkGateway:
                         self._record(target, purpose, status, len(body), start, outcome)
                         if attempt >= self.retries:
                             return status or 0, headers, b"", target, outcome
-                        await asyncio.sleep(min(0.1 * (attempt + 1), 0.5))
+                        if not self.replay_mode:
+                            await asyncio.sleep(min(0.1 * (attempt + 1), 0.5))
                 else:
                     return 0, {}, b"", target, "transport_error"
                 # Redirect: continue outer hop loop using the newly checked target.
@@ -573,7 +661,7 @@ class NetworkGateway:
                 await limiter.recover(self.budget.config.per_host_concurrency if self.budget else 2)
 
     def _assert_proxy_route(self, url: str) -> None:
-        if not self.trusted_proxy:
+        if self.replay_mode or not self.trusted_proxy:
             return
         parsed = urllib.parse.urlsplit(url)
         proxies = urllib.request.getproxies()
@@ -643,6 +731,8 @@ class NetworkGateway:
             return state, delay
 
     async def _pace(self, url: str, minimum: float = 0.0) -> None:
+        if self.replay_mode:
+            return
         host = (urllib.parse.urlsplit(url).hostname or "").casefold()
         # Serialize slot reservation as well as the wait. Without holding this
         # host lock, simultaneous callers wake together and violate the rate.

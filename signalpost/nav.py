@@ -220,7 +220,7 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
             if payload["status"] == "ACTIVE" and (not isinstance(payload.get("ad_content"), dict)
                     or not isinstance(payload["ad_content"].get("employer"), dict)):
                 raise ValueError("invalid NAV employer detail")
-            remember(payload, body, url, datetime.now(timezone.utc), "/")
+            remember(payload, body, url, getattr(gateway, "observed_at", None) or datetime.now(timezone.utc), "/")
             if vacancy not in resolved:
                 audit["unbound_details"] = audit.get("unbound_details", 0) + 1
                 resolved.add(vacancy)
@@ -280,7 +280,7 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
                     reasons.add("request_or_feed_failure")
                     audit["error_type"] = type(exc).__name__
                     break
-                retrieved = datetime.now(timezone.utc)
+                retrieved = getattr(gateway, "observed_at", None) or datetime.now(timezone.utc)
                 for position, item in enumerate(page["items"]):
                     audit["items"] += 1
                     entry = item.get("_feed_entry") if isinstance(item, dict) else None

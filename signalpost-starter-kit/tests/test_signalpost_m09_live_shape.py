@@ -24,8 +24,9 @@ from signalpost.network import NetworkGateway
 FIXTURE_PATH = Path(__file__).parent / "fixtures/m09/live-shape-companies.json"
 
 
-def _accounts_record(year: int, revenue: int, filing_id: str) -> dict:
+def _accounts_record(year: int, revenue: int, filing_id: str, organisation_number: str) -> dict:
     return {
+        "virksomhet": {"organisasjonsnummer": organisation_number},
         "id": f"sanitized-account-{year}", "innsendingsId": filing_id, "versjon": 1,
         "regnskapstype": "SELSKAP", "valuta": "NOK", "enhet": "NOK",
         "regnskapsperiode": {"fraDato": f"{year}-01-01", "tilDato": f"{year}-12-31"},
@@ -151,6 +152,8 @@ class LiveShapeTransport:
                 org = parse_qs(parsed.query)["overordnetEnhet"][0]
                 body = _subunits_body(self.companies[org], self.companies)
                 return 200, {"Content-Type": "application/json"}, json.dumps(body, ensure_ascii=False).encode(), url
+            if path.startswith("/regnskapsregisteret/regnskap/aarsregnskap/kopi/"):
+                return 404, {"Content-Type": "application/json"}, b"{}", url
             if path.startswith("/regnskapsregisteret/regnskap/"):
                 org = path.rsplit("/", 1)[-1]
                 mode = self.companies[org]["accounts_mode"]
@@ -159,8 +162,8 @@ class LiveShapeTransport:
                 if mode == "server_error":
                     return 503, {"Retry-After": "0"}, b"{}", url
                 if mode == "history_with_exact_duplicate":
-                    recent = _accounts_record(2024, 240000, "fixture-filing-2024")
-                    older = _accounts_record(2023, 210000, "fixture-filing-2023")
+                    recent = _accounts_record(2024, 240000, "fixture-filing-2024", org)
+                    older = _accounts_record(2023, 210000, "fixture-filing-2023", org)
                     body = {"_embedded": {"regnskap": [recent, dict(recent), older]}}
                     return 200, {"Content-Type": "application/json"}, json.dumps(body).encode(), url
                 return 200, {"Content-Type": "application/json"}, b"[]", url

@@ -476,10 +476,12 @@ def _ocr_worker(pdf: bytes, org: str | None = None,
 class DocumentProcessor:
     """Two killable workers with context-bound, atomic persistent page results."""
     def __init__(self, seconds: float | None = None, *, deadline: float | None = None,
-                 cache_path: str | Path | None = None):
+                 cache_path: str | Path | None = None, cache_only: bool = False):
         """Optional run budget uses an absolute time.monotonic deadline."""
         self.slots = asyncio.Semaphore(2)
         self.cache: dict[str, list[dict[str, Any]]] = {}
+        self.cache_only = cache_only
+        self.cache_misses = 0
         self.cache_path = Path(cache_path or os.environ.get("SIGNALPOST_OCR_CACHE") or
             Path(__file__).resolve().parents[1] / ".signalpost-cache" / "ocr")
         self.model_versions = {}
@@ -573,6 +575,9 @@ class DocumentProcessor:
                         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                         break
                     except BlockingIOError:
+                        if self.cache_only:
+                            self.cache_misses += 1
+                            raise RuntimeError("offline_ocr_cache_locked")
                         await asyncio.sleep(.02)
                 if cache_key in self.cache:
                     return self.cache[cache_key], True
@@ -580,6 +585,9 @@ class DocumentProcessor:
                 if cached is not None:
                     self.cache[cache_key] = cached
                     return cached, True
+                if self.cache_only:
+                    self.cache_misses += 1
+                    raise RuntimeError("offline_ocr_cache_miss_no_worker_fallback")
                 async with self.slots:
                     pages = await self._run_worker(body, context, context_json)
                 self._save(path, identity, pages)
