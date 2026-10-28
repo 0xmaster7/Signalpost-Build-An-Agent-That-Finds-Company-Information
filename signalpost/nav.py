@@ -116,6 +116,14 @@ class _ScanStopped(Exception):
     pass
 
 
+def _employer_name_keys(value: str) -> set[str]:
+    normalized = normalize_name(value)
+    head = re.split(r"\b(?:avd|avdeling)\b|\s[-–,(]", normalized, maxsplit=1)[0]
+    keys = {normalize_name(re.sub(r"\b(?:as|asa|ans|da|sa|ba|enk|nuf|ks|hf|iks|kf)\b", " ", item))
+        for item in (normalized, head)}
+    return {key for key in keys if len(key) >= 4}
+
+
 async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff: datetime, *,
                         allow_current: bool = False, previous_claims: dict[str, list[dict[str, Any]]] | None = None,
                         max_pages: int = 256, max_details: int = 4096, time_seconds: float = 180,
@@ -138,15 +146,16 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
         return results, audit, homepages
     bindings = {org: employer_bindings(org, target.claims) for org, target in targets.items()}
     wanted = {employer for bound in bindings.values() for employer in bound}
-    names = {normalize_name(claim.value) for target in targets.values() for claim in target.claims
+    names = {key for target in targets.values() for claim in target.claims
         if claim.field in {"name", "legal_name", "workplace.navn"} and isinstance(claim.value, str)
-        and len(normalize_name(claim.value)) >= 4}
+        for key in _employer_name_keys(claim.value)}
     index: dict[str, set[str]] = {}
     employer_by_vacancy: dict[str, str] = {}
     observations: dict[str, tuple[dict[str, Any], bytes, str, datetime, str]] = {}
     pending: dict[str, int] = {}
     resolved: set[str] = set()
     requested: set[str] = set()
+    detail_ids: dict[str, str] = {}
     reasons: set[str] = set()
     gateway.set_rate_limit("pam-stilling-feed.nav.no", 4.0)
 
@@ -203,7 +212,7 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
         requested.add(vacancy)
         audit["details"] += 1
         try:
-            body, url = await fetch(ORIGIN + "/api/v1/feedentry/" + vacancy, "nav_job", headers, 1024 * 1024)
+            body, url = await fetch(ORIGIN + "/api/v1/feedentry/" + detail_ids.get(vacancy, vacancy), "nav_job", headers, 1024 * 1024)
             payload = json.loads(body)
             if (not isinstance(payload, dict) or payload.get("uuid") != vacancy
                     or payload.get("status") not in {"ACTIVE", "INACTIVE"}):
@@ -221,7 +230,8 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
             audit["detail_failures"] += 1
             reasons.add("detail_failures")
 
-    scan_time = datetime.now(timezone.utc)
+    scan_time = cutoff
+    detail_started = None
     audit["window_start"] = (scan_time - timedelta(days=40)).isoformat()
     audit["window_end"] = scan_time.isoformat()
     try:
@@ -242,6 +252,10 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
             visited: set[str] = set()
             since = format_datetime(scan_time - timedelta(days=40), usegmt=True)
             while page_url:
+                if time.monotonic() - started >= time_seconds * 0.85:
+                    reasons.add("feed_deadline")
+                    audit["truncated"] = True
+                    break
                 if page_url in visited:
                     reasons.add("pagination_cycle")
                     audit["truncated"] = True
@@ -278,6 +292,9 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
                         reasons.add("malformed_items")
                         continue
                     vacancy = entry["uuid"]
+                    detail_id = item.get("id", vacancy)
+                    if isinstance(detail_id, str) and re.fullmatch(r"[A-Za-z0-9-]{1,128}", detail_id):
+                        detail_ids[vacancy] = detail_id
                     if entry["status"] != "ACTIVE":
                         remove(vacancy)
                         pending.pop(vacancy, None)
@@ -300,11 +317,8 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
                         resolved.discard(vacancy)
                         priority = 0
                     else:
-                        priority = 1 if normalize_name(str(entry.get("businessName", ""))) in names else 2
+                        priority = 1 if _employer_name_keys(str(entry.get("businessName", ""))) & names else 2
                     pending[vacancy] = min(priority, pending.get(vacancy, priority))
-                for vacancy in pending:
-                    if pending[vacancy] < 2 and vacancy not in requested:
-                        await detail(vacancy, headers)
                 next_url = page.get("next_url")
                 if next_url is None or next_url == "":
                     audit["feed_complete"] = True
@@ -315,8 +329,11 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
                     reasons.add("invalid_continuation")
                     audit["truncated"] = True
                     break
+            audit["feed_elapsed_seconds"] = round(time.monotonic() - started, 3)
+            detail_started = time.monotonic()
             for vacancy in sorted(pending, key=lambda value: (pending[value], value)):
                 await detail(vacancy, headers)
+            audit["detail_elapsed_seconds"] = round(time.monotonic() - detail_started, 3)
     except _ScanStopped:
         pass
     except TimeoutError:
@@ -359,4 +376,6 @@ async def research_jobs(targets: dict[str, Any], gateway: NetworkGateway, cutoff
         audit["state"] = "partial" if audit["pages"] or audit["details"] or results else "blocked"
         audit["reason"] = ",".join(sorted(reasons)) or "unresolved_entries"
     audit["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    audit.setdefault("feed_elapsed_seconds", audit["elapsed_seconds"])
+    audit.setdefault("detail_elapsed_seconds", round(time.monotonic() - detail_started, 3) if detail_started is not None else 0.0)
     return results, audit, homepages

@@ -760,6 +760,7 @@ def run(args: argparse.Namespace) -> int:
                     future = asyncio.get_running_loop().create_future()
                     await completed_queue.put((item, result, future))
                     await future
+                official_started = time.monotonic()
                 try:
                     fresh_by_org, official_deadline_cancelled = await _run_before_completion_reserve(
                         scheduler.run(works, official, on_complete=checkpoint_completed), run_budget,
@@ -771,6 +772,7 @@ def run(args: argparse.Namespace) -> int:
                     await checkpoint_task
                 scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
                     "companies": scheduler.company_metrics,
+                    "wall_seconds": time.monotonic() - official_started,
                     "hard_deadline_cancelled": official_deadline_cancelled}
                 for org in unique:
                     if org not in by_org:
@@ -792,8 +794,11 @@ def run(args: argparse.Namespace) -> int:
                     state = "completed"
                     try:
                         with financial_request_scope(), request_company_scope(item.company):
-                            return await fetch_financial_statements(copy.deepcopy(by_org[item.company]),
+                            result = await fetch_financial_statements(copy.deepcopy(by_org[item.company]),
                                 item.company, gateway, cutoff)
+                            if result.section_states.get("accounts_history") == PublicState.FAILED:
+                                state = "failed"
+                            return result
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
                         raise
@@ -876,9 +881,13 @@ def run(args: argparse.Namespace) -> int:
                 return {} if cancelled else result[0]
 
             if live_websites:
-                (nav_results_by_org, nav_homepages), wikidata_by_org = await asyncio.gather(
-                    batch_phase("nav_batch", lambda: nav_phase(nav_targets)),
-                    batch_phase("wiki_batch", wikidata_phase))
+                wikidata_by_org = await batch_phase("wiki_batch", wikidata_phase)
+
+            async def network_discovery_phase():
+                nonlocal nav_results_by_org, nav_homepages
+                if not live_websites:
+                    return await website_phase()
+                nav_results_by_org, nav_homepages = await batch_phase("nav_batch", lambda: nav_phase(nav_targets))
                 for org, result in nav_results_by_org.items():
                     if org not in phase_cache["nav_apply"]:
                         started = time.monotonic()
@@ -894,6 +903,8 @@ def run(args: argparse.Namespace) -> int:
                     if org not in nav_results_by_org:
                         upstream = phase_cache["nav_batch"].get("batch", {}).get("state")
                         record_phase("nav_apply", "ineligible" if upstream == "completed" else "not_attempted")
+                return await website_phase()
+
             available_research = max(0.0, min(budget.soft_seconds - run_budget.elapsed,
                 budget.hard_seconds - run_budget.elapsed - budget.completion_reserve_seconds))
             ocr_allocation = min(budget.ocr_seconds, available_research * budget.ocr_budget_share)
@@ -924,6 +935,8 @@ def run(args: argparse.Namespace) -> int:
                             calibrate_company_financials(result, item.company, cutoff)
                             validate_batch_publication_graph([_live_envelope(row, result, batch_id, cutoff, previous,
                                 frozen_match=item.company in fixture) for row in rows_by_org[item.company]])
+                            if result.observations.get("annual_accounts_document", {}).get("state") == "failed":
+                                state = "failed"
                             return result
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
@@ -999,10 +1012,13 @@ def run(args: argparse.Namespace) -> int:
                     state = "completed"
                     try:
                         with request_company_scope(item.company):
-                            return await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
+                            result = await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
                                 enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
                                 phase=phase, previous=copy.deepcopy(previous), rights_decisions=website_rights_decisions,
                                 allow_current_registry_references=cutoff_source == "run_start")
+                            if result.state == PublicState.FAILED:
+                                state = "failed"
+                            return result
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
                         raise
@@ -1091,9 +1107,9 @@ def run(args: argparse.Namespace) -> int:
                             by_website_org[org] = result
                 return by_website_org
 
-            optional_results = await asyncio.gather(document_phase(), website_phase(), return_exceptions=True)
+            optional_results = await asyncio.gather(network_discovery_phase(), document_phase(), return_exceptions=True)
             optional_errors = []
-            for name, result in zip(("annual_documents", "website_phases"), optional_results):
+            for name, result in zip(("website_phases", "annual_documents"), optional_results):
                 if isinstance(result, BaseException) and not isinstance(result, (Exception, asyncio.CancelledError)):
                     raise result
                 if isinstance(result, asyncio.CancelledError):

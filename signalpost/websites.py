@@ -1877,6 +1877,7 @@ def _publish_registry_references(org: str, candidates: list[dict[str, Any]],
             _append_website_claim(output, claim)
         for row in rows:
             row["publication_tier"] = "shared_site" if field == "shared_website" else "registry_declared"
+            row["identity_gate_tier"] = row["publication_tier"]
 
 
 def _assess_candidate(profile: dict[str, Any], pages: list[PageRecord], candidate: dict[str, Any],
@@ -2002,7 +2003,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 robots_error = str(exc)[:180]
                 state, delay = ("unreachable" if "did not resolve" in robots_error else "policy_skip"), None
             candidate_row: dict[str, Any] = {"url": url, "source": candidate["source"], "kind": "website", "registered_domain": root_domain,
-                "robots_state": state, "crawl_delay_seconds": delay, "rights_status": rights_status, "decision": "candidate"}
+                "robots_state": state, "crawl_delay_seconds": delay, "rights_status": rights_status, "decision": "candidate",
+                "identity_gate_tier": "not_evaluated"}
             if candidate.get("discovery"):
                 candidate_row["discovery"] = {key: candidate["discovery"].get(key) for key in
                     ("provider_id", "provider_version", "query_id", "result_id", "rank", "response_sha256")}
@@ -2149,9 +2151,11 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     "proof": None, "proof_page": None, "target_page": None}
             if assessment["decision"] in {"ambiguous", "rejected"}:
                 candidate_row["review_reason"] = assessment.get("reason")
+                candidate_row["identity_gate_tier"] = "conflict" if "conflict" in str(assessment.get("reason", "")) else "ambiguous"
             candidate_row["decision"] = assessment["decision"] if candidate_row["decision"] == "candidate" else candidate_row["decision"]
             if assessment["decision"] == "accepted":
                 candidate_row["proof"] = assessment["proof"]
+                candidate_row["identity_gate_tier"] = "shared_page" if assessment["proof"].get("shared_domain") else "exact"
                 candidate_row["target_url"] = assessment["target_page"]
                 proof_key = _proof_key(assessment)
                 if any(_proof_key(existing[2]) == proof_key for existing in accepted_pages):

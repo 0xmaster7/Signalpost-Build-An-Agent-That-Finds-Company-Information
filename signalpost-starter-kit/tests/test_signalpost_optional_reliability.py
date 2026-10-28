@@ -181,6 +181,29 @@ def test_cancelled_optional_phases_keep_deadline_outcomes(scenario, monkeypatch,
     store.close()
 
 
+def test_nav_and_ocr_progress_concurrently(scenario, monkeypatch, capsys):
+    from signalpost import annual_accounts, nav
+    _, argv, calls, _ = scenario
+    document_started = asyncio.Event()
+    original_nav = nav.research_jobs
+    original_document = annual_accounts.enrich_company
+
+    async def network(*args, **kwargs):
+        await asyncio.wait_for(document_started.wait(), timeout=0.5)
+        return await original_nav(*args, **kwargs)
+
+    async def document(*args, **kwargs):
+        document_started.set()
+        return await original_document(*args, **kwargs)
+
+    monkeypatch.setattr(nav, "research_jobs", network)
+    monkeypatch.setattr(annual_accounts, "enrich_company", document)
+    assert run.main(argv) == 0
+    assert calls["nav_batch"] == calls["annual_documents"] == 1
+    report = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert report["scheduler_passes"]["optional_phases"]["nav_batch"]["failed"] == 0
+
+
 def test_checkpoint_rejects_invalid_graph_without_partial_write(scenario):
     path, argv, calls, failures = scenario
     assert run.main(argv) == 0

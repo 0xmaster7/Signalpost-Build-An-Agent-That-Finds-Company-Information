@@ -233,7 +233,7 @@ def pipeline(envelope):
         "website_crawl_state": website.get("crawl_state"),
         "hiring_diagnostics": envelope.get("sections", {}).get("hiring_activity", {}).get("diagnostics", []),
         "website_candidates": [{key: (safe_url(row.get(key)) if key == "url" else row.get(key)) for key in (
-            "url", "source", "decision", "review_reason", "publication_tier", "http_status", "robots_state") if key in row}
+            "url", "source", "decision", "review_reason", "publication_tier", "identity_gate_tier", "http_status", "robots_state") if key in row}
             for row in website.get("candidates", [])]}
 
 

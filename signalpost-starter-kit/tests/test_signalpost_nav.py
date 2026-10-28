@@ -113,7 +113,8 @@ def test_nav_once_per_batch_pagination_dedup_and_homepage_is_only_candidate():
     assert len(results[ORG].claims) == 5
     assert [kwargs["purpose"] for _, kwargs in gateway.calls].count("nav_job") == 1
     assert audit["negative_coverage"] is False and audit["state"] == "partial"
-    assert "pageSize=1000" in gateway.calls[-1][0]
+    assert all("pageSize=1000" in url for url, kwargs in gateway.calls if kwargs["purpose"] == "nav_feed")
+    assert gateway.calls[-1][1]["purpose"] == "nav_job"
     assert homepages[ORG] == [{"raw": "https://example.no/", "source": "nav_employer"}]
     assert not any(claim.field_family == "owned_web" for claim in results[ORG].claims)
 

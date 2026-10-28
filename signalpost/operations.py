@@ -100,7 +100,7 @@ class RunBudget:
     per_host_concurrency: int = 2
     per_company_physical_limit: int | None = None
     per_host_physical_limit: int | None = None
-    nav_seconds: float = 120
+    nav_seconds: float = 360
     financial_seconds: float = 180
     financial_requests_per_company: int = 1
     wikidata_seconds: float = 12
@@ -151,7 +151,7 @@ class RunBudget:
             per_host_physical_limit=(int(environ["SIGNALPOST_PER_HOST_PHYSICAL_LIMIT"])
                 if "SIGNALPOST_PER_HOST_PHYSICAL_LIMIT" in environ else
                 int(values["per_host_physical_limit"]) if "per_host_physical_limit" in values else None),
-            nav_seconds=float(value("nav_seconds", "SIGNALPOST_NAV_SECONDS", 120)),
+            nav_seconds=float(value("nav_seconds", "SIGNALPOST_NAV_SECONDS", 360)),
             financial_seconds=float(value("financial_seconds", "SIGNALPOST_FINANCIAL_SECONDS", 180)),
             financial_requests_per_company=int(value("financial_requests_per_company", "SIGNALPOST_FINANCIAL_REQUESTS_PER_COMPANY", 1)),
             wikidata_seconds=float(value("wikidata_seconds", "SIGNALPOST_WIKIDATA_SECONDS", 12)),
