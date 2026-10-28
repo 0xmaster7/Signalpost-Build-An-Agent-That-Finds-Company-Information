@@ -1,8 +1,7 @@
-"""Bounded official filing OCR and per-claim reconciliation; no network in OCR workers.
+"""Bounded official filing FTE extraction; no network in document workers.
 
-The JSON API's currency is not a scale contract. A financial claim requires a
-matching, explicitly unit-labelled document row. This implementation is original;
-it does not incorporate the unlicensed competitor implementation.
+Production enrichment publishes company FTE only. Legacy financial reconciliation
+remains available to direct callers and for incidental, audit-only cross-checks.
 """
 from __future__ import annotations
 
@@ -12,22 +11,26 @@ import inspect
 import json
 import math
 import os
+from pathlib import Path
 import re
 import sys
+import tempfile
 import time
 import unicodedata
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from .models import Claim, Evidence, PublicState, RunError, SourceSnapshot
 
 COPY_ROOT = "https://data.brreg.no/regnskapsregisteret/regnskap/aarsregnskap/kopi"
-PARSER_VERSION = "official-filing-ocr-v3"
+PARSER_VERSION = "official-filing-ocr-v4"
+OCR_MODEL = "rapidocr-onnxruntime-default-pdfium-text-v1"
 MAX_PDF_BYTES = 25 * 1024 * 1024
 MAX_OCR_SECONDS = 90
-PAGE_PRIORITY = (4, 3, 5, 2, 6, 1)
-FTE_STRATEGY = "first_verified_company_fte_page_5_4_6_3_then_7_2"
+PAGE_PRIORITY = (4, 3, 5, 2)
+FTE_STRATEGY = "first_verified_company_fte_page_5_4_6_3_then_all_remaining_v1"
 LABELS = {
     "sales_revenue": {'salgsinntekt', 'salgsinntekter'},
     "operating_costs": {'sum driftskostnader', 'sum kostnader'},
@@ -54,6 +57,10 @@ LABELS = {
     "operating_result": {"driftsresultat"},
     "annual_result": {"arsresultat"},
 }
+
+
+def _page_order(count: int) -> list[int]:
+    return [i for i in PAGE_PRIORITY if i < count] + [i for i in range(1, count) if i not in PAGE_PRIORITY]
 
 
 def fold(text: str) -> str:
@@ -138,7 +145,7 @@ def verify_cover(page: dict[str, Any], org: str, record: dict[str, Any]) -> tupl
         return False, "document_identity_mismatch", False
     journal = str(record.get("raw", {}).get("journalnr") or "")
     journal_match = re.search(r"journalnummer\s*:?\s*([\d ]+)", folded)
-    if journal and (not journal_match or re.sub(r"\D", "", journal_match.group(1)) != journal):
+    if not journal or not journal_match or re.sub(r"\D", "", journal_match.group(1)) != journal:
         return False, "document_journal_mismatch", False
     period = re.search(r"(?:arsregnskapets\s+periode|regnskapsperiode)\s*:?\s*([^\n]*(?:\n[^\n]*)?)", folded)
     found_dates = _dates(period.group(1)) if period else []
@@ -293,7 +300,7 @@ def workforce_candidates(page: dict[str, Any], org: str, *, nonparent: bool,
 
 def _first_workforce(pages: list[dict[str, Any]], org: str, record: dict[str, Any],
                      nonparent: bool) -> tuple[dict[str, Any] | None, bool]:
-    for index in PAGE_PRIORITY:
+    for index in _page_order(max((p["page"] for p in pages), default=0)):
         page = next((p for p in pages if p["page"] == index + 1), None)
         if page is None:
             continue
@@ -347,23 +354,75 @@ class OCRPages(list):
         self.coverage = coverage
 
 
+def _searchable_words(page: Any) -> list[dict[str, Any]]:
+    """Use positioned, printable PDF characters without inventing OCR confidence."""
+    if not hasattr(page, "get_textpage"):
+        return []
+    if hasattr(page, "get_rotation") and page.get_rotation() != 0:
+        return []
+    from pypdfium2 import raw as pdfium_raw
+    for obj in page.get_objects(max_depth=1):
+        if obj.type in {pdfium_raw.FPDF_PAGEOBJ_IMAGE, pdfium_raw.FPDF_PAGEOBJ_FORM}:
+            return []
+        if obj.type == pdfium_raw.FPDF_PAGEOBJ_TEXT and pdfium_raw.FPDFTextObj_GetTextRenderMode(obj) not in {0, 1, 2}:
+            return []
+    textpage = page.get_textpage()
+    try:
+        words = []
+        current: list[tuple[str, tuple[float, float, float, float]]] = []
+        height = page.get_height()
+
+        def flush() -> None:
+            if current:
+                words.append({"text": "".join(c for c, _ in current), "confidence": 1.0,
+                    "x1": min(b[0] for _, b in current), "x2": max(b[2] for _, b in current),
+                    "y1": height - max(b[3] for _, b in current), "y2": height - min(b[1] for _, b in current)})
+                current.clear()
+
+        for index in range(textpage.count_chars()):
+            char = textpage.get_text_range(index, 1)
+            if not char or char.isspace():
+                flush()
+                continue
+            box = textpage.get_charbox(index, loose=True)
+            if not char.isprintable() or not all(math.isfinite(v) for v in box) or box[2] <= box[0] or box[3] <= box[1]:
+                return []
+            if current:
+                previous = current[-1][1]
+                height_bound = max(box[3] - box[1], previous[3] - previous[1])
+                if abs((box[1] + box[3] - previous[1] - previous[3]) / 2) > height_bound * .75 or box[0] - previous[2] > height_bound * .4:
+                    flush()
+            current.append((char, box))
+        flush()
+        return words
+    finally:
+        textpage.close()
+
+
 def _ocr_worker(pdf: bytes, org: str | None = None,
                 record: dict[str, Any] | None = None) -> list[dict[str, Any]] | dict[str, Any]:
-    """Verify the cover, stop FTE scanning on its first decision, then read page 2.
-
-    A same-page FTE conflict is a terminal abstention. Page 2 is a separate,
-    single-page financial anchor, never a reason to continue scanning notes.
-    Without filing context the legacy bounded seven-page extraction is retained.
-    """
-    import numpy as np
+    """Verify the cover and scan each remaining page at most once for company FTE."""
     import pypdfium2 as pdfium
-    from rapidocr_onnxruntime import RapidOCR
-    engine = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
+    engine = None
     document = pdfium.PdfDocument(pdf)
     pages: list[dict[str, Any]] = []
     def read(index: int) -> dict[str, Any]:
+        nonlocal engine
         page = document[index]
         try:
+            try:
+                words = _searchable_words(page)
+            except (AttributeError, ValueError, RuntimeError):
+                words = []
+            if words:
+                result = {"page": index + 1, "width": page.get_width(), "height": page.get_height(),
+                    "words": words, "extraction": "pdf_text"}
+                pages.append(result)
+                return result
+            import numpy as np
+            from rapidocr_onnxruntime import RapidOCR
+            if engine is None:
+                engine = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
             bitmap = page.render(scale=1.1, grayscale=True)
             try:
                 image = bitmap.to_pil().convert("RGB")
@@ -372,7 +431,7 @@ def _ocr_worker(pdf: bytes, org: str | None = None,
                     words = [{"text": text, "confidence": float(confidence), "x1": min(p[0] for p in box),
                         "x2": max(p[0] for p in box), "y1": min(p[1] for p in box), "y2": max(p[1] for p in box)}
                         for box, text, confidence in output or []]
-                    result = {"page": index + 1, "width": image.width, "height": image.height, "words": words}
+                    result = {"page": index + 1, "width": image.width, "height": image.height, "words": words, "extraction": "ocr"}
                     pages.append(result)
                     return result
                 finally:
@@ -394,20 +453,15 @@ def _ocr_worker(pdf: bytes, org: str | None = None,
             cover = read(0)
             valid, reason, nonparent = verify_cover(cover, org, record)
             if valid:
-                for index in PAGE_PRIORITY:
-                    if index >= len(document):
-                        continue
+                order = _page_order(len(document))
+                for position, index in enumerate(order):
                     page = read(index)
                     coverage["fte_pages_examined"].append(index + 1)
                     candidates = workforce_candidates(page, org, nonparent=nonparent, year=record["period_end"][:4])
                     if candidates:
-                        coverage["stopped_early"] = any(i < len(document) for i in PAGE_PRIORITY[PAGE_PRIORITY.index(index) + 1:])
+                        coverage["stopped_early"] = position + 1 < len(order)
                         coverage["stop_reason"] = "same_page_fte_conflict" if len({c["value"] for c in candidates}) > 1 else "first_verified_company_fte"
                         break
-                if len(document) > 1:
-                    if not any(p["page"] == 2 for p in pages):
-                        read(1)
-                    coverage["financial_anchor_pages"] = [2]
             else:
                 coverage.update(stop_reason=reason, stopped_early=len(document) > 1)
         else:
@@ -420,55 +474,142 @@ def _ocr_worker(pdf: bytes, org: str | None = None,
 
 
 class DocumentProcessor:
-    """Two killable OCR subprocesses at most, with a run-scoped document-SHA cache."""
-    def __init__(self, seconds: float | None = None, *, deadline: float | None = None):
+    """Two killable workers with context-bound, atomic persistent page results."""
+    def __init__(self, seconds: float | None = None, *, deadline: float | None = None,
+                 cache_path: str | Path | None = None):
         """Optional run budget uses an absolute time.monotonic deadline."""
         self.slots = asyncio.Semaphore(2)
         self.cache: dict[str, list[dict[str, Any]]] = {}
+        self.cache_path = Path(cache_path or os.environ.get("SIGNALPOST_OCR_CACHE") or
+            Path(__file__).resolve().parents[1] / ".signalpost-cache" / "ocr")
+        self.model_versions = {}
+        for package in ("rapidocr-onnxruntime", "pypdfium2"):
+            try:
+                self.model_versions[package] = version(package)
+            except PackageNotFoundError:
+                self.model_versions[package] = "unavailable"
         self.deadline = min(deadline if deadline is not None else math.inf,
             time.monotonic() + seconds if seconds is not None else math.inf)
 
+    def _load(self, path: Path, identity: dict[str, Any]) -> list[dict[str, Any]] | None:
+        try:
+            saved = json.loads(path.read_text())
+            if saved["identity"] != identity:
+                return None
+            payload = saved["payload"]
+            if saved["payload_sha256"] != hashlib.sha256(json.dumps(payload, sort_keys=True,
+                    separators=(",", ":"), allow_nan=False).encode()).hexdigest():
+                return None
+            pages = payload["pages"]
+            if not isinstance(pages, list) or any(not isinstance(p, dict) or not isinstance(p["page"], int)
+                    or not isinstance(p["words"], list) or not isinstance(p["width"], (int, float)) for p in pages):
+                return None
+            numbers = [p["page"] for p in pages]
+            if len(set(numbers)) != len(numbers) or any(n < 1 for n in numbers):
+                return None
+            for page in pages:
+                for word in page["words"]:
+                    if not isinstance(word["text"], str) or any(isinstance(word[key], bool) or not isinstance(word[key], (int, float))
+                            or not math.isfinite(word[key]) for key in ("x1", "x2", "y1", "y2", "confidence")):
+                        return None
+            coverage = payload["coverage"]
+            if identity["context"] is not None:
+                if not isinstance(coverage, dict) or coverage["strategy"] != identity["strategy"] or coverage["examined_pages"] != numbers:
+                    return None
+                count = coverage["document_pages"]
+                if not isinstance(count, int) or count < 0 or any(n > count for n in numbers) or coverage["coverage_complete"] != (len(numbers) == count):
+                    return None
+                if coverage["fte_pages_examined"] != numbers[1:] or coverage["financial_anchor_pages"] != [] or not isinstance(coverage["stop_reason"], str):
+                    return None
+                return OCRPages(pages, coverage)
+            return pages if coverage is None else None
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+
+    def _save(self, path: Path, identity: dict[str, Any], pages: list[dict[str, Any]]) -> None:
+        temporary = None
+        try:
+            descriptor, temporary = tempfile.mkstemp(prefix=".ocr-", dir=self.cache_path)
+            with os.fdopen(descriptor, "w") as stream:
+                payload = {"pages": pages, "coverage": getattr(pages, "coverage", None)}
+                checksum = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+                json.dump({"identity": identity, "payload": payload, "payload_sha256": checksum}, stream, allow_nan=False)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary is not None:
+                Path(temporary).unlink(missing_ok=True)
+
     async def ocr(self, body: bytes, seconds: float, *, org: str | None = None,
                   record: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], bool]:
+        if (org is None) != (record is None):
+            raise ValueError("org and record must be supplied together")
         digest = hashlib.sha256(body).hexdigest()
         context = None
         if org is not None and record is not None:
             context = {"org": org, "record": {"period_start": record["period_start"], "period_end": record["period_end"],
                 "currency": record["currency"], "metrics": record["metrics"], "raw": {"journalnr": record.get("raw", {}).get("journalnr")}}}
         context_json = json.dumps(context, sort_keys=True, separators=(",", ":"))
-        cache_key = digest if context is None else digest + ":" + PARSER_VERSION + ":" + FTE_STRATEGY + ":" + hashlib.sha256(context_json.encode()).hexdigest()
+        identity = {"pdf_sha256": digest, "parser": PARSER_VERSION, "model": OCR_MODEL,
+            "model_versions": self.model_versions,
+            "strategy": FTE_STRATEGY if context is not None else "legacy_seven_pages", "context": context}
+        cache_key = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         if cache_key in self.cache:
             return self.cache[cache_key], True
+        if context is None and digest in self.cache:
+            return self.cache[digest], True
         remaining = min(seconds, MAX_OCR_SECONDS, self.deadline - time.monotonic())
         if remaining <= 0:
             raise TimeoutError("ocr_deadline")
         async with asyncio.timeout(remaining):
-            async with self.slots:
+            self.cache_path.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path = self.cache_path / (cache_key + ".json")
+            import fcntl
+            descriptor = os.open(self.cache_path / (cache_key + ".lock"), os.O_CREAT | os.O_RDWR, 0o600)
+            with os.fdopen(descriptor, "w") as lock:
+                while True:
+                    try:
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        await asyncio.sleep(.02)
                 if cache_key in self.cache:
                     return self.cache[cache_key], True
-                env = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
-                args = [sys.executable, "-m", "signalpost.annual_accounts", "--ocr-worker"]
-                if context is not None:
-                    args.append(context_json)
-                process = await asyncio.create_subprocess_exec(*args,
-                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                    cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]), env=env)
+                cached = self._load(path, identity)
+                if cached is not None:
+                    self.cache[cache_key] = cached
+                    return cached, True
+                async with self.slots:
+                    pages = await self._run_worker(body, context, context_json)
+                self._save(path, identity, pages)
+                self.cache[cache_key] = pages
+                return pages, False
+
+    async def _run_worker(self, body: bytes, context: dict[str, Any] | None,
+                          context_json: str) -> list[dict[str, Any]]:
+        env = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+        args = [sys.executable, "-m", "signalpost.annual_accounts", "--ocr-worker"]
+        if context is not None:
+            args.append(context_json)
+        process = await asyncio.create_subprocess_exec(*args,
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]), env=env)
+        try:
+            output, error = await process.communicate(body)
+            if process.returncode:
+                raise RuntimeError("local_ocr_dependency_or_document_error: " + error.decode(errors="replace")[-220:])
+            payload = json.loads(output)
+            pages = OCRPages(payload["pages"], payload["coverage"]) if isinstance(payload, dict) else payload
+            return pages
+        except BaseException:
+            if process.returncode is None:
                 try:
-                    output, error = await process.communicate(body)
-                    if process.returncode:
-                        raise RuntimeError("local_ocr_dependency_or_document_error: " + error.decode(errors="replace")[-220:])
-                    payload = json.loads(output)
-                    pages = OCRPages(payload["pages"], payload["coverage"]) if isinstance(payload, dict) else payload
-                    self.cache[cache_key] = pages
-                    return pages, False
-                except BaseException:
-                    if process.returncode is None:
-                        try:
-                            process.kill()
-                        except ProcessLookupError:
-                            pass
-                        await process.wait()
-                    raise
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                await process.wait()
+            raise
 
 
 async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, processor: DocumentProcessor) -> Any:
@@ -518,10 +659,14 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
         audit.update(examined_pages=[p["page"] for p in pages], stop_reason="legacy_ocr_coverage_unknown")
         audit.update(getattr(pages, "coverage", {}))
         checked = reconcile(pages, org, record, workforce_strategy=FTE_STRATEGY)
-        audit.update(state=checked["state"], reason=checked["reason"])
-        if checked.get("conflicts"):
-            result.errors.append(RunError(code="ANNUAL_DOCUMENT_CLAIM_CONFLICT", message="Conflicting document candidates withheld: " + ", ".join(checked["conflicts"])))
-        if not checked["financial"] and not checked["workforce"]:
+        audit.update(state=checked["state"] if checked["state"] in {"blocked", "ambiguous"} else
+            "available" if checked["workforce"] else "not_available", reason=checked["reason"],
+            financial_cross_checks=[{**item, "inferred_api_unit": item["currency"], "api_value_multiplier": 1}
+                for item in checked["financial"]], financial_cross_check_conflicts=[
+                metric for metric in checked.get("conflicts", []) if metric != "full_time_equivalents"])
+        if "full_time_equivalents" in checked.get("conflicts", []):
+            result.errors.append(RunError(code="ANNUAL_DOCUMENT_CLAIM_CONFLICT", message="Conflicting document candidates withheld: full_time_equivalents"))
+        if not checked["workforce"]:
             return result
         sid = f"{org}:annual-document:{digest[:20]}"
         result.snapshots.append(SourceSnapshot(source_id=sid, source_url=final_url, retrieved_at=retrieved,
@@ -535,34 +680,6 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
         subject = f"{org}:filing:{record['raw'].get('journalnr') or record.get('record_id')}:{record['period_start']}:{record['period_end']}"
         start = datetime.fromisoformat(record["period_start"]).replace(tzinfo=timezone.utc)
         end = datetime.fromisoformat(record["period_end"]).replace(tzinfo=timezone.utc)
-        for item in checked["financial"]:
-            metric = item["metric"]
-            existing = [c for c in result.claims if c.field_family == "financial" and c.field == metric
-                and c.period_start == start and c.period_end == end and c.scope == "legal_entity"]
-            if existing:
-                if any(Decimal(str(c.value)) != Decimal(str(item["value"])) for c in existing):
-                    result.errors.append(RunError(code="ANNUAL_EXISTING_VALUE_CONFLICT", message=f"Document conflicts with existing {metric}; document claim withheld."))
-                continue
-            eid = sid + ":" + metric
-            result.evidence.append(Evidence(evidence_id=eid, source_url=final_url, retrieved_at=retrieved,
-                content_sha256=digest, page_number=item["page"], excerpt=f"{item['unit_span']} | year column {item['year']} | {item['span']}",
-                extraction_method=PARSER_VERSION, subject_organisation_number=org, source_snapshot_ids=[sid]))
-            from .brreg import METRICS
-            source = result.account_source
-            json_sid = next(s.source_id for s in result.snapshots if s.source_url == source["url"] and s.content_sha256 == source["content_sha256"])
-            json_eid = eid + ":json"
-            result.evidence.append(Evidence(evidence_id=json_eid, source_url=source["url"], retrieved_at=source["retrieved_at"],
-                content_sha256=source["content_sha256"], json_pointer=record["_source_prefix"] + "/" + METRICS[metric],
-                extraction_method="brreg_json_pointer_v1", subject_organisation_number=org, source_snapshot_ids=[json_sid]))
-            from .identifiers import stable_claim_id
-            identity = stable_claim_id(org, metric, item["value"], source=final_url, content_sha256=digest,
-                subject=subject, period_start=start, period_end=end, unit=item["currency"], currency=item["currency"])
-            result.claims.append(Claim(claim_id=identity, organisation_number=org,
-                section="accounts_history", field_family="financial", subject_id=subject, field=metric, value=item["value"],
-                state=PublicState.AVAILABLE, unit=item["currency"], currency=item["currency"], period_start=start, period_end=end,
-                scope="legal_entity", verification_rule_id="official_pdf_json_row_reconciliation_v1", verification_score="1.0",
-                evidence_ids=[cover_id, eid, json_eid], source_snapshot_ids=[sid, json_sid]))
-            audit["financial_claims"] += 1
         item = checked["workforce"]
         if item:
             eid = sid + ":fte"
@@ -592,8 +709,6 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
     finally:
         audit["processing_seconds"] = round(time.monotonic() - started, 3)
         result.section_states["hiring_activity"] = PublicState.AVAILABLE if audit["workforce_claims"] else PublicState(audit["state"] if audit["state"] != "available" else "not_available")
-        if audit["financial_claims"]:
-            result.section_states["accounts_history"] = PublicState.AVAILABLE
         if audit["state"] in {"blocked", "failed", "ambiguous"}:
             result.errors.append(RunError(code="ANNUAL_DOCUMENT_" + audit["state"].upper(), message=audit["reason"]))
 

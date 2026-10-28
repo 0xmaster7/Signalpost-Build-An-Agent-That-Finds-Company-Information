@@ -105,11 +105,11 @@ def mock_native_worker(monkeypatch, pages, count=9):
 
 
 @pytest.mark.parametrize("first,expected", [
-    (5, [1, 5, 2]), (4, [1, 5, 4, 2]), (6, [1, 5, 4, 6, 2]),
-    (3, [1, 5, 4, 6, 3, 2]), (7, [1, 5, 4, 6, 3, 7, 2]),
-    (2, [1, 5, 4, 6, 3, 7, 2]),
+    (5, [1, 5]), (4, [1, 5, 4]), (6, [1, 5, 4, 6]),
+    (3, [1, 5, 4, 6, 3]), (7, [1, 5, 4, 6, 3, 2, 7]),
+    (2, [1, 5, 4, 6, 3, 2]),
 ])
-def test_real_worker_stops_rendering_and_retains_one_financial_anchor(monkeypatch, first, expected):
+def test_real_worker_stops_rendering_without_a_financial_anchor_pass(monkeypatch, first, expected):
     pages, record = filing()
     pages[first] = note(first, "Selskapet har hatt 0,00 arsverk")
     rendered, recognized, resources = mock_native_worker(monkeypatch, pages)
@@ -119,16 +119,16 @@ def test_real_worker_stops_rendering_and_retains_one_financial_anchor(monkeypatc
     coverage = payload["coverage"]
     assert coverage["examined_pages"] == expected
     assert coverage["strategy"] == FTE_STRATEGY
-    assert coverage["financial_anchor_pages"] == [2]
-    assert coverage["fte_pages_examined"] == (expected[1:-1] if first != 2 else expected[1:])
-    assert coverage["stopped_early"] is (first != 2)
+    assert coverage["financial_anchor_pages"] == []
+    assert coverage["fte_pages_examined"] == expected[1:]
+    assert coverage["stopped_early"] is True
     assert coverage["coverage_complete"] is False
     assert coverage["document_pages"] == 9
     assert coverage["stop_reason"] == "first_verified_company_fte"
     checked = reconcile(payload["pages"], ORG, record, workforce_strategy=FTE_STRATEGY)
     assert checked["workforce"]["value"] == 0
     assert checked["workforce"]["page"] == first
-    assert len(checked["financial"]) == (0 if first == 2 else 2)
+    assert len(checked["financial"]) == (2 if first == 7 else 0)
 
 
 @pytest.mark.parametrize("bad", ["org", "period", "journal"])
@@ -165,7 +165,7 @@ def test_worker_rejects_invalid_first_page_and_continues(monkeypatch, invalid):
         pages[5]["words"][-1]["text"] = "Antall arsverk i regnskapsaret 100"
     rendered, _, _ = mock_native_worker(monkeypatch, pages)
     payload = _ocr_worker(b"pdf", ORG, record)
-    assert rendered == [1, 5, 4, 2]
+    assert rendered == [1, 5, 4]
     out = reconcile(payload["pages"], ORG, record, workforce_strategy=FTE_STRATEGY)
     assert out["workforce"]["page"] == 4 and out["workforce"]["value"] == 2.5
 
@@ -176,12 +176,12 @@ def test_same_page_conflict_is_terminal_abstention_and_cross_page_is_not_consens
     pages[5]["words"].append(word("Selskapet har 3,00 arsverk", y=110))
     rendered, _, _ = mock_native_worker(monkeypatch, pages)
     payload = _ocr_worker(b"pdf", ORG, record)
-    assert rendered == [1, 5, 2]
+    assert rendered == [1, 5]
     assert payload["coverage"]["stop_reason"] == "same_page_fte_conflict"
     checked = reconcile(payload["pages"], ORG, record, workforce_strategy=FTE_STRATEGY)
     assert checked["workforce"] is None
     assert "full_time_equivalents" in checked["conflicts"]
-    assert len(checked["financial"]) == 2
+    assert len(checked["financial"]) == 0
     pages[5]["words"].pop()
     all_pages = list(pages.values())
     assert reconcile(all_pages, ORG, record)["workforce"] is None
@@ -191,8 +191,8 @@ def test_same_page_conflict_is_terminal_abstention_and_cross_page_is_not_consens
 
 
 @pytest.mark.parametrize("count,expected,complete", [(2, [1, 2], True),
-    (7, [1, 5, 4, 6, 3, 7, 2], True), (12, [1, 5, 4, 6, 3, 7, 2], False)])
-def test_no_fte_exhausts_only_bounded_candidates(monkeypatch, count, expected, complete):
+    (7, [1, 5, 4, 6, 3, 2, 7], True), (12, [1, 5, 4, 6, 3, 2, 7, 8, 9, 10, 11, 12], True)])
+def test_no_fte_exhausts_remaining_pages_once(monkeypatch, count, expected, complete):
     pages, record = filing()
     rendered, _, _ = mock_native_worker(monkeypatch, pages, count=count)
     payload = _ocr_worker(b"pdf", ORG, record)
@@ -247,7 +247,7 @@ def test_cache_binds_partial_pages_to_filing_context_and_strategy(monkeypatch):
         processor = DocumentProcessor()
         partial, hit = await processor.ocr(b"pdf", 1, org=ORG, record=record)
         assert not hit and isinstance(partial, OCRPages)
-        assert partial.coverage["examined_pages"] == [1, 5, 2]
+        assert partial.coverage["examined_pages"] == [1, 5]
         assert partial.coverage["coverage_complete"] is False
         assert hashlib.sha256(b"pdf").hexdigest() not in processor.cache
         repeated, hit = await processor.ocr(b"pdf", 1, org=ORG, record=deepcopy(record))
@@ -393,12 +393,12 @@ def test_enrichment_keeps_generic_stub_and_publishes_actual_coverage(monkeypatch
             http_status=200, cache_mode="transient", rights_status="public_official_filing_factual_extraction")])
     asyncio.run(enrich_company(result, ORG, Gateway(), now, LegacyStub()))
     audit = result.observations["annual_accounts_document"]
-    assert audit["examined_pages"] == [1, 5, 2]
+    assert audit["examined_pages"] == [1, 5]
     assert audit["fte_pages_examined"] == [5]
-    assert audit["financial_anchor_pages"] == [2]
+    assert audit["financial_anchor_pages"] == []
     assert audit["strategy"] == FTE_STRATEGY and audit["stopped_early"] is True
     assert audit["coverage_complete"] is False
-    assert audit["workforce_claims"] == 1 and audit["financial_claims"] == 2
+    assert audit["workforce_claims"] == 1 and audit["financial_claims"] == 0
     assert not result.errors
-    assert {e.page_number for e in result.evidence if e.page_number is not None} == {1, 2, 5}
+    assert {e.page_number for e in result.evidence if e.page_number is not None} == {1, 5}
     assert next(c for c in result.claims if c.field == "full_time_equivalents").value == 0

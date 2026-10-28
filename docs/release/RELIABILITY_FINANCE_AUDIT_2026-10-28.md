@@ -66,3 +66,11 @@ Finite, identity/period/scope/version-valid metrics with absent unit metadata pu
 Parent integration verification: **152 tests and 26 subtests passed**, including API-only publication, groups/years, strict assumption provenance, request reservations, optional fault injection and crash/resume. Reliability commit `747f6c4bcc56d01c7bb5f2d79741c097c2e75ce6` passed exact-SHA CI. These are offline correctness checks, not evidence of live coverage gains.
 
 An initially incomplete finance mock in the focused reliability tests accidentally permitted calls to the official accounts endpoint. It was corrected before any benchmark, and the test suite now blocks public DNS/HTTP and isolates OCR caches. Those accidental adapter calls are not treated as coverage evidence or cohort measurements.
+
+## Step 3: FTE-only document workers
+
+Production reads the verified cover, then pages 5, 4, 6, 3, then every remaining page once within the worker deadline. It stops at the first acceptable company statement or same-page conflict. There is no dedicated page-2 monetary pass and no monetary claim creation in document enrichment. Direct legacy financial parsing remains tested. Monetary matches encountered incidentally on pages already read are audit-only cross-checks; they do not manufacture PDF validation of other API values.
+
+The two killable subprocess slots and shared queue/startup/processing deadline remain. Searchable, visible, positioned PDF text can avoid OCR; image/form/hidden-text pages fall back to local OCR. Explicit zero, headcount/group rejection, confidence checks and ambiguous `100` versus `1.00` abstention remain. Persistent private atomic cache entries bind PDF hash, parser/model versions, strategy, filing context and partial coverage. Cold final cohorts use separate cache directories.
+
+**85 focused tests passed**, including all-page fallback, early stops, same-page conflicts, persistent cache across instances, corruption/context invalidation and worker deadlines. Older early-stop expectations were deliberately updated: they had required the monetary pass and seven-page cap that this step removes. No live FTE coverage improvement is established by these fixture tests.

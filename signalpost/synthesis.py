@@ -37,10 +37,11 @@ response_sha256 json_ld_subject_match compatible_legal_name page_url page_sha256
 shared_domain conflicting_subject_ids domain proof_method organisation_number candidate_source
 subject_ids method address municipality postcode street registered_role additional_signal
 execution_state claims request_count jobs_candidates published explicit_zero identity_rejected
-candidate_count publication_tier
+candidate_count publication_tier identity_gate_tier
 annual_accounts_document pages_processed ocr_seconds processing_seconds financial_claims workforce_claims cache_hit
 examined_pages strategy stopped_early fte_pages_examined financial_anchor_pages coverage_complete document_pages stop_reason
 financial_calibration claims_added calibration_id reference_subject_id anchor_metrics documented_api_unit_contract
+financial_cross_checks financial_cross_check_conflicts
 robots_error
 future_dated_skipped published_subjects current_subjects state activity_candidates undated future outside_window
 deduplicated subject_rejected lookback_days page_discovery_target max_from_already_fetched_feed_responses
@@ -58,6 +59,12 @@ def validate_synthesis_schema(synthesis: dict[str, Any]) -> None:
     if synthesis.get("schema_version", SYNTHESIS_SCHEMA_VERSION) != SYNTHESIS_SCHEMA_VERSION:
         raise ValueError("unsupported synthesis schema version")
     def visit(value: Any, path: tuple[str, ...] = ()) -> None:
+        if path == ("brreg_observations", "annual_accounts_document", "financial_cross_checks", "*"):
+            allowed = {"metric", "value", "page", "span", "unit_span", "year", "currency",
+                "inferred_api_unit", "api_value_multiplier"}
+            if not isinstance(value, dict) or set(value) - allowed or not {"metric", "value", "page"} <= set(value):
+                raise ValueError("invalid incidental financial cross-check diagnostic")
+            return
         if path == ("website_research", "ats_origins", "*"):
             # This is an operational refusal record, never a published fact.
             # Accept it only at its exact path and only when no request was made.
@@ -124,6 +131,8 @@ def _sentence(claim: Any) -> str:
         dimensions.append("currency " + claim.currency)
     if claim.unit:
         dimensions.append("unit " + claim.unit)
+    if claim.unit_assumed_currency:
+        dimensions.append("unit_assumed_currency=true; target value not independently PDF validated")
     if claim.scope:
         dimensions.append("scope " + claim.scope)
     if dimensions:

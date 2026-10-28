@@ -8,3 +8,5 @@
 **/.coverage
 
 .signalpost-tools/
+.signalpost-cache/
+.signalpost-recordings/
