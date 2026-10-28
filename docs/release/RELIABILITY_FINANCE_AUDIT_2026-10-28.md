@@ -56,3 +56,13 @@ Content-derived claim identities use full SHA-256 over company, field/value, sou
 Each completed optional company/subphase is now checkpointed with its typed context and validated envelope. Resume restores official account context and completed document/website stages, including acquired pages, rather than rebuilding from a foundation-only shell. NAV/Wikidata batch outcomes are durable too. Optional exceptions are isolated and retain official facts; deadline cancellations remain distinct. Reports add explicit optional phase counters and wall times. Checkpoint validation checks changed envelopes plus cached cross-company provenance signatures, avoiding revalidating every unchanged company's claims on every write.
 
 These reliability changes alone do not establish live coverage improvement. The historical collision pair remains unknown. A process killed during an in-flight company can lose that unfinished action; completed, committed company/subphase results survive. Filesystem failure cannot guarantee persistence.
+
+## Step 2: OCR-independent structured finance
+
+`fetch_financial_statements()` now has its own checkpointed phase before optional OCR, with a fixed 180-second allowance and one reserved accounts request per pending company. Foundation acquisition reserves those requests/time instead of consuming them on optional registry work. Production foundation excludes accounts; the finance phase requests each company's endpoint once, retaining all returned years, actual reporting periods and separate company/group subjects. Resume reuses completed finance results.
+
+Finite, identity/period/scope/version-valid metrics with absent unit metadata publish with `unit_assumed_currency=true` and a strictly validated `UNCALIBRATED` structured-API basis. They explicitly do not claim a documented API-wide unit contract or target-PDF validation. Explicit unit conflicts and invalid metadata are not overridden. Existing PDF agreements remain an optional diagnostic, never an acquisition/publication prerequisite.
+
+Parent integration verification: **152 tests and 26 subtests passed**, including API-only publication, groups/years, strict assumption provenance, request reservations, optional fault injection and crash/resume. Reliability commit `747f6c4bcc56d01c7bb5f2d79741c097c2e75ce6` passed exact-SHA CI. These are offline correctness checks, not evidence of live coverage gains.
+
+An initially incomplete finance mock in the focused reliability tests accidentally permitted calls to the official accounts endpoint. It was corrected before any benchmark, and the test suite now blocks public DNS/HTTP and isolates OCR caches. Those accidental adapter calls are not treated as coverage evidence or cohort measurements.

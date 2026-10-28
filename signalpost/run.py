@@ -23,7 +23,7 @@ from .models import (Claim, Envelope, Evidence, PublicState, RefreshState, RunEr
 from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
                          OrderedAtomicWriter, RunBudget, publish_paired_artifacts)
 from .network import NetworkGateway, StructuredLogger, registered_domain, request_company_scope
-from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company
+from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company, fetch_financial_statements
 from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, artifact_ref, canonical_json,
                       compare_states, company_state, merge_prior_facts, validate_artifact, sha256_json)
 from .synthesis import synthesize
@@ -324,9 +324,9 @@ def _merge_optional_website_result(envelope: Envelope, result: Any) -> Envelope:
         return retained
 
 
-async def _run_before_completion_reserve(awaitable: Any, budget: Budget) -> tuple[Any, bool]:
+async def _run_before_completion_reserve(awaitable: Any, budget: Budget, reserved_seconds: float = 0) -> tuple[Any, bool]:
     """Cancel active source work before the hard deadline's atomic-output reserve."""
-    remaining = max(0.0, budget.config.hard_seconds - budget.elapsed - budget.config.completion_reserve_seconds)
+    remaining = max(0.0, budget.config.hard_seconds - budget.elapsed - budget.config.completion_reserve_seconds - reserved_seconds)
     if remaining <= 0:
         if hasattr(awaitable, "close"):
             awaitable.close()
@@ -438,6 +438,8 @@ def run(args: argparse.Namespace) -> int:
         "live_websites": live_websites,
         "no_keyless_websites": args.no_keyless_websites,
         "budget": {"hard_seconds": budget.hard_seconds, "soft_seconds": budget.soft_seconds,
+            "financial_seconds": budget.financial_seconds,
+            "financial_requests_per_company": budget.financial_requests_per_company,
             "completion_reserve_seconds": budget.completion_reserve_seconds,
             "physical_request_limit": budget.physical_request_limit,
             "logical_request_limit": budget.logical_request_limit,
@@ -490,6 +492,8 @@ def run(args: argparse.Namespace) -> int:
         "registry_snapshot_as_of": args.registry_snapshot_as_of,
         "registry_source_url": args.registry_source_url,
         "budget": {"hard_seconds": budget.hard_seconds, "soft_seconds": budget.soft_seconds,
+                   "financial_seconds": budget.financial_seconds,
+                   "financial_requests_per_company": budget.financial_requests_per_company,
                    "completion_reserve_seconds": budget.completion_reserve_seconds,
                    "physical_request_limit": budget.physical_request_limit,
                    "logical_request_limit": budget.logical_request_limit,
@@ -550,7 +554,7 @@ def run(args: argparse.Namespace) -> int:
             phase_metrics = {}
             scheduler_report["optional_phases"] = phase_metrics
             phase_cache = {name: checkpoint.phase_results(name) for name in
-                ("annual_documents", "website_verify", "website_shallow", "jobs_activity", "nav_apply", "nav_batch", "wiki_batch")}
+                ("financial_statements", "annual_documents", "website_verify", "website_shallow", "jobs_activity", "nav_apply", "nav_batch", "wiki_batch")}
 
             def record_phase(name, state, seconds=0.0):
                 metric = phase_metrics.setdefault(name, {})
@@ -563,7 +567,8 @@ def run(args: argparse.Namespace) -> int:
                     metric[state] = metric.get(state, 0) + 1
 
             def base_envelope(row):
-                result = phase_cache["annual_documents"].get(row.organisation_number, by_org.get(row.organisation_number))
+                result = phase_cache["annual_documents"].get(row.organisation_number,
+                    phase_cache["financial_statements"].get(row.organisation_number, by_org.get(row.organisation_number)))
                 if live_brreg and result is not None:
                     envelope = _live_envelope(row, result, batch_id, cutoff, previous,
                         frozen_match=row.organisation_number in fixture)
@@ -631,10 +636,11 @@ def run(args: argparse.Namespace) -> int:
                 except Exception as exc:
                     error = RunError(code=name.upper() + "_PUBLICATION_GRAPH_REJECTED",
                         message=f"Optional {name} result rejected: {type(exc).__name__}.", retryable=True)
-                    if name == "annual_documents":
+                    if name in {"annual_documents", "financial_statements"}:
                         value = copy.deepcopy(by_org[org])
                         value.errors.append(error)
-                        value.observations["annual_accounts_document"] = {"state": "failed", "reason": "publication_graph_rejected"}
+                        value.observations["annual_accounts_document" if name == "annual_documents" else "financial_calibration"] = {
+                            "state": "failed", "reason": "publication_graph_rejected"}
                     else:
                         from .websites import WebsiteResearchResult
                         order = ("website_verify", "website_shallow", "jobs_activity")
@@ -704,6 +710,9 @@ def run(args: argparse.Namespace) -> int:
                 return observations, homepages
 
             if live_brreg:
+                finance_pending = [org for org in unique if org not in phase_cache["financial_statements"]]
+                run_budget.financial_request_reserve = len(finance_pending) * budget.financial_requests_per_company
+                run_budget.financial_logical_reserve = len(finance_pending)
                 scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
                 baseline_orgs = set(by_org)
                 works = [Opportunity(key=org, company=org, pass_name="official_foundation",
@@ -735,7 +744,7 @@ def run(args: argparse.Namespace) -> int:
                 async def official(item: Opportunity):
                     try:
                         return await fetch_company(item.company, gateway, cutoff,
-                            allow_current_identity_after_run_start=cutoff_source == "run_start")
+                            allow_current_identity_after_run_start=cutoff_source == "run_start", include_accounts=False)
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:
@@ -753,7 +762,8 @@ def run(args: argparse.Namespace) -> int:
                     await future
                 try:
                     fresh_by_org, official_deadline_cancelled = await _run_before_completion_reserve(
-                        scheduler.run(works, official, on_complete=checkpoint_completed), run_budget)
+                        scheduler.run(works, official, on_complete=checkpoint_completed), run_budget,
+                        reserved_seconds=budget.financial_seconds if finance_pending else 0)
                     by_org.update(checkpoint.phase_results("official"))
                     by_org.update(fresh_by_org)
                 finally:
@@ -762,6 +772,79 @@ def run(args: argparse.Namespace) -> int:
                 scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
                     "companies": scheduler.company_metrics,
                     "hard_deadline_cancelled": official_deadline_cancelled}
+                for org in unique:
+                    if org not in by_org:
+                        by_org[org] = BrregResult(claims=[], evidence=[], snapshots=[],
+                            errors=[RunError(code="BRREG_FOUNDATION_DEADLINE_SKIPPED",
+                                message="Official foundation did not finish before the financial reserve.", retryable=True)],
+                            section_states={name: PublicState.NOT_AVAILABLE for name in
+                                ("identity_brand", "accounts_history", "leadership_workplaces")},
+                            terminal_state=PublicState.NOT_AVAILABLE, observations={})
+                from .operations import financial_request_scope
+                finance_scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
+                finance_works = [Opportunity(key=org, company=org, pass_name="financial_statements",
+                    expected_company_family_gain=1, expected_atomic_claim_gain=10,
+                    expected_requests=1, expected_seconds=1, sequence=index)
+                    for index, org in enumerate(by_org) if org in finance_pending]
+
+                async def financial_statement(item):
+                    started = time.monotonic()
+                    state = "completed"
+                    try:
+                        with financial_request_scope(), request_company_scope(item.company):
+                            return await fetch_financial_statements(copy.deepcopy(by_org[item.company]),
+                                item.company, gateway, cutoff)
+                    except asyncio.CancelledError:
+                        state = "deadline_skipped"
+                        raise
+                    except Exception as exc:
+                        state = "failed"
+                        value = copy.deepcopy(by_org[item.company])
+                        value.errors.append(RunError(code="FINANCIAL_STATEMENTS_UNEXPECTED_FAILURE",
+                            message=f"Financial statements failed: {type(exc).__name__}.", retryable=True))
+                        value.observations["financial_calibration"] = {"state": "failed", "reason": type(exc).__name__}
+                        raise OpportunityFailed(value)
+                    finally:
+                        if state != "deadline_skipped":
+                            record_phase("financial_statements", state, time.monotonic() - started)
+
+                started = time.monotonic()
+                financial_retries = getattr(gateway, "retries", None)
+                if financial_retries is not None:
+                    gateway.retries = 0
+                try:
+                    await asyncio.wait_for(_run_before_completion_reserve(
+                        finance_scheduler.run(finance_works, financial_statement,
+                            on_complete=lambda item, value: persist_phase("financial_statements", item.company, value)),
+                        run_budget), timeout=budget.financial_seconds)
+                except asyncio.TimeoutError:
+                    pass
+                except Exception as exc:
+                    for item in finance_works:
+                        if item.company not in phase_cache["financial_statements"]:
+                            value = copy.deepcopy(by_org[item.company])
+                            value.errors.append(RunError(code="FINANCIAL_PHASE_UNEXPECTED_FAILURE",
+                                message=f"Financial phase failed: {type(exc).__name__}.", retryable=True))
+                            persist_phase("financial_statements", item.company, value)
+                            record_phase("financial_statements", "failed")
+                finally:
+                    if financial_retries is not None:
+                        gateway.retries = financial_retries
+                    run_budget.financial_request_reserve = 0
+                    run_budget.financial_logical_reserve = 0
+                phase_metrics.setdefault("financial_statements", {})["wall_seconds"] = time.monotonic() - started
+                for item in finance_works:
+                    if item.company not in phase_cache["financial_statements"]:
+                        value = copy.deepcopy(by_org[item.company])
+                        value.observations["financial_calibration"] = {"state": "deadline_skipped"}
+                        persist_phase("financial_statements", item.company, value)
+                        record_phase("financial_statements", "deadline_skipped")
+                for org in by_org:
+                    if org not in finance_pending:
+                        record_phase("financial_statements", "not_attempted")
+                by_org.update(phase_cache["financial_statements"])
+                scheduler_report["financial_statements"] = {"passes": finance_scheduler.metrics,
+                    "companies": finance_scheduler.company_metrics}
             live_by_org.update(by_org)
             for saved in baseline_saved.values():
                 if saved.organisation_number in live_by_org:
@@ -776,6 +859,8 @@ def run(args: argparse.Namespace) -> int:
                     for row in rows if row.row_number not in prior_terminalized}
             wikidata_by_org = {}
             scheduler_report["phase_reservations"] = {
+                "financial_seconds": budget.financial_seconds,
+                "financial_requests_per_company": budget.financial_requests_per_company,
                 "nav_seconds": budget.nav_seconds, "wikidata_seconds": budget.wikidata_seconds,
                 "website_seconds": budget.website_seconds, "ocr_max_seconds": budget.ocr_seconds,
                 "ocr_budget_share": budget.ocr_budget_share, "ocr_and_websites_concurrent": True}
@@ -827,7 +912,8 @@ def run(args: argparse.Namespace) -> int:
                 document_works = [Opportunity(key=org, company=org, pass_name="annual_documents",
                     expected_company_family_gain=2, expected_atomic_claim_gain=4,
                     expected_requests=1, expected_seconds=30, sequence=index)
-                    for index, (org, result) in enumerate(by_org.items()) if getattr(result, "account_records", [])]
+                    for index, (org, result) in enumerate(by_org.items()) if getattr(result, "account_records", [])
+                    and not result.observations.get("target_is_subunit")]
                 async def annual_document(item: Opportunity):
                     started = time.monotonic()
                     state = "completed"
@@ -855,7 +941,7 @@ def run(args: argparse.Namespace) -> int:
                 for org, result in by_org.items():
                     if org in phase_cache["annual_documents"]:
                         record_phase("annual_documents", "not_attempted")
-                    elif not getattr(result, "account_records", []):
+                    elif not getattr(result, "account_records", []) or result.observations.get("target_is_subunit"):
                         record_phase("annual_documents", "ineligible")
                 document_works = [item for item in document_works if item.company not in phase_cache["annual_documents"]]
                 for item in document_works:
@@ -1005,10 +1091,22 @@ def run(args: argparse.Namespace) -> int:
                             by_website_org[org] = result
                 return by_website_org
 
-            _, by_website_org = await asyncio.gather(document_phase(), website_phase())
+            optional_results = await asyncio.gather(document_phase(), website_phase(), return_exceptions=True)
+            optional_errors = []
+            for name, result in zip(("annual_documents", "website_phases"), optional_results):
+                if isinstance(result, BaseException) and not isinstance(result, (Exception, asyncio.CancelledError)):
+                    raise result
+                if isinstance(result, asyncio.CancelledError):
+                    record_phase(name, "deadline_skipped")
+                    continue
+                if isinstance(result, Exception):
+                    optional_errors.append(RunError(code=name.upper() + "_PHASE_UNEXPECTED_FAILURE",
+                        message=f"Optional phase failed: {type(result).__name__}.", retryable=True))
+                    record_phase(name, "failed")
             output = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized
                       else compose(row) for row in rows]
             for envelope in output:
+                envelope.errors.extend(optional_errors)
                 checkpoint.put(envelope)
                 checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
             checkpoint.connection.commit()

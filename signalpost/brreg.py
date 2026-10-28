@@ -50,6 +50,8 @@ class BrregResult:
     observations: dict[str, Any]
     account_records: list[dict[str, Any]] = field(default_factory=list)
     account_source: dict[str, Any] = field(default_factory=dict)
+    accounts_attempted: bool = False
+    financial_cross_checks: list[dict[str, Any]] = field(default_factory=list)
 
 
 def normalize_entity(body: dict[str, Any]) -> dict[str, Any]:
@@ -187,6 +189,7 @@ def financial_records(body: Any) -> list[dict[str, Any]]:
                 values[field + "_unit_state"] = unit_state
         result.append({
             "record_id": record.get("id"), "filing_id": record.get("innsendingsId"), "record_version": record.get("versjon"),
+            "organisation_number": _get(record, "virksomhet", "organisasjonsnummer"), "journalnr": record.get("journalnr"),
             "source_version_or_filing_id": record.get("versjon") or record.get("innsendingsId") or record.get("id"),
             "account_type": record.get("regnskapstype"), "scope": scope,
             "_source_index": source_index,
@@ -371,44 +374,7 @@ def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnaps
     return evidence_id
 
 
-async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
-                        allow_current_identity_after_run_start: bool = False) -> BrregResult:
-    claims: list[Claim] = []
-    evidence: list[Evidence] = []
-    snapshots: list[SourceSnapshot] = []
-    errors: list[RunError] = []
-    states: dict[str, PublicState] = {"identity_brand": PublicState.NOT_AVAILABLE, "accounts_history": PublicState.NOT_AVAILABLE,
-                                     "leadership_workplaces": PublicState.NOT_AVAILABLE}
-    observations: dict[str, Any] = {"workplace_count": 0, "workplaces_complete": False, "financial_records": 0,
-                                   "roles_count": 0, "entity_http_status": None, "group_checked": False}
-    target_legal_form: str | None = None
-    records: list[dict[str, Any]] = []
-
-    def contact_leads(row: dict[str, Any], url: str, digest: str | None, retrieved: datetime,
-                      status: int, source_name: str, prefix: str = "", *, workplace: bool = False) -> None:
-        # Exact linked registry rows supply leads only; no mailbox or website fact is published.
-        from .websites import registry_contact_leads
-        if not digest:
-            return
-        sid = _source_id(org, source_name, digest, url)
-        for raw, source_field in registry_contact_leads(row):
-            if source_field == "hjemmeside" and not workplace:
-                continue
-            pointer = prefix + "/" + source_field
-            eid = f"{org}:contact-lead:" + hashlib.sha256((url + pointer + raw).encode()).hexdigest()[:20]
-            if any(e.evidence_id == eid for e in evidence):
-                continue
-            evidence.append(Evidence(evidence_id=eid, source_url=url, retrieved_at=retrieved,
-                content_sha256=digest, json_pointer=pointer, extraction_method="brreg_contact_domain_lead_v1",
-                subject_organisation_number=org, source_snapshot_ids=[sid]))
-            if not any(item.source_id == sid for item in snapshots):
-                snapshots.append(SourceSnapshot(source_id=sid, source_url=url, retrieved_at=retrieved,
-                    content_sha256=digest, http_status=status, cache_mode="transient", rights_status=RIGHTS))
-            observations.setdefault("website_candidates", []).append({"raw": raw,
-                "source": "workplace_contact" if workplace else "registry_email", "json_pointer": pointer,
-                "rights_status": RIGHTS, "source_url": url, "content_sha256": digest,
-                "evidence_id": eid, "source_snapshot_id": sid})
-
+def _projection_helpers(org, gateway, claims, evidence, snapshots, errors):
     async def request(url: str, purpose: str, section: str) -> tuple[Any, str | None, int, datetime, str | None]:
         retrieved = datetime.now(timezone.utc)
         try:
@@ -460,6 +426,162 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
                             unit=unit, currency=currency, period_start=_date(start), period_end=_date(end), as_of=_date(as_of),
                             scope=scope, verification_rule_id="brreg_exact_org_pointer_v1", verification_score="1.0",
                             evidence_ids=[eid], source_snapshot_ids=[sid]))
+
+    return request, add_claim
+
+
+async def fetch_financial_statements(result: BrregResult, org: str, gateway: NetworkGateway,
+                                     cutoff: datetime) -> BrregResult:
+    if result.accounts_attempted:
+        return result
+    result.accounts_attempted = True
+    claims, evidence, snapshots, errors = result.claims, result.evidence, result.snapshots, result.errors
+    states, observations = result.section_states, result.observations
+    request, add_claim = _projection_helpers(org, gateway, claims, evidence, snapshots, errors)
+    records = []
+    accounts_url = f"{ACCOUNTS}/{org}"
+    account_body, account_final, account_status, account_time, account_hash = await request(accounts_url, "accounts", "accounts_history")
+    if account_status != 200:
+        observations["accounts_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="accounts_state",
+            url=account_final or accounts_url, retrieved_at=account_time, status=account_status, digest=account_hash,
+            pointer="/", method="brreg_accounts_endpoint_state_v1")
+    accounts_malformed = account_status == 200 and not _account_collection_shape(account_body)
+    if accounts_malformed:
+        errors.append(RunError(code="BRREG_ACCOUNTS_MALFORMED", message="Official accounts endpoint returned an invalid collection shape.", source_id="accounts_history"))
+    if account_status == 200 and _account_collection_shape(account_body):
+        records = financial_records(account_body)
+        observations["financial_records"] = len(records)
+        if not records:
+            observations["accounts_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="accounts_empty",
+                url=account_final or accounts_url, retrieved_at=account_time, status=account_status, digest=account_hash,
+                pointer="/", method="brreg_empty_account_collection_v1")
+        for ri, record in enumerate(records):
+            entity = record["raw"].get("virksomhet")
+            if (observations.get("target_is_subunit") or not isinstance(entity, dict)
+                    or entity.get("organisasjonsnummer") != org):
+                continue
+            raw = account_body
+            record_path = record["_source_prefix"]
+            period_start = _date(record.get("period_start"))
+            period_end = _date(record.get("period_end"))
+            currency_valid = supported_currency(record.get("currency"))
+            metadata_valid = (period_start is not None and period_end is not None and period_start <= period_end
+                              and currency_valid and record.get("scope") in {"legal_entity", "group"})
+            if any(record["metrics"].get(metric) is not None for metric in METRICS) and not metadata_valid:
+                missing = []
+                if period_start is None or period_end is None or period_start > period_end: missing.append("period")
+                if not currency_valid: missing.append("currency")
+                if record.get("scope") not in {"legal_entity", "group"}: missing.append("scope")
+                errors.append(RunError(code="BRREG_FINANCIAL_METADATA_INCOMPLETE",
+                    message="Financial metrics were withheld because source metadata is missing or invalid: " + ",".join(missing),
+                    source_id="accounts_history"))
+            subject = financial_record_subject(org, record)
+            from .financial_calibration import _eligible
+            eligible = _eligible(record, org, cutoff)
+            versions = sum(other["scope"] == record["scope"] and other["period_start"] == record["period_start"]
+                and other["period_end"] == record["period_end"] and _eligible(other, org, cutoff) for other in records)
+            for metric in METRICS:
+                value = record["metrics"].get(metric)
+                if value is None:
+                    continue
+                if not metadata_valid or not eligible or versions != 1:
+                    continue
+                unit = record["metrics"].get(metric + "_unit")
+                if record["metrics"].get(metric + "_unit_state") == "absent":
+                    continue
+                if not isinstance(unit, str) or not financial_dimensions_compatible(unit.strip().upper(), record["currency"]):
+                    errors.append(RunError(code="BRREG_FINANCIAL_UNIT_UNSUPPORTED",
+                        message=f"Financial metric {metric} was withheld because its source unit is missing or unsupported.",
+                        source_id="accounts_history"))
+                    continue
+                # The record's own labels determine scope and periods. No calendar-year inference.
+                raw_metric = _get(record["raw"], *METRICS[metric].split("/"))
+                metric_pointer = record_path + "/" + METRICS[metric]
+                if isinstance(raw_metric, dict) and isinstance(raw_metric.get("sum"), (int, float)):
+                    metric_pointer += "/sum"
+                add_claim(metric, value, "accounts_history", "financial", subject, record["scope"], account_final or accounts_url,
+                          account_time, raw, metric_pointer, "accounts", unit=unit.strip().upper(),
+                          currency=record["currency"], start=record["period_start"], end=record["period_end"],
+                          as_of=record["filing_timestamp"], source_hash=account_hash,
+                          extraction_method="brreg_financial_projection_v1" if isinstance(raw_metric, dict) else "brreg_json_pointer_v1")
+            for meta in ("organisation_number", "journalnr", "record_id", "filing_id", "record_version", "source_version_or_filing_id", "account_type", "scope",
+                         "period_start", "period_end", "filing_timestamp", "currency", "raw_unit"):
+                if record.get(meta) is not None and eligible:
+                    source_pointers = {"record_id": "/id", "filing_id": "/innsendingsId", "record_version": "/versjon",
+                                       "organisation_number": "/virksomhet/organisasjonsnummer", "journalnr": "/journalnr",
+                                       "account_type": "/regnskapstype", "scope": "/regnskapstype",
+                                       "period_start": "/regnskapsperiode/fraDato", "period_end": "/regnskapsperiode/tilDato",
+                                       "filing_timestamp": "/innsendingsdato" if record["raw"].get("innsendingsdato") else "/registreringsdato",
+                                       "currency": "/valuta", "raw_unit": "/enhet"}
+                    if meta == "source_version_or_filing_id":
+                        pointer = "/versjon" if record["raw"].get("versjon") else "/innsendingsId" if record["raw"].get("innsendingsId") else "/id"
+                    else:
+                        pointer = source_pointers[meta]
+                    add_claim(f"financial_record.{meta}", record[meta], "accounts_history", "financial_record_metadata", subject,
+                              record["scope"], account_final or accounts_url, account_time, raw, record_path + pointer, "accounts",
+                              start=record["period_start"], end=record["period_end"], as_of=record["filing_timestamp"],
+                              currency=record["currency"], source_hash=account_hash,
+                              extraction_method="brreg_scope_normalization_v1" if meta == "scope" else "brreg_json_pointer_v1")
+        states["accounts_history"] = (PublicState.AVAILABLE if any(c.section == "accounts_history" for c in claims)
+            else PublicState.AMBIGUOUS if records else PublicState.NOT_AVAILABLE)
+    elif accounts_malformed or account_status >= 500 or account_status == 0:
+        states["accounts_history"] = PublicState.FAILED
+    elif account_status in {401, 403, 429, 451}:
+        states["accounts_history"] = PublicState.BLOCKED
+    else:
+        states["accounts_history"] = PublicState.NOT_AVAILABLE
+
+    result.account_records = records
+    result.account_source = {"url": account_final or accounts_url, "retrieved_at": account_time,
+        "content_sha256": account_hash, "status": account_status}
+    from .financial_calibration import publish_structured_financials
+    publish_structured_financials(result, org, cutoff)
+    if states["accounts_history"] == PublicState.NOT_AVAILABLE:
+        errors.append(RunError(code="BRREG_ACCOUNTS_HISTORY_NO_DATA",
+            message="Official lookup completed without a source record for this section."))
+    if any(claim.state == PublicState.AVAILABLE for claim in claims):
+        result.terminal_state = PublicState.AVAILABLE
+    return result
+
+
+async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
+                        allow_current_identity_after_run_start: bool = False, include_accounts: bool = True) -> BrregResult:
+    claims: list[Claim] = []
+    evidence: list[Evidence] = []
+    snapshots: list[SourceSnapshot] = []
+    errors: list[RunError] = []
+    states: dict[str, PublicState] = {"identity_brand": PublicState.NOT_AVAILABLE, "accounts_history": PublicState.NOT_AVAILABLE,
+                                     "leadership_workplaces": PublicState.NOT_AVAILABLE}
+    observations: dict[str, Any] = {"workplace_count": 0, "workplaces_complete": False, "financial_records": 0,
+                                   "roles_count": 0, "entity_http_status": None, "group_checked": False}
+    target_legal_form: str | None = None
+
+    def contact_leads(row: dict[str, Any], url: str, digest: str | None, retrieved: datetime,
+                      status: int, source_name: str, prefix: str = "", *, workplace: bool = False) -> None:
+        # Exact linked registry rows supply leads only; no mailbox or website fact is published.
+        from .websites import registry_contact_leads
+        if not digest:
+            return
+        sid = _source_id(org, source_name, digest, url)
+        for raw, source_field in registry_contact_leads(row):
+            if source_field == "hjemmeside" and not workplace:
+                continue
+            pointer = prefix + "/" + source_field
+            eid = f"{org}:contact-lead:" + hashlib.sha256((url + pointer + raw).encode()).hexdigest()[:20]
+            if any(e.evidence_id == eid for e in evidence):
+                continue
+            evidence.append(Evidence(evidence_id=eid, source_url=url, retrieved_at=retrieved,
+                content_sha256=digest, json_pointer=pointer, extraction_method="brreg_contact_domain_lead_v1",
+                subject_organisation_number=org, source_snapshot_ids=[sid]))
+            if not any(item.source_id == sid for item in snapshots):
+                snapshots.append(SourceSnapshot(source_id=sid, source_url=url, retrieved_at=retrieved,
+                    content_sha256=digest, http_status=status, cache_mode="transient", rights_status=RIGHTS))
+            observations.setdefault("website_candidates", []).append({"raw": raw,
+                "source": "workplace_contact" if workplace else "registry_email", "json_pointer": pointer,
+                "rights_status": RIGHTS, "source_url": url, "content_sha256": digest,
+                "evidence_id": eid, "source_snapshot_id": sid})
+
+    request, add_claim = _projection_helpers(org, gateway, claims, evidence, snapshots, errors)
 
     entity_url = f"{BASE}/enheter/{org}"
     entity, entity_final, entity_status, entity_time, entity_hash = await request(entity_url, "entity", "identity_brand")
@@ -548,87 +670,6 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     # Subunit input is atomic. Do not use its parent to fill its legal identity.
     target_is_subunit = bool(isinstance(entity, dict) and entity.get("overordnetEnhet"))
     observations["target_is_subunit"] = target_is_subunit
-    accounts_url = f"{ACCOUNTS}/{org}"
-    account_body, account_final, account_status, account_time, account_hash = await request(accounts_url, "accounts", "accounts_history")
-    if account_status != 200:
-        observations["accounts_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="accounts_state",
-            url=account_final or accounts_url, retrieved_at=account_time, status=account_status, digest=account_hash,
-            pointer="/", method="brreg_accounts_endpoint_state_v1")
-    accounts_malformed = account_status == 200 and not _account_collection_shape(account_body)
-    if accounts_malformed:
-        errors.append(RunError(code="BRREG_ACCOUNTS_MALFORMED", message="Official accounts endpoint returned an invalid collection shape.", source_id="accounts_history"))
-    if account_status == 200 and _account_collection_shape(account_body):
-        records = financial_records(account_body)
-        observations["financial_records"] = len(records)
-        if not records:
-            observations["accounts_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="accounts_empty",
-                url=account_final or accounts_url, retrieved_at=account_time, status=account_status, digest=account_hash,
-                pointer="/", method="brreg_empty_account_collection_v1")
-        for ri, record in enumerate(records):
-            raw = account_body
-            record_path = record["_source_prefix"]
-            period_start = _date(record.get("period_start"))
-            period_end = _date(record.get("period_end"))
-            currency_valid = supported_currency(record.get("currency"))
-            metadata_valid = (period_start is not None and period_end is not None and period_start <= period_end
-                              and currency_valid and record.get("scope") in {"legal_entity", "group"})
-            if any(record["metrics"].get(metric) is not None for metric in METRICS) and not metadata_valid:
-                missing = []
-                if period_start is None or period_end is None or period_start > period_end: missing.append("period")
-                if not currency_valid: missing.append("currency")
-                if record.get("scope") not in {"legal_entity", "group"}: missing.append("scope")
-                errors.append(RunError(code="BRREG_FINANCIAL_METADATA_INCOMPLETE",
-                    message="Financial metrics were withheld because source metadata is missing or invalid: " + ",".join(missing),
-                    source_id="accounts_history"))
-            subject = financial_record_subject(org, record)
-            for metric in METRICS:
-                value = record["metrics"].get(metric)
-                if value is None:
-                    continue
-                if not metadata_valid:
-                    continue
-                unit = record["metrics"].get(metric + "_unit")
-                if not isinstance(unit, str) or not financial_dimensions_compatible(unit.strip().upper(), record["currency"]):
-                    errors.append(RunError(code="BRREG_FINANCIAL_UNIT_UNSUPPORTED",
-                        message=f"Financial metric {metric} was withheld because its source unit is missing or unsupported.",
-                        source_id="accounts_history"))
-                    continue
-                # The record's own labels determine scope and periods. No calendar-year inference.
-                raw_metric = _get(record["raw"], *METRICS[metric].split("/"))
-                metric_pointer = record_path + "/" + METRICS[metric]
-                if isinstance(raw_metric, dict) and isinstance(raw_metric.get("sum"), (int, float)):
-                    metric_pointer += "/sum"
-                add_claim(metric, value, "accounts_history", "financial", subject, record["scope"], account_final or accounts_url,
-                          account_time, raw, metric_pointer, "accounts", unit=unit.strip().upper(),
-                          currency=record["currency"], start=record["period_start"], end=record["period_end"],
-                          as_of=record["filing_timestamp"], source_hash=account_hash,
-                          extraction_method="brreg_financial_projection_v1" if isinstance(raw_metric, dict) else "brreg_json_pointer_v1")
-            for meta in ("record_id", "filing_id", "record_version", "source_version_or_filing_id", "account_type", "scope",
-                         "period_start", "period_end", "filing_timestamp", "currency", "raw_unit"):
-                if record.get(meta) is not None:
-                    source_pointers = {"record_id": "/id", "filing_id": "/innsendingsId", "record_version": "/versjon",
-                                       "account_type": "/regnskapstype", "scope": "/regnskapstype",
-                                       "period_start": "/regnskapsperiode/fraDato", "period_end": "/regnskapsperiode/tilDato",
-                                       "filing_timestamp": "/innsendingsdato" if record["raw"].get("innsendingsdato") else "/registreringsdato",
-                                       "currency": "/valuta", "raw_unit": "/enhet"}
-                    if meta == "source_version_or_filing_id":
-                        pointer = "/versjon" if record["raw"].get("versjon") else "/innsendingsId" if record["raw"].get("innsendingsId") else "/id"
-                    else:
-                        pointer = source_pointers[meta]
-                    add_claim(f"financial_record.{meta}", record[meta], "accounts_history", "financial_record_metadata", subject,
-                              record["scope"], account_final or accounts_url, account_time, raw, record_path + pointer, "accounts",
-                              start=record["period_start"], end=record["period_end"], as_of=record["filing_timestamp"],
-                              currency=record["currency"], source_hash=account_hash,
-                              extraction_method="brreg_scope_normalization_v1" if meta == "scope" else "brreg_json_pointer_v1")
-        states["accounts_history"] = (PublicState.AVAILABLE if any(c.section == "accounts_history" for c in claims)
-            else PublicState.AMBIGUOUS if records else PublicState.NOT_AVAILABLE)
-    elif accounts_malformed or account_status >= 500 or account_status == 0:
-        states["accounts_history"] = PublicState.FAILED
-    elif account_status in {401, 403, 429, 451}:
-        states["accounts_history"] = PublicState.BLOCKED
-    else:
-        states["accounts_history"] = PublicState.NOT_AVAILABLE
-
     roles_url = f"{BASE}/enheter/{org}/roller"
     roles_body, roles_final, roles_status, roles_time, roles_hash = await request(roles_url, "roles", "leadership_workplaces")
     if roles_status != 200:
@@ -810,7 +851,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
         PublicState.AMBIGUOUS if not observations["workplaces_complete"] else PublicState.NOT_AVAILABLE)
 
     for section in states:
-        if states[section] == PublicState.NOT_AVAILABLE:
+        if section != "accounts_history" and states[section] == PublicState.NOT_AVAILABLE:
             errors.append(RunError(code=f"BRREG_{section.upper()}_NO_DATA", message="Official lookup completed without a source record for this section."))
     evidence_by_id = {item.evidence_id: item for item in evidence}
     eligible_claims = []
@@ -843,6 +884,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     terminal = PublicState.AVAILABLE if any(c.section in states and c.state == PublicState.AVAILABLE for c in claims) else (
         PublicState.BLOCKED if any(s == PublicState.BLOCKED for s in states.values()) else
         PublicState.FAILED if any(s == PublicState.FAILED for s in states.values()) else PublicState.NOT_AVAILABLE)
-    return BrregResult(claims, evidence, snapshots, errors, states, terminal, observations,
-        account_records=records, account_source={"url": account_final or accounts_url,
-            "retrieved_at": account_time, "content_sha256": account_hash, "status": account_status})
+    result = BrregResult(claims, evidence, snapshots, errors, states, terminal, observations)
+    if include_accounts:
+        await fetch_financial_statements(result, org, gateway, cutoff)
+    return result

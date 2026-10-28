@@ -15,6 +15,10 @@ from signalpost.websites import PageRecord, WebsiteResearchResult
 ORG = "987974249"
 
 
+class SimulatedCrash(BaseException):
+    pass
+
+
 @pytest.fixture
 def scenario(tmp_path, monkeypatch):
     calls = Counter()
@@ -91,6 +95,11 @@ def scenario(tmp_path, monkeypatch):
         return original_merge(envelope, result)
 
     monkeypatch.setattr(run, "fetch_company", official)
+    async def financial(result, *args, **kwargs):
+        result.accounts_attempted = True
+        return result
+
+    monkeypatch.setattr(run, "fetch_financial_statements", financial)
     monkeypatch.setattr("signalpost.annual_accounts.enrich_company", document)
     monkeypatch.setattr("signalpost.financial_calibration.calibrate_company_financials", lambda *args: None)
     monkeypatch.setattr("signalpost.nav.research_jobs", nav)
@@ -152,7 +161,7 @@ def test_cancelled_optional_phases_keep_deadline_outcomes(scenario, monkeypatch,
 
     (path / "config").write_text(json.dumps({"budget": {
         "hard_seconds": 4, "soft_seconds": 3, "completion_reserve_seconds": 1,
-        "nav_seconds": 0.01, "wikidata_seconds": 0.01,
+        "nav_seconds": 0.01, "wikidata_seconds": 0.01, "financial_seconds": 0.02,
         "ocr_seconds": 0.01, "website_seconds": 0.01}}))
     monkeypatch.setattr("signalpost.nav.research_jobs", slow)
     monkeypatch.setattr("signalpost.public_discovery.wikidata_candidates", slow)
@@ -239,10 +248,10 @@ def test_crash_resume_keeps_completed_optional_work(scenario, monkeypatch, crash
         original(store, phase, org, value, envelopes)
         if phase == crash_phase and not crashed:
             crashed = True
-            raise RuntimeError("simulated process interruption after committed phase")
+            raise SimulatedCrash("simulated process interruption after committed phase")
 
     monkeypatch.setattr(CheckpointStore, "save_phase", save)
-    with pytest.raises(RuntimeError, match="simulated process interruption"):
+    with pytest.raises(SimulatedCrash, match="simulated process interruption"):
         run.main(argv)
     store = CheckpointStore(path / "checkpoint")
     completed = {name for name in calls if store.phase_results(name)}

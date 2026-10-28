@@ -12,6 +12,8 @@ import sqlite3
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -19,6 +21,17 @@ from pathlib import Path
 from typing import Awaitable, Callable, Iterable, TypeVar
 
 from .models import Envelope
+
+_FINANCIAL_REQUEST = ContextVar("financial_request", default=False)
+
+
+@contextmanager
+def financial_request_scope():
+    token = _FINANCIAL_REQUEST.set(True)
+    try:
+        yield
+    finally:
+        _FINANCIAL_REQUEST.reset(token)
 
 
 def _checkpoint_encode(value: object) -> object:
@@ -88,6 +101,8 @@ class RunBudget:
     per_company_physical_limit: int | None = None
     per_host_physical_limit: int | None = None
     nav_seconds: float = 120
+    financial_seconds: float = 180
+    financial_requests_per_company: int = 1
     wikidata_seconds: float = 12
     website_seconds: float = 480
     ocr_seconds: float = 900
@@ -108,7 +123,8 @@ class RunBudget:
         if min(self.global_http_concurrency, self.per_host_concurrency) < 1:
             raise ValueError("global and per-host concurrency limits must be positive")
         if (not all(math.isfinite(value) and value >= 0 for value in
-                    (self.nav_seconds, self.wikidata_seconds, self.website_seconds, self.ocr_seconds))
+                    (self.nav_seconds, self.financial_seconds, self.wikidata_seconds, self.website_seconds, self.ocr_seconds))
+                or self.financial_requests_per_company < 1
                 or not math.isfinite(self.ocr_budget_share) or not 0 <= self.ocr_budget_share <= 1):
             raise ValueError("phase durations must be finite/non-negative and OCR share between zero and one")
 
@@ -136,6 +152,8 @@ class RunBudget:
                 if "SIGNALPOST_PER_HOST_PHYSICAL_LIMIT" in environ else
                 int(values["per_host_physical_limit"]) if "per_host_physical_limit" in values else None),
             nav_seconds=float(value("nav_seconds", "SIGNALPOST_NAV_SECONDS", 120)),
+            financial_seconds=float(value("financial_seconds", "SIGNALPOST_FINANCIAL_SECONDS", 180)),
+            financial_requests_per_company=int(value("financial_requests_per_company", "SIGNALPOST_FINANCIAL_REQUESTS_PER_COMPANY", 1)),
             wikidata_seconds=float(value("wikidata_seconds", "SIGNALPOST_WIKIDATA_SECONDS", 12)),
             website_seconds=float(value("website_seconds", "SIGNALPOST_WEBSITE_SECONDS", 480)),
             ocr_seconds=float(value("ocr_seconds", "SIGNALPOST_OCR_SECONDS", 900)),
@@ -151,6 +169,8 @@ class Budget:
         self.started = monotonic() if started_at is None else started_at
         self._max_elapsed = 0.0
         self._request_count = 0
+        self.financial_request_reserve = 0
+        self.financial_logical_reserve = 0
         self._logical_request_count = 0
         self._cost = Decimal("0")
         self._company_counts: dict[str, int] = {}
@@ -188,17 +208,26 @@ class Budget:
                 return False
             if self._request_count + 1 > self.config.physical_request_limit:
                 return False
+            if (not _FINANCIAL_REQUEST.get()
+                    and self._request_count + 1 > self.config.physical_request_limit - self.financial_request_reserve):
+                return False
             if self._cost + cost > self.config.paid_cost_limit:
                 return False
             company_key = company.casefold() if company else None
             host_key = host.casefold() if host else None
             if (company_key and self.config.per_company_physical_limit is not None
-                    and self._company_counts.get(company_key, 0) >= self.config.per_company_physical_limit):
+                    and self._company_counts.get(company_key, 0) >= self.config.per_company_physical_limit
+                        - (self.config.financial_requests_per_company if self.financial_request_reserve
+                            and not _FINANCIAL_REQUEST.get() else 0)):
                 return False
             if (host_key and self.config.per_host_physical_limit is not None
-                    and self._host_counts.get(host_key, 0) >= self.config.per_host_physical_limit):
+                    and self._host_counts.get(host_key, 0) >= self.config.per_host_physical_limit
+                        - (self.financial_request_reserve if host_key == "data.brreg.no"
+                            and not _FINANCIAL_REQUEST.get() else 0)):
                 return False
             self._request_count += 1
+            if _FINANCIAL_REQUEST.get():
+                self.financial_request_reserve = max(0, self.financial_request_reserve - 1)
             self._cost += cost
             if company_key:
                 self._company_counts[company_key] = self._company_counts.get(company_key, 0) + 1
@@ -212,7 +241,12 @@ class Budget:
                 return False
             if self.config.logical_request_limit is not None and self._logical_request_count + 1 > self.config.logical_request_limit:
                 return False
+            if (not _FINANCIAL_REQUEST.get() and self.config.logical_request_limit is not None
+                    and self._logical_request_count + 1 > self.config.logical_request_limit - self.financial_logical_reserve):
+                return False
             self._logical_request_count += 1
+            if _FINANCIAL_REQUEST.get():
+                self.financial_logical_reserve = max(0, self.financial_logical_reserve - 1)
             return True
 
     def host_request_count(self, host: str) -> int:

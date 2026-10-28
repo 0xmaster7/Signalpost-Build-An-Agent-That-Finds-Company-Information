@@ -77,6 +77,33 @@ class FinancialUnitAssumption(StrictModel):
     documented_api_unit_contract: Literal[False] = False
 
 
+class StructuredAPIUnitAssumption(StrictModel):
+    method: Literal["structured_api_currency_assumption"] = "structured_api_currency_assumption"
+    calibration_state: Literal["UNCALIBRATED"] = "UNCALIBRATED"
+    organisation_number: str
+    currency: str
+    subject_id: str
+    period_start: datetime
+    period_end: datetime
+    scope: Literal["legal_entity", "group"]
+    filing_identity: dict[str, str]
+    api_pointer_prefix: str
+    api_snapshot_id: str
+    api_value_multiplier: Literal[1] = 1
+    source_unit_state: Literal["absent"] = "absent"
+    target_pdf_validated: Literal[False] = False
+    documented_api_unit_contract: Literal[False] = False
+
+    @model_validator(mode="after")
+    def exact_record_identity(self) -> "StructuredAPIUnitAssumption":
+        if (not self.filing_identity or set(self.filing_identity) - {"record_id", "filing_id", "record_version", "journalnr"}
+                or any(not value.strip() for value in self.filing_identity.values())
+                or self.period_start.tzinfo is None or self.period_end.tzinfo is None
+                or self.period_start > self.period_end):
+            raise ValueError("structured API assumption requires an exact filing identity and reporting period")
+        return self
+
+
 class Claim(StrictModel):
     claim_id: str
     organisation_number: str | None = None
@@ -89,7 +116,7 @@ class Claim(StrictModel):
     unit: str | None = None
     currency: str | None = None
     unit_assumed_currency: bool = False
-    unit_assumption_basis: FinancialUnitAssumption | None = None
+    unit_assumption_basis: FinancialUnitAssumption | StructuredAPIUnitAssumption | None = None
     period_start: datetime | None = None
     period_end: datetime | None = None
     as_of: datetime | None = None
@@ -112,6 +139,16 @@ class Claim(StrictModel):
         if self.scope is not None and self.scope not in {"legal_entity", "group", "unknown", "workplace", "person_role", "job", "event"}:
             raise ValueError("unsupported claim scope")
         basis = self.unit_assumption_basis
+        if isinstance(basis, StructuredAPIUnitAssumption):
+            if (not self.unit_assumed_currency or self.field_family != "financial"
+                    or self.verification_rule_id != "structured_api_currency_assumption_v1"
+                    or self.unit != self.currency or self.currency != basis.currency
+                    or self.organisation_number != basis.organisation_number
+                    or self.subject_id != basis.subject_id or self.scope != basis.scope
+                    or self.period_start != basis.period_start or self.period_end != basis.period_end
+                    or not basis.filing_identity or basis.api_snapshot_id not in self.source_snapshot_ids):
+                raise ValueError("structured API assumption verification rule and exact record basis required")
+            return self
         if self.unit_assumed_currency:
             if (basis is None or self.field_family != "financial" or self.unit != self.currency
                     or self.verification_rule_id != "company_pdf_calibrated_currency_assumption_v1"
@@ -128,7 +165,7 @@ class Claim(StrictModel):
                 raise ValueError("assumed currency unit flags and evidence must match the calibration reference")
         elif basis is not None:
             raise ValueError("a currency unit assumption basis requires unit_assumed_currency")
-        elif self.verification_rule_id == "company_pdf_calibrated_currency_assumption_v1":
+        elif self.verification_rule_id in {"company_pdf_calibrated_currency_assumption_v1", "structured_api_currency_assumption_v1"}:
             raise ValueError("company calibration verification requires unit_assumed_currency")
         return self
 

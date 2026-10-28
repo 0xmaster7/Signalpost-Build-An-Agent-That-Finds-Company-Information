@@ -4,6 +4,7 @@ import asyncio
 import json
 from copy import deepcopy
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -54,7 +55,8 @@ class Gateway:
 
 
 def result_for(records=None, org=ORG):
-    return asyncio.run(fetch_company(org, Gateway(records or [raw_record(org=org)], org), CUTOFF))
+    with patch("signalpost.financial_calibration.publish_structured_financials", side_effect=lambda result, *args: result):
+        return asyncio.run(fetch_company(org, Gateway(records or [raw_record(org=org)], org), CUTOFF))
 
 
 def attach_anchors(result, record_index=0, metrics=("revenue", "annual_result"), overrides=None):

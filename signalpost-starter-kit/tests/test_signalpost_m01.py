@@ -491,6 +491,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
         target = "923609016"
         period = {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}
         valid_record = {"id": "valid", "regnskapstype": "SELSKAP", "regnskapsperiode": period,
+            "virksomhet": {"organisasjonsnummer": target},
             "valuta": "NOK", "enhet": "NOK", "resultatregnskapResultat": {"driftsresultat": {
                 "driftsinntekter": {"sumDriftsinntekter": 10}}}}
         cases = (
@@ -689,7 +690,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
                 self.ledger.physical_requests += 1
                 if "/roller" in url: body = {"rollegrupper": []}
                 elif "/underenheter?" in url: body = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
-                elif "/regnskap/" in url: body = [{"id": "F1", "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 5}}]
+                elif "/regnskap/" in url: body = [{"id": "F1", "virksomhet": {"organisasjonsnummer": "923609016"}, "regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"}, "valuta": "NOK", "eiendeler": {"sumEiendeler": 5}}]
                 else: body = {"organisasjonsnummer": "923609016", "navn": "Target AS"}
                 self.ledger.entries.append(type("Entry", (), {"purpose": kwargs["purpose"], "url": url, "status": 200, "outcome": "received"})())
                 return 200, {}, json.dumps(body).encode(), url, "ok"
@@ -900,7 +901,7 @@ class BrregFoundationTests(unittest.IsolatedAsyncioTestCase):
         ]
         class AccountsTransport:
             async def request(self, url, headers, timeout):
-                if "/regnskap/" in url: body = accounts
+                if "/regnskap/" in url: body = [{**record, "virksomhet": {"organisasjonsnummer": target}} for record in accounts]
                 elif url.endswith("/roller"): body = {"rollegrupper": []}
                 elif "/underenheter?" in url: body = {"_embedded": {"underenheter": []}, "page": {"number": 0, "totalPages": 1}}
                 else: body = {"organisasjonsnummer": target, "navn": "Target AS"}
