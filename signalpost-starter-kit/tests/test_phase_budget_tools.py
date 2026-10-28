@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
@@ -42,15 +44,20 @@ def test_holdout_sampling_is_disjoint_and_refuses_rerandomization(tmp_path):
     assert (destination / "companies.jsonl").read_bytes() == frozen
 
 
-def test_normalization_preserves_assumption_and_does_not_claim_direct_units():
+@pytest.mark.parametrize("method", [None, "structured_api_currency_assumption",
+    "company_pdf_calibrated_currency_assumption"])
+def test_normalization_preserves_assumption_and_does_not_claim_direct_units(method):
     comparison = module("compare_live_envelopes")
+    basis = {"target_pdf_validated": False}
+    if method is not None:
+        basis["method"] = method
     result = comparison.normalize({"claims": [{"state": "available", "field": "revenue", "value": 10,
         "unit": "NOK", "currency": "NOK", "scope": "group", "unit_assumed_currency": True,
-        "unit_assumption_basis": {"target_pdf_validated": False},
+        "unit_assumption_basis": basis,
         "period_start": "2025-01-01", "period_end": "2025-12-31"}]}, "ours")
     item = result["financial"][0]
     assert item["unit_assumed_currency"] and item["scope"] == "group"
-    assert item["unit_basis"] == "company_pdf_calibrated_currency_assumption"
+    assert item["unit_basis"] == (method or "unspecified_currency_assumption")
     assert item["unit_assumption_basis"]["target_pdf_validated"] is False
 
 
