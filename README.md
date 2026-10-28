@@ -1,6 +1,8 @@
 # Signalpost
 
-**Latest experiment — targets not met:** [27 October matched rerun and fresh holdout](docs/release/PHASE_BUDGET_RESULTS_2026-10-27.md). The matched 100 produced 0 verified-site companies, 0 jobs, 28 FTE companies and 42 financial companies in 1,190.614 seconds. Financial breadth rose to 2,491 observations (2,100 explicitly assumption-backed), but company/FTE coverage fell. The holdout failed publication on duplicate claim IDs and produced no final envelopes; optional coverage is unknown. A subsequent publication guard passed offline regressions, without a live rerun. Public `main` has **not** demonstrated the preregistered gates.
+**Latest experiment — failed:** [28 October reliability/finance experiment](docs/release/RELIABILITY_FINANCE_RESULTS_2026-10-28.md). Both frozen 100-company cohorts aborted during foundation projection on repeated role-group claim IDs, before finance/OCR/discovery. Neither produced final envelopes; coverage is unknown, not zero. The duplicate-observation repair passes offline tests and the captured first-company projection, but has not had another live benchmark. Public `main` has **not** demonstrated the acceptance gates.
+
+**Previous experiment:** [27 October matched rerun and fresh holdout](docs/release/PHASE_BUDGET_RESULTS_2026-10-27.md). The matched 100 produced 0 verified-site companies, 0 jobs, 28 FTE companies and 42 financial companies in 1,190.614 seconds, with 2,491 monetary observations (2,100 explicitly assumption-backed). Its holdout failed publication; optional coverage is unknown.
 
 **[Results — live evaluation and evidence](RESULTS.md)**
 

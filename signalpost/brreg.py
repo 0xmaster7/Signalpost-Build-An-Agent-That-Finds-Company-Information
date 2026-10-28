@@ -421,11 +421,20 @@ def _projection_helpers(org, gateway, claims, evidence, snapshots, errors):
         identity = stable_claim_id(org, field, value, source=url + "#" + pointer, content_sha256=digest,
             subject=subject, period_start=_date(start), period_end=_date(end), scope=scope,
             unit=unit, currency=currency, as_of=_date(as_of))
-        claims.append(Claim(claim_id=identity, organisation_number=org, section=section,
+        candidate = Claim(claim_id=identity, organisation_number=org, section=section,
                             field_family=family, subject_id=subject, field=field, value=value, state=PublicState.AVAILABLE,
                             unit=unit, currency=currency, period_start=_date(start), period_end=_date(end), as_of=_date(as_of),
                             scope=scope, verification_rule_id="brreg_exact_org_pointer_v1", verification_score="1.0",
-                            evidence_ids=[eid], source_snapshot_ids=[sid]))
+                            evidence_ids=[eid], source_snapshot_ids=[sid])
+        existing = next((claim for claim in claims if claim.claim_id == identity), None)
+        if existing is None:
+            claims.append(candidate)
+        else:
+            provenance = {"evidence_ids", "source_snapshot_ids"}
+            if existing.model_dump(exclude=provenance) != candidate.model_dump(exclude=provenance):
+                raise ValueError("conflicting BRREG claim identity")
+            existing.evidence_ids = list(dict.fromkeys([*existing.evidence_ids, eid]))
+            existing.source_snapshot_ids = list(dict.fromkeys([*existing.source_snapshot_ids, sid]))
 
     return request, add_claim
 

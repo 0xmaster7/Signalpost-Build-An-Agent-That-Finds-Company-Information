@@ -1,0 +1,62 @@
+{
+  "source_sha": "2ec51c948752a16484127fe8d353a4a382c60e71",
+  "source_ci": "https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/40700668085",
+  "source_ci_conclusion": "success",
+  "configuration_sha256": "8bea1bf324b67266735599c3e0f9bd583e062c5d0cdc52bb61875ac2a95eb73c",
+  "implementation_changes_between_cohorts": false,
+  "bootstrap_failures": 2,
+  "bootstrap_exit_codes": [2, 2],
+  "cohorts": {
+    "matched": {
+      "input_sha256": "acd65b35b1a87ef35c77fa673e4a44b63bd3718b339bc69adddc152889692076",
+      "exit_code": 1,
+      "elapsed_seconds": 6.885,
+      "final_envelopes": 0,
+      "pending_shells": 100,
+      "completed_checkpoint_envelopes": 0,
+      "captured_http_attempts": 9,
+      "http_received": 5,
+      "http_transport_errors": 2,
+      "http_cancelled": 2,
+      "summed_http_seconds": 5.700420,
+      "finance_companies": null,
+      "explicit_fte_companies": null,
+      "verified_website_companies": null,
+      "acceptance_pass": false
+    },
+    "holdout": {
+      "input_sha256": "8ef2df33c4c275b18ac6c6f6ca754db0a8596755ba382bab4e6bb0f54eef44af",
+      "exit_code": 1,
+      "elapsed_seconds": 6.077,
+      "final_envelopes": 0,
+      "pending_shells": 100,
+      "completed_checkpoint_envelopes": 0,
+      "captured_http_attempts": 9,
+      "http_received": 5,
+      "http_transport_errors": 2,
+      "http_cancelled": 2,
+      "summed_http_seconds": 5.570940,
+      "finance_companies": null,
+      "explicit_fte_companies": null,
+      "verified_website_companies": null,
+      "acceptance_pass": false
+    }
+  },
+  "phase_status": {
+    "official_foundation": "ran_fatal_projection_failure",
+    "structured_finance": "not_reached",
+    "wikidata": "not_reached",
+    "nav": "not_reached",
+    "websites": "not_reached",
+    "annual_documents": "not_reached",
+    "finalization": "not_reached"
+  },
+  "persisted_company_phase_counts": null,
+  "completed_phase_wall_timings": null,
+  "repair_live_verified": false,
+  "repair_captured_first_company_claims": 71,
+  "repair_captured_first_company_unique_ids": 71,
+  "replay": {"exit_code": 1, "elapsed_seconds_approximate": 3, "http_misses": 395, "http_failures": 2, "ocr_misses": 0, "final_publication": false},
+  "component_live_ablation": "unproven_incomplete_capture",
+  "coverage_is_not_accuracy": true
+}
