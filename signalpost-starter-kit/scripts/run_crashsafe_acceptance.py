@@ -105,7 +105,7 @@ def freeze_smoke(registry, original_selection, destination, seed=None, exclude_s
             raise GateError("excluded_cohort_hash_mismatch")
         excluded.update(read_input(source, 100))
         exclusion_receipts.append({"input_sha256": digest(source), "selection_sha256": digest(directory / "selection.json")})
-    private_dir(destination)  # Existing/partial selection is never rerandomized.
+    private_dir(destination)
     seed = seed or secrets.token_hex(32)
     if not re.fullmatch(r"[0-9a-f]{64}", seed):
         raise GateError("seed_requires_64_lowercase_hex_digits")
@@ -487,7 +487,7 @@ def command(repository, directory, source, config, batch_id, capture=None):
 
 
 def launch(repository, directory, source, config, batch_id, timeout, capture=None):
-    private_dir(directory)  # No overwrite, resume, retry, or reused checkpoint.
+    private_dir(directory)
     for name in ("home", "cache", "ocr-cache"):
         private_dir(directory / name)
     environment = {key: value for key, value in os.environ.items() if not key.startswith("SIGNALPOST_")}

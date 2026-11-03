@@ -266,7 +266,7 @@ def test_replay_requires_exact_bytes_and_zero_misses(tmp_path):
     artifacts(replay, orgs, replay=True)
     assert acceptance.summarize(replay, orgs, acceptance.PHASES, True, live)["gate_pass"]
     with (replay / "envelopes.jsonl").open("a") as stream:
-        stream.write("\n")  # Semantic equality is deliberately insufficient.
+        stream.write("\n")
     assert not acceptance.summarize(replay, orgs, acceptance.PHASES, True, live)["gates"]["exact_output_bytes_equal"]
     (replay / "envelopes.jsonl").write_bytes((live / "envelopes.jsonl").read_bytes())
     batch = json.loads((replay / "stdout.log").read_text())
@@ -340,7 +340,7 @@ def test_default_runs_only_smoke_then_replay_with_private_logs_fresh_checkpoints
     assert (tmp_path / "acceptance" / "smoke" / "stdout.log").stat().st_mode & 0o077 == 0
     assert not (tmp_path / "acceptance" / "matched").exists()
     assert acceptance.main(args) == 1
-    assert len(calls) == 2  # A repeat invocation cannot retry smoke.
+    assert len(calls) == 2
 
 
 def test_failed_smoke_stops_before_replay_reports_traceback_without_secrets(frame, tmp_path, monkeypatch, capsys):
