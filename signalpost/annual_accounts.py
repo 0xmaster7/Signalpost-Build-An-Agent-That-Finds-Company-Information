@@ -476,12 +476,13 @@ def _ocr_worker(pdf: bytes, org: str | None = None,
 class DocumentProcessor:
     """Two killable workers with context-bound, atomic persistent page results."""
     def __init__(self, seconds: float | None = None, *, deadline: float | None = None,
-                 cache_path: str | Path | None = None, cache_only: bool = False):
+                 cache_path: str | Path | None = None, cache_only: bool = False, recording=None):
         """Optional run budget uses an absolute time.monotonic deadline."""
         self.slots = asyncio.Semaphore(2)
         self.cache: dict[str, list[dict[str, Any]]] = {}
         self.cache_only = cache_only
         self.cache_misses = 0
+        self.recording = recording
         self.cache_path = Path(cache_path or os.environ.get("SIGNALPOST_OCR_CACHE") or
             Path(__file__).resolve().parents[1] / ".signalpost-cache" / "ocr")
         self.model_versions = {}
@@ -545,6 +546,36 @@ class DocumentProcessor:
 
     async def ocr(self, body: bytes, seconds: float, *, org: str | None = None,
                   record: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], bool]:
+        if self.recording is None:
+            return await self._ocr(body, seconds, org=org, record=record)
+        control = {"pdf_sha256": hashlib.sha256(body).hexdigest(), "org": org, "record": record,
+            "parser": PARSER_VERSION, "strategy": FTE_STRATEGY, "models": self.model_versions}
+        key = "ocr:" + hashlib.sha256(json.dumps(control, sort_keys=True, separators=(",", ":"),
+            default=str).encode()).hexdigest()
+        saved = self.recording.replay_execution(key) if self.recording.replay else None
+        if saved is not None and saved["status"] == "timeout":
+            raise TimeoutError("ocr_deadline")
+        if saved is not None and saved["status"] == "cancelled":
+            raise asyncio.CancelledError()
+        if saved is not None and saved["status"] != "completed":
+            self.recording._fail("recorded OCR failure cannot be reconstructed: " + key)
+        try:
+            pages, cache_hit = await self._ocr(body, seconds, org=org, record=record)
+        except (asyncio.CancelledError, Exception) as exc:
+            if not self.recording.replay:
+                state = ("cancelled" if isinstance(exc, asyncio.CancelledError) else
+                    "timeout" if isinstance(exc, TimeoutError) else "failed")
+                self.recording.record_execution(key, {"status": state, "error_type": type(exc).__name__})
+            raise
+        payload = {"pages": list(pages), "coverage": getattr(pages, "coverage", None)}
+        self.recording.assert_identity(key + ":pages", json.dumps(payload, sort_keys=True,
+            separators=(",", ":"), allow_nan=False).encode())
+        if not self.recording.replay:
+            self.recording.record_execution(key, {"status": "completed", "cache_hit": cache_hit})
+        return pages, saved["cache_hit"] if saved is not None else cache_hit
+
+    async def _ocr(self, body: bytes, seconds: float, *, org: str | None = None,
+                   record: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], bool]:
         if (org is None) != (record is None):
             raise ValueError("org and record must be supplied together")
         digest = hashlib.sha256(body).hexdigest()
@@ -643,10 +674,10 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
         return result
     record = latest[0]
     url = f"{COPY_ROOT}/{org}/{record['period_end'][:4]}"
-    retrieved = datetime.now(timezone.utc)
     try:
         status, headers, body, final_url, outcome = await gateway.fetch(url, purpose="annual_account_copy",
             max_bytes=MAX_PDF_BYTES, allowed_hosts={"data.brreg.no"}, access_profile="brreg_document_api")
+        retrieved = getattr(gateway, "observed_at", None) or datetime.now(timezone.utc)
         if status != 200 or outcome != "ok" or not body.startswith(b"%PDF"):
             audit.update(state="not_available" if status in {404, 410} else "blocked" if outcome.startswith("robots") or status in {401,403,429} or outcome == "budget_exhausted" else "failed",
                 reason=f"pdf_{status}_{outcome}")

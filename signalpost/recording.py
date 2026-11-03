@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -18,6 +19,7 @@ import stat
 import tempfile
 from datetime import datetime, timezone
 from typing import Any
+import uuid
 
 
 class ReplayError(RuntimeError):
@@ -41,17 +43,28 @@ class HttpRecording:
         self.misses = 0
         self.failures = 0
         self.hits = 0
+        self.missing_requests: list[dict[str, Any]] = []
         self._positions: dict[str, int] = {}
         self._counts: dict[str, int] = {}
+        self._pending: set[tuple[str, int]] = set()
+        self._unreplayable = False
         if any(part.is_symlink() for part in [self.root, *self.root.parents]):
             raise ReplayError("recording path may not contain symlinks")
         if replay:
             self.metadata = self._read("manifest.json")
-            if (self.metadata.get("version") != 1 or
+            if (self.metadata.get("version") != 2 or
                     self.metadata.get("variant_policy") != "ordered-physical-attempts" or
                     self.metadata.get("header_policy") != "exact-if-modified-since-no-credentials" or
-                    not isinstance(self.metadata.get("run"), dict)):
+                    not isinstance(self.metadata.get("run"), dict) or
+                    not isinstance(self.metadata.get("complete"), bool) or
+                    not isinstance(self.metadata.get("attempts"), dict)):
                 self._fail("unsupported recording manifest")
+            for key, entry in self.metadata["attempts"].items():
+                if (not re.fullmatch(r"[0-9a-f]{64}", key) or not isinstance(entry, dict) or
+                        not isinstance(entry.get("count"), int) or entry["count"] < 1 or
+                        not isinstance(entry.get("request"), dict) or
+                        hashlib.sha256(_encoded(entry["request"])).hexdigest() != key):
+                    self._fail("malformed recording attempt index")
             if run_metadata is not None and run_metadata != self.metadata["run"]:
                 self._fail("run metadata mismatch")
         else:
@@ -59,8 +72,9 @@ class HttpRecording:
             if any(self.root.iterdir()):
                 raise ReplayError("recording requires an empty private directory")
             os.chmod(self.root, 0o700)
-            self.metadata = {"version": 1, "variant_policy": "ordered-physical-attempts",
+            self.metadata = {"version": 2, "variant_policy": "ordered-physical-attempts",
                              "header_policy": "exact-if-modified-since-no-credentials",
+                             "attempts": {}, "complete": False,
                              "run": run_metadata if run_metadata is not None else
                              {"run_started_at": datetime.now(timezone.utc).isoformat()}}
             self._write("manifest.json", self.metadata)
@@ -70,7 +84,7 @@ class HttpRecording:
         raise ReplayError(message)
 
     def _path(self, name: str) -> Path:
-        if name != "manifest.json" and not re.fullmatch(r"[0-9a-f]{64}-[0-9]+\.json", name):
+        if name not in {"manifest.json", "execution.json"} and not re.fullmatch(r"[0-9a-f]{64}-[0-9]+\.json", name):
             self._fail("invalid recording filename")
         path = self.root / name
         if self.root.is_symlink() or path.is_symlink():
@@ -78,6 +92,8 @@ class HttpRecording:
         return path
 
     def _write(self, name: str, payload: dict[str, Any]) -> None:
+        if self.replay:
+            self._fail("replay cannot write to its recording")
         wrapped = _encoded({"sha256": hashlib.sha256(_encoded(payload)).hexdigest(), "payload": payload})
         descriptor, temporary = tempfile.mkstemp(prefix=".capture-", dir=self.root)
         try:
@@ -87,6 +103,11 @@ class HttpRecording:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self._path(name))
+            directory_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
         except OSError:
             self._fail("cannot atomically write private recording")
         finally:
@@ -110,31 +131,69 @@ class HttpRecording:
             return payload
         except FileNotFoundError:
             self.misses += 1
-            raise ReplayError("recording missing; live fallback forbidden") from None
+            raise ReplayError(f"recording missing: {name}; live fallback forbidden") from None
         except (OSError, ValueError, KeyError, TypeError):
             self._fail("malformed recording")
 
-    def save(self, request: dict[str, Any], *, response: tuple[int, dict[str, str], bytes, str] | None,
-             outcome: str, approved_ips: tuple[str, ...] | None, elapsed_ms: float) -> None:
+    def begin(self, request: dict[str, Any], *, approved_ips: tuple[str, ...] | None) -> dict[str, Any]:
+        """Reserve order before I/O; a crash leaves an explicit incomplete attempt."""
+        if self.replay or self.metadata["complete"]:
+            self._fail("cannot append to a replay or sealed capture")
         key = hashlib.sha256(_encoded(request)).hexdigest()
         position = self._counts.get(key, 0)
+        attempt = {"key": key, "position": position, "request_id": str(uuid.uuid4()),
+                   "started_at": datetime.now(timezone.utc).isoformat()}
+        self._write(f"{key}-{position}.json", {**attempt, "request": request, "outcome": "incomplete",
+                    "approved_ips": approved_ips})
+        self._counts[key] = position + 1
+        self._pending.add((key, position))
+        self.metadata["attempts"][key] = {"request": request, "count": position + 1}
+        self._write("manifest.json", self.metadata)
+        return attempt
+
+    def save(self, request: dict[str, Any], *, response: tuple[int, dict[str, str], bytes, str] | None,
+             outcome: str, approved_ips: tuple[str, ...] | None, elapsed_ms: float,
+             retrieved_at: datetime | None = None, attempt: dict[str, Any] | None = None) -> dict[str, Any]:
+        attempt = attempt or self.begin(request, approved_ips=approved_ips)
+        key, position = attempt["key"], attempt["position"]
+        if (self.replay or (key, position) not in self._pending or
+                hashlib.sha256(_encoded(request)).hexdigest() != key):
+            self._fail("invalid attempt reservation")
         payload = {"request": request, "outcome": outcome, "approved_ips": approved_ips,
-                   "retrieved_at": datetime.now(timezone.utc).isoformat(), "elapsed_ms": elapsed_ms,
+                   **attempt, "retrieved_at": (retrieved_at or datetime.now(timezone.utc)).isoformat(),
+                   "elapsed_ms": elapsed_ms,
                    "response": None if response is None else
                    {"status": response[0], "headers": response[1],
                     "body": base64.b64encode(response[2]).decode(), "final_url": response[3]}}
         self._write(f"{key}-{position}.json", payload)
-        self._counts[key] = position + 1
+        self._pending.remove((key, position))
+        self._unreplayable |= outcome == "unexpected_error"
+        return payload
 
     def load(self, request: dict[str, Any]) -> dict[str, Any]:
         key = hashlib.sha256(_encoded(request)).hexdigest()
         position = self._positions.get(key, 0)
-        payload = self._read(f"{key}-{position}.json")
+        entry = self.metadata["attempts"].get(key)
+        if entry is None or position >= entry["count"]:
+            self.misses += 1
+            self._missing(request, key, position)
+        misses_before = self.misses
         try:
+            payload = self._read(f"{key}-{position}.json")
+        except ReplayError:
+            if self.misses > misses_before:
+                self._missing(request, key, position)
+            raise
+        try:
+            if payload.get("outcome") == "incomplete":
+                self._fail(f"incomplete physical attempt: key={key} position={position}")
             if (payload["request"] != request or
                     payload["outcome"] not in {"received", "timeout", "transport_error", "cancelled"} or
                     not isinstance(payload["retrieved_at"], str) or
-                    not isinstance(payload["elapsed_ms"], (int, float)) or payload["elapsed_ms"] < 0):
+                    not isinstance(payload["elapsed_ms"], (int, float)) or
+                    not math.isfinite(payload["elapsed_ms"]) or payload["elapsed_ms"] < 0 or
+                    not isinstance(payload["request_id"], str) or not payload["request_id"] or
+                    payload["key"] != key or payload["position"] != position):
                 self._fail("recording request or outcome mismatch")
             if datetime.fromisoformat(payload["retrieved_at"]).tzinfo is None:
                 self._fail("recording retrieval time requires a timezone")
@@ -151,10 +210,78 @@ class HttpRecording:
                 response["body"] = base64.b64decode(response["body"], validate=True)
             elif response is not None:
                 self._fail("unexpected response on recorded failure")
-            if payload["outcome"] == "cancelled":
-                self._fail("capture contains cancelled request")
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, OverflowError):
             self._fail("malformed recording payload")
         self._positions[key] = position + 1
         self.hits += 1
         return payload
+
+    def _missing(self, request: dict[str, Any], key: str, position: int) -> None:
+        missing = {"key": key, "position": position, "request": request}
+        self.missing_requests.append(missing)
+        raise ReplayError("recording missing: " + _encoded(missing).decode() +
+                          "; live fallback forbidden") from None
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Safe request descriptors only: request headers/credentials are never keys."""
+        remaining = [{"key": key, "request": entry["request"],
+                      "positions": list(range(self._positions.get(key, 0), entry["count"]))}
+                     for key, entry in self.metadata["attempts"].items()
+                     if self._positions.get(key, 0) < entry["count"]]
+        return {"http_misses": self.misses, "http_failures": self.failures, "http_hits": self.hits,
+                "missing_requests": list(self.missing_requests), "unconsumed_requests": remaining,
+                "capture_complete": self.metadata["complete"]}
+
+    def assert_complete(self) -> None:
+        """Run before publication, even if extractors caught ReplayError locally."""
+        if not self.replay:
+            self._fail("completeness assertion requires replay")
+        diagnostic = self.diagnostics()
+        if (not diagnostic["capture_complete"] or self.misses or self.failures or
+                diagnostic["unconsumed_requests"]):
+            self._fail("replay incomplete: " + _encoded(diagnostic).decode())
+
+    def _execution(self) -> dict[str, Any]:
+        payload = (self._read("execution.json") if self._path("execution.json").exists()
+                   else {"controls": {}, "identities": {}})
+        if not isinstance(payload.get("controls"), dict) or not isinstance(payload.get("identities"), dict):
+            self._fail("malformed execution metadata")
+        return payload
+
+    def record_execution(self, name: str, value: Any) -> None:
+        """Store scheduler/clock controls, never extractor facts or final output."""
+        if self.replay or self.metadata["complete"]:
+            self._fail("execution controls require an unsealed live capture")
+        payload = self._execution()
+        if name in payload["controls"]:
+            self._fail("duplicate execution control")
+        payload["controls"][name] = value
+        self._write("execution.json", payload)
+
+    def replay_execution(self, name: str) -> Any:
+        if not self.replay:
+            self._fail("execution control lookup requires replay")
+        payload = self._execution()
+        if name not in payload["controls"]:
+            self._fail(f"missing execution control: {name}")
+        return payload["controls"][name]
+
+    def assert_identity(self, name: str, actual: bytes) -> None:
+        """Compare fresh extractor/output bytes to a digest; never return saved output."""
+        payload = self._execution()
+        identity = {"sha256": hashlib.sha256(actual).hexdigest(), "bytes": len(actual)}
+        if self.replay:
+            if payload["identities"].get(name) != identity:
+                self._fail(f"replay identity mismatch: {name}")
+        else:
+            if self.metadata["complete"] or name in payload["identities"]:
+                self._fail("identity requires an unused name in an unsealed capture")
+            payload["identities"][name] = identity
+            self._write("execution.json", payload)
+
+    def seal(self) -> None:
+        """Mark successful, fully drained capture after identity digests are saved."""
+        if self.replay or self._pending or self._unreplayable or self.metadata["complete"]:
+            self._fail("cannot seal replay, pending, unreplayable, or already sealed capture")
+        self.metadata["complete"] = True
+        self._write("manifest.json", self.metadata)

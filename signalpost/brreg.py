@@ -376,16 +376,17 @@ def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnaps
 
 def _projection_helpers(org, gateway, claims, evidence, snapshots, errors):
     async def request(url: str, purpose: str, section: str) -> tuple[Any, str | None, int, datetime, str | None]:
-        retrieved = datetime.now(timezone.utc)
         try:
             status, headers, payload, final_url, outcome = await gateway.fetch(url, purpose=purpose, user_agent=UA,
                                                                                 max_bytes=4 * 1024 * 1024,
                                                                                 allowed_hosts={"data.brreg.no"},
                                                                                 access_profile="brreg_structured_api")
         except Exception as exc:
+            retrieved = getattr(gateway, "observed_at", None) or datetime.now(timezone.utc)
             detail = str(exc).replace("\n", " ")[:160]
             errors.append(RunError(code=f"BRREG_{purpose.upper()}_TRANSPORT", message=f"{type(exc).__name__}: {detail}", retryable=True, source_id=section))
             return None, None, 0, retrieved, None
+        retrieved = getattr(gateway, "observed_at", None) or datetime.now(timezone.utc)
         response_digest = hashlib.sha256(payload).hexdigest()
         if final_url and urlsplit(final_url).hostname != "data.brreg.no":
             errors.append(RunError(code="BRREG_REDIRECT_HOST_REJECTED", message="BRREG endpoint redirected outside its official API host."))

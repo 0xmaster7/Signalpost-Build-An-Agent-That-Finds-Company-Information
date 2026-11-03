@@ -4,6 +4,7 @@ import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 import gzip
+import hashlib
 import http.client
 import ipaddress
 import json
@@ -27,7 +28,16 @@ from .recording import HttpRecording
 
 
 _REQUEST_COMPANY: ContextVar[str | None] = ContextVar("signalpost_request_company", default=None)
-_HTTP_OBSERVED_AT: ContextVar[datetime | None] = ContextVar("signalpost_http_observed_at", default=None)
+_REQUEST_PHASE: ContextVar[str | None] = ContextVar("signalpost_request_phase", default=None)
+
+
+@contextmanager
+def request_phase_scope(phase: str):
+    token = _REQUEST_PHASE.set(phase)
+    try:
+        yield
+    finally:
+        _REQUEST_PHASE.reset(token)
 
 
 @contextmanager
@@ -344,6 +354,7 @@ class NetworkGateway:
         self.proxy_url = proxy_url
         self.budget = budget
         self.ledger = RequestLedger()
+        self._observed_at: ContextVar[datetime | None] = ContextVar("signalpost_http_observed_at", default=None)
         concurrency = (global_concurrency if global_concurrency is not None else
                        budget.config.global_http_concurrency if budget else 32)
         if concurrency < 1:
@@ -355,7 +366,7 @@ class NetworkGateway:
         self._rate_slots: dict[str, asyncio.Lock] = {}
         self._robots: dict[str, tuple[str, float | None, str]] = {}
         self._robots_slots: dict[str, asyncio.Lock] = {}
-        self._inflight: dict[tuple[Any, ...], asyncio.Future[tuple[int, dict[str, str], bytes, str, str]]] = {}
+        self._inflight: dict[tuple[Any, ...], asyncio.Future] = {}
         self.coalesced_requests = 0
         self._default_rates: dict[str, float] = {}
         self._rate_adjustments: dict[str, int] = {}
@@ -367,18 +378,46 @@ class NetworkGateway:
 
     @property
     def observed_at(self) -> datetime:
-        return _HTTP_OBSERVED_AT.get() or datetime.now(timezone.utc)
+        return self._observed_at.get() or datetime.now(timezone.utc)
+
+    @property
+    def replay_missing_requests(self) -> list[dict[str, Any]]:
+        return list(self.http_recording.missing_requests) if self.http_recording else []
 
     @property
     def replay_failures(self) -> int:
         return self.http_recording.failures if self.http_recording else 0
 
     def _validate_host(self, url: str) -> tuple[str, ...] | None:
-        return validate_public_host(url, trusted_proxy=self.replay_mode or self.trusted_proxy)
+        control_key = "dns_policy:" + hashlib.sha256(url.encode()).hexdigest()
+        failures = {"hostname did not resolve": "unresolved",
+            "hostname resolves to a non-public address": "non_public"}
+        if self.replay_mode:
+            approved = validate_public_host(url, trusted_proxy=True)
+            saved = self.http_recording._execution()["controls"].get(control_key)
+            if saved is not None:
+                message = next((message for message, code in failures.items() if code == saved.get("failure")), None)
+                if message is None:
+                    self.http_recording._fail("invalid recorded DNS policy: " + control_key)
+                self._observed_at.set(datetime.fromisoformat(saved["observed_at"]))
+                raise NetworkPolicyError(message)
+            return approved
+        try:
+            return validate_public_host(url, trusted_proxy=self.trusted_proxy)
+        except NetworkPolicyError as exc:
+            observed_at = datetime.now(timezone.utc)
+            if self.http_recording and str(exc) in failures:
+                if control_key not in self.http_recording._execution()["controls"]:
+                    self.http_recording.record_execution(control_key, {"failure": failures[str(exc)],
+                        "observed_at": observed_at.isoformat()})
+                observed_at = datetime.fromisoformat(self.http_recording._execution()["controls"][control_key]["observed_at"])
+            self._observed_at.set(observed_at)
+            raise
 
     def _assert_recordable_url(self, url: str) -> None:
         if self.http_recording and any(
-                re.search(r"(?i)(token|authorization|password|secret|api[_-]?key|credential)", name)
+                re.search(r"(?i)(token|authorization|password|secret|api[_-]?key|credential|access[_-]?key|"
+                          r"(?:^|[-_])(?:auth|sig|signature|key|jwt)(?:$|[-_]))", name)
                 for name, value in urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query, keep_blank_values=True)):
             raise NetworkPolicyError("credential-bearing query parameters cannot be recorded or replayed")
 
@@ -387,15 +426,28 @@ class NetworkGateway:
                             api_headers: dict[str, str] | None,
                             approved_ips: tuple[str, ...] | None) -> tuple[int, dict[str, str], bytes, str]:
         self._assert_recordable_url(target)
-        request = {"url": target, "purpose": purpose, "user_agent": user_agent, "max_bytes": cap,
+        request = {"method": "GET", "url": target,
+                   "params": [list(pair) for pair in urllib.parse.parse_qsl(
+                       urllib.parse.urlsplit(target).query, keep_blank_values=True)],
+                   "purpose": purpose, "user_agent": user_agent, "max_bytes": cap,
+                   "company": _REQUEST_COMPANY.get(), "phase": _REQUEST_PHASE.get(),
                    "use_robots": use_robots, "access_profile": access_profile,
                    "allowed_hosts": sorted(h.casefold() for h in allowed_hosts) if allowed_hosts is not None else None,
                    "if_modified_since": (api_headers or {}).get("If-Modified-Since"),
                    "retries": self.retries, "redirect_limit": self.redirect_limit,
                    "trusted_proxy": self.trusted_proxy, "timeout": self.timeout}
         if self.replay_mode:
+            checkpoint = asyncio.get_running_loop().create_future()
+            def release() -> None:
+                if not checkpoint.done():
+                    checkpoint.set_result(None)
+            handle = asyncio.get_running_loop().call_soon(release)
+            try:
+                await checkpoint
+            finally:
+                handle.cancel()
             captured = self.http_recording.load(request)
-            _HTTP_OBSERVED_AT.set(datetime.fromisoformat(captured["retrieved_at"]))
+            self._observed_at.set(datetime.fromisoformat(captured["retrieved_at"]))
             try:
                 if any(not _public_ip(ip) for ip in captured["approved_ips"] or []):
                     raise ValueError("non-public recorded address")
@@ -404,11 +456,16 @@ class NetworkGateway:
                     self._validate_host(canonical_url(response["final_url"]))
             except ValueError:
                 self.http_recording._fail("recorded destination violates host policy")
+            self._record(target, purpose, response["status"] if response is not None else None,
+                         len(response["body"]) if response is not None else 0, 0, captured["outcome"], captured=captured)
             if captured["outcome"] == "timeout":
                 raise asyncio.TimeoutError()
             if captured["outcome"] == "transport_error":
                 raise OSError("recorded transport failure")
+            if captured["outcome"] == "cancelled":
+                raise asyncio.CancelledError()
             return response["status"], response["headers"], response["body"], response["final_url"]
+        attempt = self.http_recording.begin(request, approved_ips=approved_ips) if self.http_recording else None
         start = time.monotonic()
         headers = {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}
         try:
@@ -416,17 +473,26 @@ class NetworkGateway:
                 self.transport.request(target, headers, self.timeout, approved_ips=approved_ips, max_bytes=cap)
                 if isinstance(self.transport, UrlLibTransport) else
                 self.transport.request(target, headers, self.timeout), timeout=self.timeout)
-        except (asyncio.CancelledError, asyncio.TimeoutError, OSError, urllib.error.URLError) as exc:
+        except (asyncio.CancelledError, Exception) as exc:
+            retrieved_at = datetime.now(timezone.utc)
+            self._observed_at.set(retrieved_at)
+            elapsed_ms = (time.monotonic() - start) * 1000
+            outcome = ("cancelled" if isinstance(exc, asyncio.CancelledError) else
+                       "timeout" if isinstance(exc, asyncio.TimeoutError) else
+                       "transport_error" if isinstance(exc, (OSError, urllib.error.URLError)) else "unexpected_error")
+            captured = None
             if self.http_recording:
-                outcome = ("cancelled" if isinstance(exc, asyncio.CancelledError) else
-                           "timeout" if isinstance(exc, asyncio.TimeoutError) else "transport_error")
-                self.http_recording.save(request, response=None, outcome=outcome, approved_ips=approved_ips,
-                                         elapsed_ms=(time.monotonic() - start) * 1000)
+                captured = self.http_recording.save(request, response=None, outcome=outcome, approved_ips=approved_ips,
+                    elapsed_ms=elapsed_ms, retrieved_at=retrieved_at, attempt=attempt)
+            self._record(target, purpose, None, 0, start, outcome, captured=captured)
             raise
+        retrieved_at = datetime.now(timezone.utc)
+        self._observed_at.set(retrieved_at)
+        captured = None
         if self.http_recording:
-            self.http_recording.save(request, response=response, outcome="received", approved_ips=approved_ips,
-                                     elapsed_ms=(time.monotonic() - start) * 1000)
-        _HTTP_OBSERVED_AT.set(datetime.now(timezone.utc))
+            captured = self.http_recording.save(request, response=response, outcome="received", approved_ips=approved_ips,
+                elapsed_ms=(time.monotonic() - start) * 1000, retrieved_at=retrieved_at, attempt=attempt)
+        self._record(target, purpose, response[0], len(response[2]), start, "received", captured=captured)
         return response
 
     def set_rate_limit(self, host: str, requests_per_second: float) -> None:
@@ -460,14 +526,16 @@ class NetworkGateway:
         existing = self._inflight.get(key)
         if existing is not None:
             self.coalesced_requests += 1
-            return await asyncio.shield(existing)
+            result, observed_at = await asyncio.shield(existing)
+            self._observed_at.set(observed_at)
+            return result
         future = asyncio.get_running_loop().create_future()
         self._inflight[key] = future
         try:
             result = await self._fetch_uncached(target, purpose=purpose, user_agent=user_agent,
                 max_bytes=max_bytes, use_robots=use_robots, allowed_hosts=allowed_hosts,
                 access_profile=access_profile, api_headers=api_headers)
-            future.set_result(result)
+            future.set_result((result, self._observed_at.get()))
             return result
         except BaseException as exc:
             if not future.done():
@@ -542,19 +610,14 @@ class NetworkGateway:
                             company=org_match.group(1) if org_match else _REQUEST_COMPANY.get(),
                             host=urllib.parse.urlsplit(target).hostname):
                         return 0, {}, b"", target, "budget_exhausted"
-                    start = time.monotonic()
                     status = None
                     body = b""
                     headers: dict[str, str] = {}
-                    outcome = "transport_error"
-                    response_recorded = False
                     try:
                         status, headers, body, _ = await self._http_request(
                             target, purpose=purpose, user_agent=user_agent, cap=cap, use_robots=use_robots,
                             allowed_hosts=allowed_hosts, access_profile=access_profile, api_headers=api_headers,
                             approved_ips=(ordered_ips[address_index % len(ordered_ips)],) if ordered_ips else None)
-                        self._record(target, purpose, status, len(body), start, "received")
-                        response_recorded = True
                         location = headers.get("Location") or headers.get("location")
                         if status in {301, 302, 303, 307, 308} and location:
                             self.ledger.entries[-1].redirect_location = canonical_url(urllib.parse.urljoin(target, location))
@@ -623,13 +686,10 @@ class NetworkGateway:
                             await self._recover_host_rate(parsed.hostname or "")
                         return status, headers, body, target, classify_response(status, headers, body)
                     except asyncio.CancelledError:
-                        if not response_recorded:
-                            self._record(target, purpose, status, len(body), start, "cancelled")
                         raise
                     except (asyncio.TimeoutError, OSError, urllib.error.URLError) as exc:
                         outcome = "timeout" if isinstance(exc, asyncio.TimeoutError) else "transport_error"
                         address_index += 1
-                        self._record(target, purpose, status, len(body), start, outcome)
                         if attempt >= self.retries:
                             return status or 0, headers, b"", target, outcome
                         if not self.replay_mode:
@@ -744,8 +804,11 @@ class NetworkGateway:
                 await asyncio.sleep(delay - elapsed)
             self._last_request[host] = time.monotonic()
 
-    def _record(self, url: str, purpose: str, status: int | None, size: int, start: float, outcome: str) -> None:
-        self.ledger.entries.append(LedgerEntry(str(uuid.uuid4()), url, purpose, status, size, (time.monotonic() - start) * 1000, outcome))
+    def _record(self, url: str, purpose: str, status: int | None, size: int, start: float, outcome: str,
+                *, captured: dict[str, Any] | None = None) -> None:
+        self.ledger.entries.append(LedgerEntry(
+            captured["request_id"] if captured else str(uuid.uuid4()), url, purpose, status, size,
+            captured["elapsed_ms"] if captured else (time.monotonic() - start) * 1000, outcome))
 
 
 def _robots_disallows(text: str, path: str, user_agent: str) -> bool:

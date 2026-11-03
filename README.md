@@ -25,6 +25,10 @@ Clone this public repository and enter its directory, then run:
 ./run.sh --input companies.jsonl --output output.jsonl
 ```
 
+For recorded live smoke and strict offline replay, see the
+[crash-safe acceptance workflow](signalpost-starter-kit/scripts/crashsafe_acceptance_usage.md).
+Implementation tests alone do not establish live coverage or replay acceptance.
+
 Prerequisites: **CPython 3.12+** (3.12 recommended), Linux with glibc or macOS on x86_64/arm64, and `curl` for the first setup. Setup downloads checksum-verified **uv 0.8.0**, creates `signalpost-starter-kit/.venv`, installs production dependencies from [uv.lock](signalpost-starter-kit/uv.lock), and checks the local PDF/OCR modules. Tools, caches and temporary installation files stay inside the checkout. Setup is safe to rerun; it does not install Python, modify shell profiles, use sudo or require Tesseract, Docker, API keys or paid services. Outbound HTTPS is needed for installation and live research. Set `SIGNALPOST_PYTHON=/path/to/python3.12` during setup if interpreter selection needs an override.
 
 `run.sh` performs **no installation**. By default it enables the real production evaluator's **live BRREG, official annual-account PDF/local OCR, independent NAV jobs, and permitted website research** paths. NAV and batch candidate discovery share the existing gateway, budgets and completion reserve; current public feeds are not used to reconstruct an explicit historical cutoff. Arguments and exit codes are preserved; relative input/output paths resolve from your current directory. From another directory, use `/absolute/path/to/checkout/run.sh ...`.

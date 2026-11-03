@@ -294,7 +294,26 @@ class CheckpointStore:
         self.connection.execute("CREATE TABLE IF NOT EXISTS run_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.connection.execute("CREATE TABLE IF NOT EXISTS shells (row_number INTEGER PRIMARY KEY, input_ref TEXT, organisation_number TEXT, execution_state TEXT)")
         self.connection.execute("CREATE TABLE IF NOT EXISTS phase_results (phase TEXT, company TEXT, payload TEXT NOT NULL, PRIMARY KEY(phase,company))")
+        self.connection.execute("CREATE TABLE IF NOT EXISTS phase_status (phase TEXT, company TEXT, payload TEXT NOT NULL, PRIMARY KEY(phase,company))")
         self.connection.commit()
+
+    def save_phase_status(self, phase: str, company: str, state: str, seconds: float = 0.0,
+                          *, reason: str | None = None, traceback_sha256: str | None = None) -> None:
+        """Commit progress independently of later phase or process failures."""
+        status = state if state in {"failed", "deadline_skipped"} else "ran" if state == "completed" else "skipped"
+        if reason is None and state != "completed":
+            reason = "source_reported_failure" if state == "failed" else state
+        payload = dict(status=status, outcome=state, seconds=max(0.0, seconds),
+                       ran=state in {"completed", "failed"}, skipped=status == "skipped",
+                       deadline_skipped=status == "deadline_skipped", failed=status == "failed",
+                       reason=reason, traceback_sha256=traceback_sha256)
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO phase_status VALUES (?,?,?)",
+                                    (phase, company, json.dumps(payload)))
+
+    def phase_statuses(self, phase: str) -> dict[str, dict]:
+        return {company: json.loads(payload) for company, payload in self.connection.execute(
+            "SELECT company,payload FROM phase_status WHERE phase=?", (phase,))}
 
     def set_meta(self, key: str, value: str) -> None:
         self.connection.execute("INSERT OR REPLACE INTO run_meta(key,value) VALUES (?,?)", (key, value))

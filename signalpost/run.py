@@ -22,11 +22,50 @@ from .models import (Claim, Envelope, Evidence, PublicState, RefreshState, RunEr
                      empty_section, validate_batch_publication_graph)
 from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
                          OrderedAtomicWriter, RunBudget, publish_paired_artifacts)
-from .network import NetworkGateway, StructuredLogger, registered_domain, request_company_scope
+from .network import NetworkGateway, StructuredLogger, registered_domain, request_company_scope, request_phase_scope
+from .execution import ExecutionTrace, implementation_identity
+from .recording import HttpRecording, ReplayError
 from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company, fetch_financial_statements
 from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, artifact_ref, canonical_json,
                       compare_states, company_state, merge_prior_facts, validate_artifact, sha256_json)
 from .synthesis import synthesize
+from .phases import failure_error, error_fingerprint
+
+
+def _phase_failure_envelope(row, batch_id, cutoff, phase, exc, clock):
+    sections = {name: Section(state=PublicState.FAILED) for name in (
+        "identity_brand", "accounts_history", "leadership_workplaces", "website_owned_profiles",
+        "hiring_activity", "claims_evidence_states", "refresh_changes")}
+    return Envelope(input_ref=row.input_ref, row_number=row.row_number,
+        organisation_number=row.organisation_number, terminal_state=PublicState.FAILED,
+        sections=sections, refresh=RefreshState(last_attempt_at=clock),
+        errors=[failure_error(phase.upper() + "_UNEXPECTED_FAILURE", phase, exc)],
+        batch_id=batch_id, evidence_cutoff=cutoff, created_at=clock)
+
+
+def _finalize_company(envelope, old_state, previous_state_error, previous_ref, current_ref, current_state, cutoff):
+    if previous_state_error:
+        envelope.refresh.mode = "incompatible_prior_state"
+        envelope.errors.append(RunError(code="REFRESH_PRIOR_STATE_INCOMPATIBLE",
+            message="Prior state was not used: " + previous_state_error[:400]))
+    elif not old_state:
+        envelope.refresh.mode = "baseline_no_prior_state"
+    else:
+        envelope.refresh.mode = "compared"
+        envelope.refresh.previous_state_ref = previous_ref
+        envelope.refresh.changes = compare_states(old_state, current_state,
+            cutoff=cutoff, previous_ref=previous_ref, current_ref=current_ref)
+    envelope.refresh.current_state_ref = current_ref
+    envelope.refresh.last_attempt_at = envelope.created_at
+    envelope.refresh.retained_claim_ids = sorted(claim.get("claim_id", "") for claim in current_state.claims)
+    section = envelope.sections["refresh_changes"]
+    section.state = PublicState.AVAILABLE if envelope.refresh.changes else PublicState.NOT_AVAILABLE
+    section.attempt_outcome = envelope.refresh.mode
+    section.diagnostics = [f"material_changes:{len(envelope.refresh.changes)}"]
+    envelope.synthesis["summary"] = synthesize(envelope)
+    validate_batch_publication_graph([envelope])
+    to_evaluator(envelope)
+    return envelope
 
 
 def _website_profile(org: str, *, live_result: Any | None = None, frozen: dict[str, Any] | None = None,
@@ -82,6 +121,17 @@ def _find_default_input() -> Path | None:
         if path.exists():
             return path
     return None
+
+
+def _failed_envelope(row: Any, batch_id: str, cutoff: datetime, errors: list[RunError]) -> Envelope:
+    """Build a validated failure without calling a failed source projector again."""
+    return Envelope(input_ref=row.input_ref, row_number=row.row_number,
+        organisation_number=row.organisation_number, terminal_state=PublicState.FAILED,
+        sections={name: empty_section(PublicState.FAILED) for name in (
+            "identity_brand", "accounts_history", "leadership_workplaces", "website_owned_profiles",
+            "hiring_activity", "claims_evidence_states", "refresh_changes")},
+        refresh=RefreshState(last_attempt_at=datetime.now(timezone.utc)), errors=errors,
+        batch_id=batch_id, evidence_cutoff=cutoff)
 
 
 def _envelope(row: Any, fixture: dict[str, dict[str, Any]], batch_id: str, cutoff: datetime, previous: dict[str, Any],
@@ -313,10 +363,9 @@ def _merge_optional_website_result(envelope: Envelope, result: Any) -> Envelope:
         envelope.errors.extend(result.errors)
         envelope.synthesis["website_research"] = result.audit
         return envelope.__class__.model_validate(envelope.model_dump())
-    except Exception:
+    except Exception as exc:
         retained = original.model_copy(deep=True)
-        retained.errors.append(RunError(code="WEBSITE_PUBLICATION_GRAPH_REJECTED",
-            message="Optional website claims failed publication validation; verified official facts were retained."))
+        retained.errors.append(failure_error("WEBSITE_PUBLICATION_GRAPH_REJECTED", "website publication", exc))
         retained.sections["website_owned_profiles"].state = PublicState.FAILED
         retained.sections["website_owned_profiles"].attempt_outcome = "failed"
         retained.synthesis["website_research"] = {"execution_state": "failed",
@@ -357,7 +406,6 @@ def run(args: argparse.Namespace) -> int:
     run_start_utc = datetime.now(timezone.utc)
     replay_metadata = None
     if getattr(args, "replay_http", None):
-        from .recording import HttpRecording, ReplayError
         replay_metadata = HttpRecording(args.replay_http, replay=True).metadata["run"]
         try:
             run_start_utc = datetime.fromisoformat(replay_metadata["run_started_at"])
@@ -538,6 +586,13 @@ def run(args: argparse.Namespace) -> int:
         "no_keyless": args.no_keyless_websites,
     }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     batch_id = args.batch_id or str(uuid.uuid4())
+    code_identity = implementation_identity()
+    if replay_metadata is not None:
+        if replay_metadata.get("implementation_identity") != code_identity:
+            raise ReplayError("replay implementation differs from the capture")
+        if args.batch_id and args.batch_id != replay_metadata.get("batch_id"):
+            raise ReplayError("replay batch ID differs from the capture")
+        batch_id = replay_metadata["batch_id"]
     # Persist one internal shell per row before running any enrichment. Shells are not
     # evaluator envelopes and therefore do not invent a public terminal result.
     writer = OrderedAtomicWriter(output_path, estimated_bytes=len(rows) * 64 * 1024)  # preflight before enrichment
@@ -556,6 +611,7 @@ def run(args: argparse.Namespace) -> int:
         checkpoint.connection.execute("DELETE FROM envelopes")
         checkpoint.connection.execute("DELETE FROM run_meta")
         checkpoint.connection.execute("DELETE FROM phase_results")
+        checkpoint.connection.execute("DELETE FROM phase_status")
         checkpoint.connection.executemany("INSERT INTO shells VALUES (?,?,?,?)",
             [(row.row_number, row.input_ref, row.organisation_number, "pending") for row in rows])
         checkpoint.set_meta("input_fingerprint", run_fingerprint)
@@ -565,9 +621,36 @@ def run(args: argparse.Namespace) -> int:
     pending_path = writer.write_shells(rows, checkpoint.shell_states())
     prior_terminalized = checkpoint.terminalized() if args.resume else {}
     baseline_saved = checkpoint.envelopes_for_state("baseline_done") if args.resume else {}
+    frozen_cache = checkpoint.phase_results("frozen_foundation") if args.resume else {}
+
+    def frozen_envelope(row):
+        saved = frozen_cache.get(row.organisation_number, {}).get(str(row.row_number))
+        if saved is not None:
+            return Envelope.model_validate(saved)
+        started = time.monotonic()
+        try:
+            envelope = _envelope(row, fixture, batch_id, cutoff, previous,
+                registry_as_of=args.registry_snapshot_as_of, registry_source_url=args.registry_source_url)
+            validate_batch_publication_graph([envelope])
+            to_evaluator(envelope)
+            checkpoint.validate_phase_update([envelope])
+            if row.organisation_number not in checkpoint.phase_statuses("official"):
+                checkpoint.save_phase_status("official", row.organisation_number, "completed", time.monotonic() - started)
+        except Exception as exc:
+            error = failure_error("BRREG_PUBLICATION_GRAPH_REJECTED", "frozen foundation", exc)
+            checkpoint.save_phase_status("official", row.organisation_number, "failed",
+                time.monotonic() - started, reason=error.message.split(";", 1)[0], traceback_sha256=error_fingerprint([error])[1])
+            envelope = _failed_envelope(row, batch_id, cutoff, [error])
+        company = frozen_cache.setdefault(row.organisation_number, {})
+        company[str(row.row_number)] = envelope.model_dump(mode="json")
+        checkpoint.save_phase("frozen_foundation", row.organisation_number, company, [envelope])
+        return envelope
+
     gateway = None
     scheduler_report: dict[str, Any] = {}
     live_by_org: dict[str, Any] = {}
+    recording = None
+    execution = ExecutionTrace(None)
     if live_brreg or live_websites:
         gateway = NetworkGateway(timeout=20, retries=1, budget=run_budget,
                                  trusted_proxy=args.network_policy == "trusted-proxy",
@@ -575,9 +658,12 @@ def run(args: argparse.Namespace) -> int:
                                  record_http=getattr(args, "record_http", None),
                                  replay_http=getattr(args, "replay_http", None),
                                  run_metadata={"run_started_at": run_start_utc.isoformat(),
+                                     "batch_id": batch_id, "implementation_identity": code_identity,
                                      "cutoff": cutoff.isoformat(), "cutoff_source": cutoff_source,
                                      "input_sha256": input_sha256,
                                      "request_configuration": effective_config_identity})
+        recording = getattr(gateway, "http_recording", None)
+        execution = ExecutionTrace(recording)
         if live_brreg:
             gateway.set_rate_limit("data.brreg.no", 3.0)
         async def enrich():
@@ -591,7 +677,7 @@ def run(args: argparse.Namespace) -> int:
             phase_cache = {name: checkpoint.phase_results(name) for name in
                 ("financial_statements", "annual_documents", "website_verify", "website_shallow", "jobs_activity", "nav_apply", "nav_batch", "wiki_batch")}
 
-            def record_phase(name, state, seconds=0.0):
+            def record_phase(name, state, seconds=0.0, org=None, errors=()):
                 metric = phase_metrics.setdefault(name, {})
                 for key in ("ran", "skipped", "deadline_skipped", "failed", "ineligible", "not_attempted"):
                     metric.setdefault(key, 0)
@@ -600,18 +686,46 @@ def run(args: argparse.Namespace) -> int:
                 metric["ran" if state in {"completed", "failed"} else "skipped"] += 1
                 if state != "completed":
                     metric[state] = metric.get(state, 0) + 1
+                if org is not None:
+                    reason, digest = error_fingerprint(errors)
+                    old = checkpoint.phase_statuses(name).get(org, {})
+                    checkpoint.save_phase_status(name, org, state, max(seconds, old.get("seconds", 0.0)),
+                        reason=reason, traceback_sha256=digest)
+
+            def progress(name, org, value, state=None):
+                errors = value.get("errors", []) if isinstance(value, dict) else getattr(value, "errors", [])
+                prefixes = {"official": ("BRREG_",), "financial_statements": ("FINANCIAL_",),
+                    "annual_documents": ("OCR_", "ANNUAL_"), "nav_apply": ("NAV_APPLICATION_", "NAV_APPLY_")}
+                errors = [error for error in errors if error.code.startswith(prefixes.get(name, ("WEBSITE_", "JOBS_ACTIVITY_")))]
+                reason, digest = error_fingerprint(errors)
+                prior = checkpoint.phase_statuses(name).get(org, {})
+                state = state or ("failed" if digest else prior.get("outcome", "completed"))
+                checkpoint.save_phase_status(name, org, state, prior.get("seconds", 0.0),
+                    reason=reason or prior.get("reason"), traceback_sha256=digest or prior.get("traceback_sha256"))
 
             def base_envelope(row):
                 result = phase_cache["annual_documents"].get(row.organisation_number,
                     phase_cache["financial_statements"].get(row.organisation_number, by_org.get(row.organisation_number)))
                 if live_brreg and result is not None:
-                    envelope = _live_envelope(row, result, batch_id, cutoff, previous,
-                        frozen_match=row.organisation_number in fixture)
+                    try:
+                        envelope = _live_envelope(row, result, batch_id, cutoff, previous,
+                            frozen_match=row.organisation_number in fixture)
+                    except Exception as exc:
+                        if result.terminal_state != PublicState.FAILED or not any(
+                                error.code == "BRREG_PUBLICATION_GRAPH_REJECTED" for error in result.errors):
+                            raise
+                        return _failed_envelope(row, batch_id, cutoff, [*result.errors,
+                            failure_error("BRREG_PUBLICATION_GRAPH_REJECTED", "official projection", exc)])
                     if args.registry_snapshot:
-                        envelope = _attach_frozen_baseline(envelope, fixture.get(row.organisation_number), registry_hash,
-                            cutoff, args.registry_snapshot_as_of, args.registry_source_url)
+                        retained = envelope.model_copy(deep=True)
+                        try:
+                            envelope = _attach_frozen_baseline(envelope, fixture.get(row.organisation_number), registry_hash,
+                                cutoff, args.registry_snapshot_as_of, args.registry_source_url)
+                        except Exception as exc:
+                            envelope = retained
+                            envelope.errors.append(failure_error("BRREG_PUBLICATION_GRAPH_REJECTED", "frozen baseline", exc))
                     return envelope
-                return baseline_saved.get(row.row_number, _envelope(row, fixture, batch_id, cutoff, previous)).model_copy(deep=True)
+                return frozen_envelope(row)
 
             def compose(row):
                 envelope = base_envelope(row)
@@ -631,6 +745,8 @@ def run(args: argparse.Namespace) -> int:
                     if batch and batch["state"] == "failed":
                         envelope.errors.append(RunError(code=phase.upper() + "_UNEXPECTED_FAILURE",
                             message=batch["reason"], retryable=True))
+                    elif batch and row.organisation_number in batch.get("company_errors", {}):
+                        envelope.errors.append(batch["company_errors"][row.organisation_number])
                 return envelope
 
             def apply_nav(envelope, result):
@@ -648,11 +764,11 @@ def run(args: argparse.Namespace) -> int:
                     return Envelope.model_validate(envelope.model_dump())
                 except Exception as exc:
                     retained = original.model_copy(deep=True)
-                    retained.errors.append(RunError(code="NAV_APPLICATION_UNEXPECTED_FAILURE",
-                        message=f"Optional NAV application failed: {type(exc).__name__}.", retryable=True))
+                    retained.errors.append(failure_error("NAV_APPLICATION_UNEXPECTED_FAILURE", "NAV application", exc))
                     return retained
 
             def persist_phase(name, org, value):
+                publication_started = time.monotonic()
                 target_rows = [row for row in rows_by_org.get(org, ()) if row.row_number not in prior_terminalized]
                 if name == "nav_apply":
                     errors = [error for row in target_rows for error in apply_nav(base_envelope(row), value).errors
@@ -667,10 +783,12 @@ def run(args: argparse.Namespace) -> int:
                     if name.startswith("website_") or name == "jobs_activity":
                         if any(error.code == "WEBSITE_PUBLICATION_GRAPH_REJECTED" for envelope in envelopes for error in envelope.errors):
                             raise ValueError("optional website publication graph rejected")
+                    validate_batch_publication_graph(envelopes)
+                    for envelope in envelopes:
+                        to_evaluator(envelope)
                     checkpoint.validate_phase_update(envelopes)
                 except Exception as exc:
-                    error = RunError(code=name.upper() + "_PUBLICATION_GRAPH_REJECTED",
-                        message=f"Optional {name} result rejected: {type(exc).__name__}.", retryable=True)
+                    error = failure_error(name.upper() + "_PUBLICATION_GRAPH_REJECTED", name + " publication", exc)
                     if name in {"annual_documents", "financial_statements"}:
                         value = copy.deepcopy(by_org[org])
                         value.errors.append(error)
@@ -688,7 +806,13 @@ def run(args: argparse.Namespace) -> int:
                     phase_cache[name][org] = value
                     envelopes = [compose(row) for row in target_rows]
                     phase_metrics.setdefault(name, {})["failed"] = phase_metrics.get(name, {}).get("failed", 0) + 1
+                progress(name, org, value)
+                status = checkpoint.phase_statuses(name)[org]
+                checkpoint.save_phase_status(name, org, status["outcome"],
+                    status["seconds"] + time.monotonic() - publication_started,
+                    reason=status["reason"], traceback_sha256=status["traceback_sha256"])
                 checkpoint.save_phase(name, org, value, envelopes)
+                return value
 
             async def batch_phase(name, action):
                 saved = phase_cache[name].get("batch")
@@ -699,30 +823,62 @@ def run(args: argparse.Namespace) -> int:
                     return saved["value"]
                 started = time.monotonic()
                 try:
-                    value = await action()
+                    with request_phase_scope(name):
+                        value = await action()
+                    if name == "nav_batch" and (not isinstance(value, tuple) or len(value) != 2
+                            or any(not isinstance(part, dict) for part in value)):
+                        raise ValueError("NAV batch must contain company results and candidate mappings")
+                    if name == "wiki_batch" and not isinstance(value, dict):
+                        raise ValueError("Wiki batch must contain a company candidate mapping")
+                    company_errors = {}
+                    candidate_map = value if name == "wiki_batch" else value[1]
+                    for org, candidates in list(candidate_map.items()):
+                        try:
+                            if not isinstance(candidates, list) or any(not isinstance(item, dict) for item in candidates):
+                                raise ValueError("discovery candidates must be a list of source records")
+                        except Exception as exc:
+                            company_errors[org] = failure_error(name.upper() + "_PUBLICATION_GRAPH_REJECTED", name + " projection", exc)
+                            candidate_map[org] = []
                     report = scheduler_report.get("nav_jobs" if name == "nav_batch" else "wikidata_discovery", {})
+                    if execution.replay:
+                        report = execution.control("batch_report:" + name)
+                        scheduler_report["nav_jobs" if name == "nav_batch" else "wikidata_discovery"] = report
                     state = report.get("state", "completed")
+                    if state == "failed":
+                        raise RuntimeError(f"{name} source reported failure")
                     state = state if state in {"deadline_skipped", "budget_skipped", "not_attempted"} else "completed"
-                    saved = {"state": state, "value": value, "report": report}
+                    saved = {"state": state, "value": value, "report": report, "company_errors": company_errors}
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    saved = {"state": "failed", "reason": f"Optional {name} failed: {type(exc).__name__}.",
+                    error = failure_error(name.upper() + "_UNEXPECTED_FAILURE", name, exc)
+                    saved = {"state": "failed", "reason": error.message, "errors": [error],
                              "value": ({}, {}) if name == "nav_batch" else {}}
                     saved["report"] = {"state": "failed", "reason": saved["reason"]}
                     if name == "nav_batch":
                         saved["report"]["negative_coverage"] = False
                     scheduler_report["nav_jobs" if name == "nav_batch" else "wikidata_discovery"] = saved["report"]
+                if not execution.replay:
+                    execution.control("batch_report:" + name, saved["report"])
                 elapsed = time.monotonic() - started
                 record_phase(name, saved["state"], elapsed)
                 phase_metrics[name]["wall_seconds"] = elapsed
                 phase_cache[name]["batch"] = saved
+                for org in unique:
+                    errors = [saved["company_errors"][org]] if org in saved.get("company_errors", {}) else saved.get("errors", [])
+                    reason, digest = error_fingerprint(errors)
+                    checkpoint.save_phase_status(name, org, "failed" if errors else saved["state"], elapsed,
+                        reason=reason or saved.get("reason"), traceback_sha256=digest)
                 checkpoint.save_phase(name, "batch", saved, [compose(row) for row in rows
                     if row.row_number not in prior_terminalized])
                 return saved["value"]
 
             async def nav_phase(targets):
                 from .nav import research_jobs
+                recorded_nav = execution.control("batch_report:nav_batch") if execution.replay else None
+                if recorded_nav and recorded_nav.get("state") in {"not_attempted", "deadline_skipped", "budget_skipped"}:
+                    scheduler_report["nav_jobs"] = recorded_nav
+                    return {}, {}
                 if run_budget.soft_expired or run_budget.reserve_active:
                     scheduler_report["nav_jobs"] = {"state": "deadline_skipped", "negative_coverage": False}
                     return {}, {}
@@ -731,9 +887,13 @@ def run(args: argparse.Namespace) -> int:
                     scheduler_report["nav_jobs"] = {"state": "budget_skipped", "negative_coverage": False,
                         "reason": "preserve_existing_research_request_reserve"}
                     return {}, {}
+                if recorded_nav and isinstance(recorded_nav.get("requests"), int):
+                    nav_request_allowance = min(nav_request_allowance, max(1, recorded_nav["requests"]))
                 previous_claims = {org: state.claims for org, state in previous_artifact.companies.items()} if previous_artifact else {}
                 result, cancelled = await _run_source_phase(research_jobs(targets, gateway, cutoff,
                     allow_current=cutoff_source == "run_start", previous_claims=previous_claims,
+                    max_pages=max(1, recorded_nav.get("pages", 256)) if recorded_nav else 256,
+                    max_details=max(1, recorded_nav.get("details", 4096)) if recorded_nav else 4096,
                     time_seconds=max(0.001, budget.nav_seconds - 0.5),
                     max_requests=min(512, nav_request_allowance)),
                     run_budget, budget.nav_seconds)
@@ -756,69 +916,84 @@ def run(args: argparse.Namespace) -> int:
                                      expected_company_family_gain=3, expected_atomic_claim_gain=4,
                                      expected_requests=4.02, expected_seconds=2.888, sequence=index)
                          for index, org in enumerate(unique) if org not in baseline_orgs]
-                completed_queue: asyncio.Queue[Any] = asyncio.Queue()
-                async def checkpoint_writer():
-                    while True:
-                        payload = await completed_queue.get()
-                        if payload is None:
-                            return
-                        item, result, future = payload
-                        try:
-                            baseline = fixture.get(item.company)
-                            for row in rows_by_org.get(item.company, ()):
-                                if row.row_number in prior_terminalized:
-                                    continue
-                                envelope = _live_envelope(row, result, batch_id, cutoff, previous,
-                                                          frozen_match=baseline is not None)
-                                if args.registry_snapshot:
-                                    envelope = _attach_frozen_baseline(envelope, baseline, registry_hash, cutoff,
-                                        args.registry_snapshot_as_of, args.registry_source_url)
-                                checkpoint.save_phase("official", item.company, result, [envelope])
-                            future.set_result(None)
-                        except BaseException as exc:
-                            future.set_exception(exc)
-                checkpoint_task = asyncio.create_task(checkpoint_writer())
+                def failed_official(org, error):
+                    return BrregResult(claims=[], evidence=[], snapshots=[], errors=[error],
+                        section_states={name: PublicState.FAILED for name in
+                            ("identity_brand", "accounts_history", "leadership_workplaces")},
+                        terminal_state=PublicState.FAILED,
+                        observations={"execution_state": "failed", "organisation_number": org})
+
                 async def official(item: Opportunity):
+                    started = time.monotonic()
+                    state = "completed"
+                    errors = []
                     try:
-                        return await fetch_company(item.company, gateway, cutoff,
-                            allow_current_identity_after_run_start=cutoff_source == "run_start", include_accounts=False)
+                        with request_phase_scope("official"), request_company_scope(item.company):
+                            result = await fetch_company(item.company, gateway, cutoff,
+                                allow_current_identity_after_run_start=cutoff_source == "run_start", include_accounts=False)
+                        if result.terminal_state == PublicState.FAILED:
+                            state = "failed"
+                        return result
                     except asyncio.CancelledError:
+                        state = "deadline_skipped"
                         raise
                     except Exception as exc:
-                        raise OpportunityFailed(BrregResult(
-                            claims=[], evidence=[], snapshots=[],
-                            errors=[RunError(code="BRREG_ACTION_UNEXPECTED_FAILURE",
-                                message=f"Official work item failed: {type(exc).__name__}.", retryable=True)],
-                            section_states={name: PublicState.FAILED for name in
-                                ("identity_brand", "accounts_history", "leadership_workplaces")},
-                            terminal_state=PublicState.FAILED,
-                            observations={"execution_state": "failed", "organisation_number": item.company}))
+                        state = "failed"
+                        errors = [failure_error("BRREG_ACTION_UNEXPECTED_FAILURE", "official foundation", exc)]
+                        raise OpportunityFailed(failed_official(item.company, errors[0]))
+                    finally:
+                        if state == "deadline_skipped":
+                            checkpoint.save_phase_status("official", item.company, state, time.monotonic() - started)
+                        elif sys.exc_info()[0] is None or isinstance(sys.exc_info()[1], Exception):
+                            record_phase("official", state, time.monotonic() - started, item.company, errors)
                 async def checkpoint_completed(item: Opportunity, result: Any) -> None:
-                    future = asyncio.get_running_loop().create_future()
-                    await completed_queue.put((item, result, future))
-                    await future
+                    org = item.company
+                    target_rows = [row for row in rows_by_org.get(org, ()) if row.row_number not in prior_terminalized]
+                    def project(value):
+                        projected = []
+                        for row in target_rows:
+                            envelope = _live_envelope(row, value, batch_id, cutoff, previous, frozen_match=org in fixture)
+                            if args.registry_snapshot:
+                                envelope = _attach_frozen_baseline(envelope, fixture.get(org), registry_hash, cutoff,
+                                    args.registry_snapshot_as_of, args.registry_source_url)
+                            projected.append(envelope)
+                        validate_batch_publication_graph(projected)
+                        for envelope in projected:
+                            to_evaluator(envelope)
+                        checkpoint.validate_phase_update(projected)
+                        return projected
+                    try:
+                        projected = project(result)
+                    except Exception as exc:
+                        result = failed_official(org, failure_error("BRREG_PUBLICATION_GRAPH_REJECTED", "official publication", exc))
+                        try:
+                            projected = project(result)
+                        except Exception as fallback_exc:
+                            result.errors.append(failure_error("BRREG_PUBLICATION_GRAPH_REJECTED", "frozen baseline", fallback_exc))
+                            projected = [_failed_envelope(row, batch_id, cutoff, result.errors) for row in target_rows]
+                    by_org[org] = result
+                    progress("official", org, result)
+                    checkpoint.save_phase("official", org, result, projected)
                 official_started = time.monotonic()
-                try:
-                    fresh_by_org, official_deadline_cancelled = await _run_before_completion_reserve(
-                        scheduler.run(works, official, on_complete=checkpoint_completed), run_budget,
-                        reserved_seconds=financial_allocation if finance_pending else 0)
-                    by_org.update(checkpoint.phase_results("official"))
-                    by_org.update(fresh_by_org)
-                finally:
-                    await completed_queue.put(None)
-                    await checkpoint_task
+                _, official_deadline_cancelled = await _run_before_completion_reserve(
+                    scheduler.run(works, official, on_complete=checkpoint_completed,
+                        permitted=lambda item: execution.admitted("official", item.company)), run_budget,
+                    reserved_seconds=financial_allocation if finance_pending else 0)
                 scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
                     "companies": scheduler.company_metrics,
                     "wall_seconds": time.monotonic() - official_started,
                     "hard_deadline_cancelled": official_deadline_cancelled}
                 for org in unique:
                     if org not in by_org:
+                        await execution.consume_abandoned(gateway, "official", org)
                         by_org[org] = BrregResult(claims=[], evidence=[], snapshots=[],
                             errors=[RunError(code="BRREG_FOUNDATION_DEADLINE_SKIPPED",
                                 message="Official foundation did not finish before the financial reserve.", retryable=True)],
                             section_states={name: PublicState.FAILED for name in
                                 ("identity_brand", "accounts_history", "leadership_workplaces")},
                             terminal_state=PublicState.FAILED, observations={})
+                        record_phase("official", "deadline_skipped", org=org)
+                        await checkpoint_completed(Opportunity(key=org, company=org, pass_name="official_foundation"), by_org[org])
                 from .operations import financial_request_scope
                 finance_scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
                 finance_works = [Opportunity(key=org, company=org, pass_name="financial_statements",
@@ -829,8 +1004,9 @@ def run(args: argparse.Namespace) -> int:
                 async def financial_statement(item):
                     started = time.monotonic()
                     state = "completed"
+                    errors = []
                     try:
-                        with financial_request_scope(), request_company_scope(item.company):
+                        with financial_request_scope(), request_company_scope(item.company), request_phase_scope("financial_statements"):
                             result = await fetch_financial_statements(copy.deepcopy(by_org[item.company]),
                                 item.company, gateway, cutoff)
                             if result.section_states.get("accounts_history") == PublicState.FAILED:
@@ -842,13 +1018,15 @@ def run(args: argparse.Namespace) -> int:
                     except Exception as exc:
                         state = "failed"
                         value = copy.deepcopy(by_org[item.company])
-                        value.errors.append(RunError(code="FINANCIAL_STATEMENTS_UNEXPECTED_FAILURE",
-                            message=f"Financial statements failed: {type(exc).__name__}.", retryable=True))
+                        errors = [failure_error("FINANCIAL_STATEMENTS_UNEXPECTED_FAILURE", "financial statements", exc)]
+                        value.errors.extend(errors)
                         value.observations["financial_calibration"] = {"state": "failed", "reason": type(exc).__name__}
                         raise OpportunityFailed(value)
                     finally:
-                        if state != "deadline_skipped":
-                            record_phase("financial_statements", state, time.monotonic() - started)
+                        if state == "deadline_skipped":
+                            checkpoint.save_phase_status("financial_statements", item.company, state, time.monotonic() - started)
+                        elif sys.exc_info()[0] is None or isinstance(sys.exc_info()[1], Exception):
+                            record_phase("financial_statements", state, time.monotonic() - started, item.company, errors)
 
                 started = time.monotonic()
                 financial_retries = getattr(gateway, "retries", None)
@@ -858,6 +1036,7 @@ def run(args: argparse.Namespace) -> int:
                     if financial_allocation > 0:
                         await asyncio.wait_for(_run_before_completion_reserve(
                             finance_scheduler.run(finance_works, financial_statement,
+                                permitted=lambda item: execution.admitted("financial_statements", item.company),
                                 on_complete=lambda item, value: persist_phase("financial_statements", item.company, value)),
                             run_budget), timeout=financial_allocation)
                 except asyncio.TimeoutError:
@@ -866,8 +1045,7 @@ def run(args: argparse.Namespace) -> int:
                     for item in finance_works:
                         if item.company not in phase_cache["financial_statements"]:
                             value = copy.deepcopy(by_org[item.company])
-                            value.errors.append(RunError(code="FINANCIAL_PHASE_UNEXPECTED_FAILURE",
-                                message=f"Financial phase failed: {type(exc).__name__}.", retryable=True))
+                            value.errors.append(failure_error("FINANCIAL_PHASE_UNEXPECTED_FAILURE", "financial phase", exc))
                             persist_phase("financial_statements", item.company, value)
                             record_phase("financial_statements", "failed")
                 finally:
@@ -878,10 +1056,11 @@ def run(args: argparse.Namespace) -> int:
                 phase_metrics.setdefault("financial_statements", {})["wall_seconds"] = time.monotonic() - started
                 for item in finance_works:
                     if item.company not in phase_cache["financial_statements"]:
+                        await execution.consume_abandoned(gateway, "financial_statements", item.company)
                         value = copy.deepcopy(by_org[item.company])
                         value.observations["financial_calibration"] = {"state": "deadline_skipped"}
+                        record_phase("financial_statements", "deadline_skipped", org=item.company)
                         persist_phase("financial_statements", item.company, value)
-                        record_phase("financial_statements", "deadline_skipped")
                 for org in by_org:
                     if org not in finance_pending:
                         record_phase("financial_statements", "not_attempted")
@@ -898,7 +1077,7 @@ def run(args: argparse.Namespace) -> int:
             nav_targets = dict(by_org)
             nav_targets.update({envelope.organisation_number: envelope for envelope in baseline_saved.values()})
             if not live_brreg:
-                nav_targets = {row.organisation_number: _envelope(row, fixture, batch_id, cutoff, previous)
+                nav_targets = {row.organisation_number: frozen_envelope(row)
                     for row in rows if row.row_number not in prior_terminalized}
             wikidata_by_org = {}
             scheduler_report["phase_reservations"] = {
@@ -940,23 +1119,31 @@ def run(args: argparse.Namespace) -> int:
                 for org in unique:
                     if org not in nav_results_by_org:
                         upstream = phase_cache["nav_batch"].get("batch", {}).get("state")
-                        record_phase("nav_apply", "ineligible" if upstream == "completed" else "not_attempted")
+                        if org not in checkpoint.phase_statuses("nav_apply"):
+                            record_phase("nav_apply", "ineligible" if upstream == "completed" else "not_attempted", org=org)
                 return await website_phase()
 
             available_research = max(0.0, min(budget.soft_seconds - run_budget.elapsed,
                 budget.hard_seconds - run_budget.elapsed - budget.completion_reserve_seconds))
             ocr_allocation = min(budget.ocr_seconds, available_research * budget.ocr_budget_share)
             website_allocation = min(budget.website_seconds, available_research)
+            allocations = execution.control("research_allocations", {"ocr": ocr_allocation, "website": website_allocation})
+            ocr_allocation, website_allocation = allocations["ocr"], allocations["website"]
             scheduler_report["phase_reservations"].update(ocr_allocated_seconds=ocr_allocation,
                 website_allocated_seconds=website_allocation)
 
             async def document_phase():
                 if not live_brreg:
                     for org in unique:
+                        record_phase("annual_documents", "not_attempted", org=org)
+                    return
+                if all(org in phase_cache["annual_documents"] for org in by_org):
+                    for org in by_org:
                         record_phase("annual_documents", "not_attempted")
                     return
                 from .annual_accounts import DocumentProcessor, enrich_company
                 processor = DocumentProcessor(seconds=ocr_allocation,
+                    **({"recording": recording} if recording is not None else {}),
                     **({"cache_only": True} if getattr(args, "replay_http", None) else {}))
                 document_scheduler = OpportunityScheduler(concurrency=2)
                 document_works = [Opportunity(key=org, company=org, pass_name="annual_documents",
@@ -967,8 +1154,9 @@ def run(args: argparse.Namespace) -> int:
                 async def annual_document(item: Opportunity):
                     started = time.monotonic()
                     state = "completed"
+                    errors = []
                     try:
-                        with request_company_scope(item.company):
+                        with request_company_scope(item.company), request_phase_scope("annual_documents"):
                             result = await enrich_company(copy.deepcopy(by_org[item.company]), item.company, gateway, cutoff, processor)
                             from .financial_calibration import calibrate_company_financials
                             calibrate_company_financials(result, item.company, cutoff)
@@ -983,18 +1171,20 @@ def run(args: argparse.Namespace) -> int:
                     except Exception as exc:
                         state = "failed"
                         result = copy.deepcopy(by_org[item.company])
-                        result.errors.append(RunError(code="OCR_ENRICHMENT_UNEXPECTED_FAILURE",
-                            message=f"Optional annual document action failed: {type(exc).__name__}.", retryable=True))
+                        errors = [failure_error("OCR_ENRICHMENT_UNEXPECTED_FAILURE", "annual documents", exc)]
+                        result.errors.extend(errors)
                         result.observations["annual_accounts_document"] = {"state": "failed", "reason": type(exc).__name__}
                         raise OpportunityFailed(result)
                     finally:
-                        if state != "deadline_skipped":
-                            record_phase("annual_documents", state, time.monotonic() - started)
+                        if state == "deadline_skipped":
+                            checkpoint.save_phase_status("annual_documents", item.company, state, time.monotonic() - started)
+                        elif sys.exc_info()[0] is None or isinstance(sys.exc_info()[1], Exception):
+                            record_phase("annual_documents", state, time.monotonic() - started, item.company, errors)
                 for org, result in by_org.items():
                     if org in phase_cache["annual_documents"]:
                         record_phase("annual_documents", "not_attempted")
                     elif not getattr(result, "account_records", []) or result.observations.get("target_is_subunit"):
-                        record_phase("annual_documents", "ineligible")
+                        record_phase("annual_documents", "ineligible", org=org)
                 document_works = [item for item in document_works if item.company not in phase_cache["annual_documents"]]
                 for item in document_works:
                     by_org[item.company].section_states["hiring_activity"] = PublicState.BLOCKED
@@ -1003,19 +1193,21 @@ def run(args: argparse.Namespace) -> int:
                 document_started = time.monotonic()
                 document_results, document_cancelled = await _run_source_phase(
                     document_scheduler.run(document_works, annual_document,
-                        permitted=lambda item: not run_budget.soft_expired and not run_budget.reserve_active,
+                        permitted=lambda item: execution.admitted("annual_documents", item.company)
+                            and not run_budget.soft_expired and not run_budget.reserve_active,
                         on_complete=lambda item, value: persist_phase("annual_documents", item.company, value)),
                     run_budget, ocr_allocation)
                 phase_metrics.setdefault("annual_documents", {})["wall_seconds"] = time.monotonic() - document_started
                 scheduler_report["ocr_replay_misses"] = getattr(processor, "cache_misses", 0)
-                by_org.update(document_results)
+                by_org.update(phase_cache["annual_documents"])
                 for item in document_works:
                     if item.company not in phase_cache["annual_documents"]:
+                        await execution.consume_abandoned(gateway, "annual_documents", item.company)
                         result = copy.deepcopy(by_org[item.company])
                         result.observations["annual_accounts_document"] = {"state": "deadline_skipped",
                             "reason": "phase_deadline_or_completion_reserve"}
+                        record_phase("annual_documents", "deadline_skipped", org=item.company)
                         persist_phase("annual_documents", item.company, result)
-                        record_phase("annual_documents", "deadline_skipped")
                 gateway.set_rate_limit("data.brreg.no", 3.0)
                 scheduler_report["annual_documents"] = {"passes": document_scheduler.metrics,
                     "companies": document_scheduler.company_metrics, "hard_deadline_cancelled": document_cancelled}
@@ -1024,12 +1216,21 @@ def run(args: argparse.Namespace) -> int:
                 if not live_websites:
                     for name in ("website_verify", "website_shallow", "jobs_activity", "nav_batch", "wiki_batch", "nav_apply"):
                         for org in unique:
-                            record_phase(name, "not_attempted")
+                            if org not in checkpoint.phase_statuses(name):
+                                record_phase(name, "not_attempted", org=org)
                     return {}
                 from .websites import WebsiteResearchResult, research_company, sanitize_registry_websites
                 # Discover shared roots across input entities before evaluating any one company.
-                profiles = {org: _website_profile(org, live_result=live_by_org.get(org), frozen=fixture.get(org),
-                    frozen_sha=registry_hash, frozen_source_url=args.registry_source_url) for org in unique}
+                profiles = {}
+                for org in unique:
+                    try:
+                        profiles[org] = _website_profile(org, live_result=live_by_org.get(org), frozen=fixture.get(org),
+                            frozen_sha=registry_hash, frozen_source_url=args.registry_source_url)
+                    except Exception as exc:
+                        error = failure_error("WEBSITE_RESEARCH_UNEXPECTED_FAILURE", "website profile", exc)
+                        record_phase("website_verify", "failed", org=org, errors=[error])
+                        persist_phase("website_verify", org, WebsiteResearchResult(state=PublicState.FAILED,
+                            attempt_outcome="failed", errors=[error], audit={"execution_state": "failed", "claims": []}))
                 for org, candidates in nav_homepages.items():
                     if org in profiles:
                         profiles[org].setdefault("discovery_candidates", []).extend(candidates)
@@ -1050,8 +1251,9 @@ def run(args: argparse.Namespace) -> int:
                 async def website(item: Opportunity, phase: str, previous: WebsiteResearchResult | None = None):
                     started = time.monotonic()
                     state = "completed"
+                    errors = []
                     try:
-                        with request_company_scope(item.company):
+                        with request_company_scope(item.company), request_phase_scope(item.pass_name):
                             result = await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
                                 enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
                                 phase=phase, previous=copy.deepcopy(previous), rights_decisions=website_rights_decisions,
@@ -1067,18 +1269,21 @@ def run(args: argparse.Namespace) -> int:
                         result = copy.deepcopy(previous) if previous else WebsiteResearchResult()
                         result.state = PublicState.FAILED
                         result.attempt_outcome = "failed"
-                        result.errors.append(RunError(code="WEBSITE_RESEARCH_UNEXPECTED_FAILURE",
-                            message=f"Optional website {phase} action failed: {type(exc).__name__}.", retryable=True))
+                        errors = [failure_error("WEBSITE_RESEARCH_UNEXPECTED_FAILURE", item.pass_name, exc)]
+                        result.errors.extend(errors)
                         result.audit.update(execution_state="failed", reason=f"{phase}_unexpected_failure")
                         raise OpportunityFailed(result)
                     finally:
-                        if state != "deadline_skipped":
-                            record_phase(item.pass_name, state, time.monotonic() - started)
+                        if state == "deadline_skipped":
+                            checkpoint.save_phase_status(item.pass_name, item.company, state, time.monotonic() - started)
+                        elif sys.exc_info()[0] is None or isinstance(sys.exc_info()[1], Exception):
+                            record_phase(item.pass_name, state, time.monotonic() - started, item.company, errors)
                 def website_permitted(item: Opportunity) -> bool:
                     # The jobs/activity pass only extracts the pages saved by
                     # shallow research. HTTP exhaustion must not discard those
                     # observations; time and completion-reserve gates still apply.
-                    return (time.monotonic() < website_deadline and not run_budget.soft_expired and not run_budget.reserve_active
+                    return (execution.admitted(item.pass_name, item.company)
+                        and time.monotonic() < website_deadline and not run_budget.soft_expired and not run_budget.reserve_active
                         and (item.pass_name == "jobs_activity" or (
                             run_budget.physical_requests_remaining > 0
                             and run_budget.logical_requests_remaining != 0)))
@@ -1088,8 +1293,7 @@ def run(args: argparse.Namespace) -> int:
                     for index, org in enumerate(profiles) if org not in phase_cache["website_verify"]]
                 verified_by_org = dict(phase_cache["website_verify"])
                 def completed(name, target, item, value):
-                    target[item.company] = value
-                    persist_phase(name, item.company, value)
+                    target[item.company] = persist_phase(name, item.company, value)
                 verify_started = time.monotonic()
                 _, verify_deadline_cancelled = await _run_source_phase(
                     scheduler.run(verify_works, lambda item: website(item, "verify"), permitted=website_permitted,
@@ -1135,10 +1339,14 @@ def run(args: argparse.Namespace) -> int:
                     scheduled = {item.company for item in works}
                     for org in profiles:
                         if org not in scheduled:
-                            record_phase(name, "not_attempted" if org in results else "ineligible")
+                            if org not in checkpoint.phase_statuses(name):
+                                record_phase(name, "not_attempted" if org in results else "ineligible", org=org)
                         elif org not in results:
+                            await execution.consume_abandoned(gateway, name, org)
                             state = "deadline_skipped" if time.monotonic() >= website_deadline or run_budget.soft_expired or run_budget.reserve_active else "budget_skipped"
-                            record_phase(name, state)
+                            if execution.replay:
+                                state = execution.outcome(name, org)
+                            record_phase(name, state, org=org)
                             prior = by_website_org.get(org)
                             result = copy.deepcopy(prior) if prior else WebsiteResearchResult(state=None, hiring_activity_state=None)
                             result.attempt_outcome = state
@@ -1156,9 +1364,35 @@ def run(args: argparse.Namespace) -> int:
                     record_phase(name, "deadline_skipped")
                     continue
                 if isinstance(result, Exception):
-                    optional_errors.append(RunError(code=name.upper() + "_PHASE_UNEXPECTED_FAILURE",
-                        message=f"Optional phase failed: {type(result).__name__}.", retryable=True))
+                    error = failure_error(name.upper() + "_PHASE_UNEXPECTED_FAILURE", name, result)
+                    optional_errors.append(error)
                     record_phase(name, "failed")
+                    affected = ("annual_documents",) if name == "annual_documents" else (
+                        "nav_batch", "nav_apply", "website_verify", "website_shallow", "jobs_activity")
+                    for phase in affected:
+                        for org in unique:
+                            if org not in checkpoint.phase_statuses(phase):
+                                record_phase(phase, "failed", org=org, errors=[error])
+                            if org not in phase_cache[phase] and phase not in {"nav_batch", "wiki_batch"}:
+                                if phase == "annual_documents":
+                                    value = copy.deepcopy(by_org[org])
+                                    value.errors.append(error)
+                                    value.observations["annual_accounts_document"] = {"state": "failed", "reason": "phase_setup_failed"}
+                                else:
+                                    from .websites import WebsiteResearchResult
+                                    value = WebsiteResearchResult(state=PublicState.FAILED, attempt_outcome="failed",
+                                        errors=[error], audit={"execution_state": "failed", "reason": "phase_setup_failed", "claims": []})
+                                persist_phase(phase, org, value)
+            for name in ("official", *phase_cache):
+                saved_statuses = checkpoint.phase_statuses(name)
+                for org in unique:
+                    if org not in saved_statuses:
+                        record_phase(name, "not_attempted", org=org)
+                if name not in phase_metrics:
+                    phase_metrics[name] = {"ran": 0, "skipped": 0, "deadline_skipped": 0, "failed": 0,
+                        "worker_seconds": 0.0, "wall_seconds": 0.0}
+            scheduler_report["company_phases"] = {name: checkpoint.phase_statuses(name) for name in ("official", *phase_cache)}
+            execution.save(checkpoint, ("official", *phase_cache))
             output = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized
                       else compose(row) for row in rows]
             for envelope in output:
@@ -1169,18 +1403,44 @@ def run(args: argparse.Namespace) -> int:
             return output
         envelopes = asyncio.run(enrich())
     else:
-        envelopes = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized else
-                     _envelope(row, fixture, batch_id, cutoff, previous, registry_as_of=args.registry_snapshot_as_of,
-                               registry_source_url=args.registry_source_url) for row in rows]
-    if getattr(args, "replay_http", None) and gateway is not None and (
-            gateway.replay_misses or gateway.replay_failures or scheduler_report.get("ocr_replay_misses", 0)):
-        checkpoint.close()
-        print(json.dumps({"event": "replay_failed", "http_misses": gateway.replay_misses,
-            "http_failures": gateway.replay_failures,
-            "ocr_misses": scheduler_report.get("ocr_replay_misses", 0),
-            "reason": "incomplete_or_invalid_capture_no_live_fallback"}), file=sys.stderr)
-        return 1
+        envelopes = []
+        for row in rows:
+            if row.row_number in prior_terminalized:
+                envelopes.append(prior_terminalized[row.row_number])
+                continue
+            started = time.monotonic()
+            envelope = frozen_envelope(row)
+            reason, digest = error_fingerprint(envelope.errors)
+            checkpoint.save_phase_status("official", row.organisation_number, "failed" if digest else "completed",
+                time.monotonic() - started, reason=reason, traceback_sha256=digest)
+            checkpoint.put(envelope)
+            for name in ("financial_statements", "annual_documents", "nav_batch", "wiki_batch", "nav_apply",
+                         "website_verify", "website_shallow", "jobs_activity"):
+                checkpoint.save_phase_status(name, row.organisation_number, "not_attempted")
+            envelopes.append(envelope)
+        scheduler_report["company_phases"] = {name: checkpoint.phase_statuses(name) for name in (
+            "official", "financial_statements", "annual_documents", "nav_batch", "wiki_batch", "nav_apply",
+            "website_verify", "website_shallow", "jobs_activity")}
+    capture_error = None
+    if recording and recording.replay:
+        try:
+            recording.assert_complete()
+            if scheduler_report.get("ocr_replay_misses", 0):
+                raise ReplayError("offline OCR inputs missing")
+        except ReplayError as exc:
+            capture_error = exc
     for envelope in envelopes:
+        if recording:
+            envelope.created_at = run_start_utc
+            frozen_sources = {item.source_snapshot_ids[0] for item in envelope.evidence
+                if item.extraction_method in {"frozen_registry_fixture", "frozen_registry_jsonl_v1"}
+                and item.source_snapshot_ids}
+            for item in envelope.evidence:
+                if item.extraction_method in {"frozen_registry_fixture", "frozen_registry_jsonl_v1"}:
+                    item.retrieved_at = run_start_utc
+            for item in envelope.source_snapshots:
+                if item.source_id in frozen_sources:
+                    item.retrieved_at = run_start_utc
         envelope.synthesis["evidence_cutoff"] = cutoff.isoformat()
         envelope.synthesis["evidence_cutoff_source"] = cutoff_source
     # Construct one canonical company state per organisation, independent of
@@ -1189,46 +1449,94 @@ def run(args: argparse.Namespace) -> int:
     # artifact must not silently forget state outside today's input rows.
     current_states: dict[str, CompanyState] = (dict(previous_artifact.companies) if previous_artifact else {})
     representative: dict[str, Envelope] = {}
+    finalization_errors = {}
     for envelope in sorted(envelopes, key=lambda item: item.row_number):
         representative.setdefault(envelope.organisation_number, envelope)
     for org, envelope in sorted(representative.items()):
         old_state = previous_artifact.companies.get(org) if previous_artifact else None
-        new_state = company_state(envelope, config_fingerprint, old_state)
-        new_state = merge_prior_facts(new_state, old_state)
+        try:
+            new_state = company_state(envelope, config_fingerprint, old_state)
+            new_state = merge_prior_facts(new_state, old_state)
+        except Exception as exc:
+            row = rows_by_org[org][0]
+            envelope = _phase_failure_envelope(row, batch_id, cutoff, "finalization", exc, run_start_utc)
+            finalization_errors[org] = exc
+            representative[org] = envelope
+            from .history import company_state as canonical_company_state
+            new_state = canonical_company_state(envelope, config_fingerprint, old_state)
         current_states[org] = new_state
     state_payload = artifact_payload(current_states, config_fingerprint)
     current_ref = artifact_ref(state_payload)
-    for envelope in envelopes:
-        old_state = previous_artifact.companies.get(envelope.organisation_number) if previous_artifact else None
-        if previous_state_error:
-            envelope.refresh.mode = "incompatible_prior_state"
-            envelope.errors.append(RunError(code="REFRESH_PRIOR_STATE_INCOMPATIBLE",
-                message="Prior state was not used: " + previous_state_error[:400]))
-        elif not old_state:
-            envelope.refresh.mode = "baseline_no_prior_state"
-        else:
-            envelope.refresh.mode = "compared"
-            envelope.refresh.previous_state_ref = previous_ref
-            envelope.refresh.changes = compare_states(old_state, current_states[envelope.organisation_number],
-                cutoff=cutoff, previous_ref=previous_ref, current_ref=current_ref)
-        envelope.refresh.current_state_ref = current_ref
-        envelope.refresh.last_attempt_at = envelope.created_at
-        envelope.refresh.retained_claim_ids = sorted(claim.get("claim_id", "")
-            for claim in current_states[envelope.organisation_number].claims)
-        change_section = envelope.sections["refresh_changes"]
-        change_section.state = PublicState.AVAILABLE if envelope.refresh.changes else PublicState.NOT_AVAILABLE
-        change_section.attempt_outcome = envelope.refresh.mode
-        change_section.diagnostics = [f"material_changes:{len(envelope.refresh.changes)}"]
-        envelope.synthesis["summary"] = synthesize(envelope)
+    for index, envelope in enumerate(envelopes):
+        started = time.monotonic()
+        org = envelope.organisation_number
+        old_state = previous_artifact.companies.get(org) if previous_artifact else None
+        try:
+            if org in finalization_errors:
+                raise finalization_errors[org]
+            envelope = _finalize_company(envelope, old_state, previous_state_error, previous_ref,
+                current_ref, current_states[org], cutoff)
+        except Exception as exc:
+            row = next(row for row in rows_by_org[org] if row.row_number == envelope.row_number)
+            envelope = _phase_failure_envelope(row, batch_id, cutoff, "finalization", exc, run_start_utc)
+            envelope.refresh.mode = "finalization_failed"
+            envelope.refresh.last_attempt_at = envelope.created_at
+            from .synthesis import synthesize as canonical_synthesis
+            from .history import company_state as canonical_company_state
+            envelope.synthesis["summary"] = canonical_synthesis(envelope)
+            current_states[org] = canonical_company_state(envelope, config_fingerprint, old_state)
+            finalization_errors[org] = exc
+        envelopes[index] = envelope
+        reason, digest = error_fingerprint(envelope.errors)
+        checkpoint.save_phase_status("finalization", org, "failed" if org in finalization_errors else "completed",
+            time.monotonic() - started, reason=reason if org in finalization_errors else None,
+            traceback_sha256=digest if org in finalization_errors else None)
         checkpoint.put(envelope)
         checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
     checkpoint.connection.commit()
+    if finalization_errors:
+        state_payload = artifact_payload(current_states, config_fingerprint)
+        current_ref = artifact_ref(state_payload)
+        for envelope in envelopes:
+            envelope.refresh.current_state_ref = current_ref
+            for event in envelope.refresh.changes:
+                event.current_state_ref = current_ref
+            checkpoint.put(envelope)
     expected_rows = [(row.row_number, row.input_ref) for row in rows]
     actual_rows = [(item.row_number, item.input_ref) for item in sorted(envelopes, key=lambda item: item.row_number)]
     if len(actual_rows) != len(expected_rows) or actual_rows != expected_rows:
         raise RuntimeError("terminal output does not exactly match input row cardinality/order")
     finalization_started = time.monotonic()
     validate_batch_publication_graph(envelopes)
+    scheduler_report.setdefault("company_phases", {})["finalization"] = checkpoint.phase_statuses("finalization")
+    if recording and capture_error is None:
+        try:
+            fresh_bytes = b"".join((json.dumps(to_evaluator(envelope), ensure_ascii=False,
+                separators=(",", ":")) + "\n").encode() for envelope in sorted(envelopes, key=lambda item: item.row_number))
+            recording.assert_identity("envelopes", fresh_bytes)
+            recording.assert_identity("state", canonical_json(state_payload) + b"\n")
+            if recording.replay:
+                recording.assert_complete()
+            else:
+                recording.seal()
+        except ReplayError as exc:
+            capture_error = exc
+    if capture_error is not None:
+        name = "replay" if recording and recording.replay else "recording"
+        error = failure_error(name.upper() + "_UNEXPECTED_FAILURE", name, capture_error)
+        for envelope in envelopes:
+            envelope.errors.append(error)
+            envelope.terminal_state = PublicState.FAILED
+            checkpoint.save_phase_status(name, envelope.organisation_number, "failed", 0,
+                reason=error.message.split(";", 1)[0], traceback_sha256=error.message.rsplit("=", 1)[-1])
+            current_states[envelope.organisation_number].errors.append(error.model_dump(mode="json"))
+        state_payload = artifact_payload(current_states, config_fingerprint)
+        current_ref = artifact_ref(state_payload)
+        for envelope in envelopes:
+            envelope.refresh.current_state_ref = current_ref
+            for event in envelope.refresh.changes:
+                event.current_state_ref = current_ref
+            checkpoint.put(envelope)
     publication_marker = publish_paired_artifacts(writer, state_writer, envelopes,
         canonical_json(state_payload) + b"\n", serializer=to_evaluator)
     finalization_seconds = time.monotonic() - finalization_started
@@ -1247,6 +1555,11 @@ def run(args: argparse.Namespace) -> int:
     for envelope in envelopes:
         for error in envelope.errors:
             error_counts[error.code] = error_counts.get(error.code, 0) + 1
+    if recording:
+        diagnostic = {**recording.diagnostics(), "ocr_misses": scheduler_report.get("ocr_replay_misses", 0)}
+        event = ("replay_failed" if capture_error is not None else "replay_complete") if recording.replay else (
+            "recording_failed" if capture_error is not None else "recording_complete")
+        print(json.dumps({"event": event, **diagnostic}), file=sys.stderr if capture_error else sys.stdout)
     print(StructuredLogger.emit("batch_complete", batch_id=batch_id, rows=len(rows),
                                 available=sum(item.terminal_state == PublicState.AVAILABLE for item in envelopes),
                                 failed=sum(item.terminal_state == PublicState.FAILED for item in envelopes),
@@ -1277,7 +1590,7 @@ def run(args: argparse.Namespace) -> int:
                                     per_host_physical_limit=budget.per_host_physical_limit,
                                     paid_cost_limit=str(budget.paid_cost_limit)))
     checkpoint.close()
-    return 0
+    return 1 if capture_error is not None else 0
 
 
 def main(argv: list[str] | None = None) -> int:

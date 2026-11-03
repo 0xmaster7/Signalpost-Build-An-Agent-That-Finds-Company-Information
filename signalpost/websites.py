@@ -302,7 +302,8 @@ def _append_website_claim(output: WebsiteResearchResult, claim: Claim) -> None:
     existing.source_snapshot_ids = list(dict.fromkeys([*existing.source_snapshot_ids, *claim.source_snapshot_ids]))
 
 
-def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: bytes, final_url: str) -> PageRecord | None:
+def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: bytes, final_url: str,
+                *, retrieved_at: datetime | None = None) -> PageRecord | None:
     content_type = next((value for key, value in headers.items() if key.casefold() == "content-type"), "")
     if status < 200 or status >= 300 or "html" not in content_type.casefold() or len(body) > MAX_PAGE_BYTES:
         return None
@@ -384,7 +385,7 @@ def _parse_page(requested_url: str, status: int, headers: dict[str, str], body: 
         soft_error = "waf_or_cookie_challenge"
     headings = [" ".join(node.get_text(" ", strip=True).split())[:220] for node in soup.select("h1,h2,h3")]
     page = PageRecord(requested_url, final_url, status, content_type, body, hashlib.sha256(body).hexdigest(),
-                      datetime.now(timezone.utc), title, description, text, identity_text, identity_blocks, headings, links,
+                      retrieved_at or datetime.now(timezone.utc), title, description, text, identity_text, identity_blocks, headings, links,
                       structured if isinstance(structured, dict) else {}, schemas, canonical, directives, soft_error)
     page.footer_blocks = footer_blocks
     page.operator_identity_blocks = operator_identity_blocks
@@ -2095,7 +2096,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     saw_blocked |= status in {401, 403, 451}
                     saw_failure |= status == 0 or status >= 500 or outcome == "robots_unreachable"
                     break
-                page = _parse_page(normalized, status, headers, body, final_url)
+                page = _parse_page(normalized, status, headers, body, final_url,
+                    retrieved_at=getattr(gateway, "observed_at", None))
                 if page is None:
                     candidate_row["decision"] = "rejected_non_html_or_oversized"
                     break
@@ -2398,6 +2400,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             feed_candidates = list(dict.fromkeys(url for url in feed_candidates if _internal_url(url, allowed_hosts)))[:MAX_FEEDS]
             feed_entries: list[dict[str, str]] = []
             downloaded_html: dict[str, tuple[int, dict[str, str], bytes, str, str]] = {}
+            downloaded_html_at: dict[str, datetime] = {}
             fetched_feed_urls: set[str] = set()
             actual_feed_urls: set[str] = set()
             for feed_url in feed_candidates:
@@ -2418,6 +2421,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     media_type = next((v for k, v in headers.items() if k.casefold() == "content-type"), "")
                     if "html" in media_type.casefold():
                         downloaded_html[feed_url] = (status, headers, body, final_url, outcome)
+                        downloaded_html_at[feed_url] = getattr(gateway, "observed_at", None) or datetime.now(timezone.utc)
                         continue
                     if not _feed_document(body):
                         continue
@@ -2425,7 +2429,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     parsed_entries = _parse_feed(body)
                     feed_page = PageRecord(requested_url=feed_url, final_url=final_url, status=status,
                         content_type=next((v for k, v in headers.items() if k.casefold() == "content-type"), "application/xml"),
-                        body=body, digest=hashlib.sha256(body).hexdigest(), retrieved_at=datetime.now(timezone.utc))
+                        body=body, digest=hashlib.sha256(body).hexdigest(),
+                        retrieved_at=getattr(gateway, "observed_at", None) or datetime.now(timezone.utc))
                     feed_observations.append((candidate["url"], feed_page, parsed_entries))
                     feed_entries.extend(row for row in parsed_entries if _same_host_url(row.get("url"), final_url))
             seen_page_urls = {page.final_url for page in pages}
@@ -2463,7 +2468,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     except Exception:
                         continue
                     page_total_bytes += len(body)
-                page = _parse_page(page_url, status, headers, body, final_url)
+                page = _parse_page(page_url, status, headers, body, final_url,
+                    retrieved_at=downloaded_html_at.get(page_url) or getattr(gateway, "observed_at", None))
                 if page and _normalized_site_host(page.final_url) != _normalized_site_host(candidate["url"]):
                     output.audit["request_outcomes"]["off_host_website_page_redirect"] = output.audit["request_outcomes"].get("off_host_website_page_redirect", 0) + 1
                     continue
@@ -2528,7 +2534,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     if status == 200 and len(body) <= 256 * 1024:
                         feed_page = PageRecord(requested_url=feed_url, final_url=final_url, status=status,
                             content_type=next((v for k, v in headers.items() if k.casefold() == "content-type"), "application/xml"),
-                            body=body, digest=hashlib.sha256(body).hexdigest(), retrieved_at=datetime.now(timezone.utc))
+                            body=body, digest=hashlib.sha256(body).hexdigest(),
+                            retrieved_at=getattr(gateway, "observed_at", None) or datetime.now(timezone.utc))
                         feed_observations.append((candidate["url"], feed_page, _parse_feed(body)))
             # M05 publishes hiring/activity only from pages still bound to the exact-site proof.
         if phase == "shallow":
