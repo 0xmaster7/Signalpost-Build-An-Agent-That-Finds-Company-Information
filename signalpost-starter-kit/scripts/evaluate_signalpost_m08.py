@@ -19,7 +19,7 @@ sys.path[:0] = [str(ROOT), str(TESTS)]
 
 from signalpost.query import FindFilter, QueryError, build_index, compare_companies, find_companies, load_profiles, verify_proposition  # noqa: E402
 from signalpost.synthesis import synthesize, validate_synthesis  # noqa: E402
-from signalpost.web import _as_envelope_view  # noqa: E402
+from signalpost.models import Envelope
 
 
 def main() -> int:
@@ -32,6 +32,13 @@ def main() -> int:
         return sorted(values)[max(0, math.ceil(len(values) * 0.95) - 1)]
     gold = json.loads(Path(args.gold).read_text(encoding="utf-8"))
     canonical_path = TESTS / "fixtures/m08/canonical.jsonl"
+    canonical_envelopes = {}
+    for row_number, line in enumerate(canonical_path.read_text(encoding="utf-8").splitlines(), start=1):
+        payload = json.loads(line)
+        canonical = {key: value for key, value in payload.items() if key not in {"batch", "run"}}
+        canonical.update(row_number=row_number, batch_id=payload["batch"]["batch_id"],
+            evidence_cutoff=payload["batch"]["evidence_cutoff"], created_at=payload["run"]["created_at"])
+        canonical_envelopes[payload["organisation_number"]] = Envelope.model_validate(canonical)
     profiles = load_profiles(canonical_path)
     index = build_index(profiles)
     find_results = []
@@ -91,7 +98,7 @@ def main() -> int:
     unsupported = 0
     fully_cited = 0
     for org, profile in sorted(profiles.items()):
-        envelope = _as_envelope_view(profile)
+        envelope = canonical_envelopes[org]
         summary = synthesize(envelope)
         for sentence in summary["sentences"]:
             assertions += 1
