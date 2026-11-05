@@ -49,10 +49,8 @@ def test_source_phase_timeout_drains_only_its_own_work():
     asyncio.run(check())
 
 
-def test_production_runs_batch_sources_before_concurrent_ocr_and_websites(tmp_path, capsys):
+def test_production_prioritizes_batch_and_website_work_before_ocr(tmp_path, capsys):
     calls = []
-    ocr_started = asyncio.Event()
-    web_started = asyncio.Event()
 
     async def official(*args, **kwargs):
         return BrregResult(claims=[], evidence=[], snapshots=[], errors=[],
@@ -73,15 +71,11 @@ def test_production_runs_batch_sources_before_concurrent_ocr_and_websites(tmp_pa
 
     async def document(result, *args, **kwargs):
         calls.append("ocr_start")
-        ocr_started.set()
-        await web_started.wait()
         calls.append("ocr_finished")
         return result
 
     async def website(*args, **kwargs):
         calls.append("web_start")
-        web_started.set()
-        await ocr_started.wait()
         calls.append("web_finished")
         return WebsiteResearchResult(state=PublicState.NOT_AVAILABLE,
             audit={"execution_state": "completed", "claims": []})
@@ -102,9 +96,10 @@ def test_production_runs_batch_sources_before_concurrent_ocr_and_websites(tmp_pa
             "--config", str(tmp_path / "config"), "--live-brreg", "--live-websites"]) == 0
     assert calls.index("nav") < calls.index("ocr_start")
     assert calls.index("wikidata") < calls.index("ocr_start")
+    assert calls.index("web_finished") < calls.index("ocr_start")
     assert "ocr_finished" in calls and "web_finished" in calls
     rows = [json.loads(line) for line in (tmp_path / "output").read_text().splitlines()]
     assert len(rows) == 3 and rows[-1]["terminal_state"] == "failed"
     receipt = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert receipt["physical_gateway_requests"] == 0
-    assert receipt["scheduler_passes"]["phase_reservations"]["ocr_and_websites_concurrent"]
+    assert not receipt["scheduler_passes"]["phase_reservations"]["ocr_and_websites_concurrent"]

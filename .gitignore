@@ -9,4 +9,6 @@
 
 .signalpost-tools/
 .signalpost-cache/
+/cache/
 .signalpost-recordings/
+/signalpost_state.json

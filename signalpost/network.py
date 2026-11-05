@@ -138,6 +138,7 @@ class LedgerEntry:
     elapsed_ms: float
     outcome: str
     redirect_location: str | None = None
+    error_type: str | None = None
 
 
 @dataclass
@@ -365,6 +366,8 @@ class NetworkGateway:
         self._last_request: dict[str, float] = {}
         self._rate_slots: dict[str, asyncio.Lock] = {}
         self._robots: dict[str, tuple[str, float | None, str]] = {}
+        self._robots_observations: dict[str, tuple[LedgerEntry, ...]] = {}
+        self._physical_observer = ContextVar("physical_observer", default=None)
         self._robots_slots: dict[str, asyncio.Lock] = {}
         self._inflight: dict[tuple[Any, ...], asyncio.Future] = {}
         self.coalesced_requests = 0
@@ -424,8 +427,10 @@ class NetworkGateway:
     async def _http_request(self, target: str, *, purpose: str, user_agent: str, cap: int,
                             use_robots: bool, allowed_hosts: set[str] | None, access_profile: str | None,
                             api_headers: dict[str, str] | None,
-                            approved_ips: tuple[str, ...] | None) -> tuple[int, dict[str, str], bytes, str]:
+                            approved_ips: tuple[str, ...] | None,
+                            timeout: float | None = None) -> tuple[int, dict[str, str], bytes, str]:
         self._assert_recordable_url(target)
+        request_timeout = timeout or self.timeout
         request = {"method": "GET", "url": target,
                    "params": [list(pair) for pair in urllib.parse.parse_qsl(
                        urllib.parse.urlsplit(target).query, keep_blank_values=True)],
@@ -434,8 +439,8 @@ class NetworkGateway:
                    "use_robots": use_robots, "access_profile": access_profile,
                    "allowed_hosts": sorted(h.casefold() for h in allowed_hosts) if allowed_hosts is not None else None,
                    "if_modified_since": (api_headers or {}).get("If-Modified-Since"),
-                   "retries": self.retries, "redirect_limit": self.redirect_limit,
-                   "trusted_proxy": self.trusted_proxy, "timeout": self.timeout}
+                   "retries": min(1, self.retries) if purpose == "robots" else self.retries, "redirect_limit": self.redirect_limit,
+                   "trusted_proxy": self.trusted_proxy, "timeout": request_timeout}
         if self.replay_mode:
             checkpoint = asyncio.get_running_loop().create_future()
             def release() -> None:
@@ -470,10 +475,12 @@ class NetworkGateway:
         headers = {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}
         try:
             response = await asyncio.wait_for(
-                self.transport.request(target, headers, self.timeout, approved_ips=approved_ips, max_bytes=cap)
+                self.transport.request(target, headers, request_timeout, approved_ips=approved_ips, max_bytes=cap)
                 if isinstance(self.transport, UrlLibTransport) else
-                self.transport.request(target, headers, self.timeout), timeout=self.timeout)
+                self.transport.request(target, headers, request_timeout), timeout=request_timeout)
         except (asyncio.CancelledError, Exception) as exc:
+            cause = getattr(exc, "reason", exc)
+            error_type = type(cause).__name__ if isinstance(cause, BaseException) else type(exc).__name__
             retrieved_at = datetime.now(timezone.utc)
             self._observed_at.set(retrieved_at)
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -483,8 +490,9 @@ class NetworkGateway:
             captured = None
             if self.http_recording:
                 captured = self.http_recording.save(request, response=None, outcome=outcome, approved_ips=approved_ips,
-                    elapsed_ms=elapsed_ms, retrieved_at=retrieved_at, attempt=attempt)
-            self._record(target, purpose, None, 0, start, outcome, captured=captured)
+                    elapsed_ms=elapsed_ms, retrieved_at=retrieved_at, attempt=attempt, error_type=error_type)
+            self._record(target, purpose, None, 0, start, outcome, captured=captured,
+                         error_type=error_type)
             raise
         retrieved_at = datetime.now(timezone.utc)
         self._observed_at.set(retrieved_at)
@@ -595,10 +603,11 @@ class NetworkGateway:
             ordered_ips = tuple(sorted(approved_ips or (), key=lambda ip: (ipaddress.ip_address(ip).version != 4, ip)))
             address_index = 0
             parsed = urllib.parse.urlsplit(target)
+            retry_limit = min(1, self.retries) if purpose == "robots" else self.retries
             slot = self._host_slots.setdefault(parsed.hostname or "", _AdaptiveHostLimit(
                 self.budget.config.per_host_concurrency if self.budget else 2))
             async with self._global_slots, slot:
-                for attempt in range(self.retries + 1):
+                for attempt in range(retry_limit + 1):
                     await self._pace(target, delay or 0.0)
                     org_match = re.search(r"(?:enheter|regnskap|konsernstruktur|kopi)/(\d{9})", urllib.parse.urlsplit(target).path)
                     if org_match is None:
@@ -617,6 +626,7 @@ class NetworkGateway:
                         status, headers, body, _ = await self._http_request(
                             target, purpose=purpose, user_agent=user_agent, cap=cap, use_robots=use_robots,
                             allowed_hosts=allowed_hosts, access_profile=access_profile, api_headers=api_headers,
+                            timeout=(self.timeout * 2 if purpose == "robots" and attempt > 0 else self.timeout),
                             approved_ips=(ordered_ips[address_index % len(ordered_ips)],) if ordered_ips else None)
                         location = headers.get("Location") or headers.get("location")
                         if status in {301, 302, 303, 307, 308} and location:
@@ -652,7 +662,7 @@ class NetworkGateway:
                             break
                         if status in {429, 503}:
                             await self._adapt_host_rate(parsed.hostname or "")
-                        if status in {429, 503} and attempt < self.retries:
+                        if status in {429, 503} and attempt < retry_limit:
                             retry_after = headers.get("Retry-After") or headers.get("retry-after")
                             try:
                                 wait_seconds = min(60.0, max(0.0, float(retry_after))) if retry_after else min(1.0 * (attempt + 1), 5.0)
@@ -690,7 +700,7 @@ class NetworkGateway:
                     except (asyncio.TimeoutError, OSError, urllib.error.URLError) as exc:
                         outcome = "timeout" if isinstance(exc, asyncio.TimeoutError) else "transport_error"
                         address_index += 1
-                        if attempt >= self.retries:
+                        if attempt >= retry_limit:
                             return status or 0, headers, b"", target, outcome
                         if not self.replay_mode:
                             await asyncio.sleep(min(0.1 * (attempt + 1), 0.5))
@@ -736,6 +746,10 @@ class NetworkGateway:
         state, delay = await self.robots_decision(url, user_agent, allowed_hosts=allowed_hosts)
         return state == "allowed", delay
 
+    def robots_observations(self, url: str) -> tuple[LedgerEntry, ...]:
+        parsed = urllib.parse.urlsplit(url)
+        return self._robots_observations.get(f"{parsed.scheme}://{parsed.netloc}", ())
+
     async def robots_decision(self, url: str, user_agent: str, *, allowed_hosts: set[str] | None = None) -> tuple[str, float | None]:
         """Return allowed, disallowed, or unreachable without conflating policy and transport."""
         parsed = urllib.parse.urlsplit(url)
@@ -750,8 +764,14 @@ class NetworkGateway:
                 request_path = (parsed.path or "/") + (("?" + parsed.query) if parsed.query else "")
                 return ("disallowed" if _robots_disallows(rules, request_path, user_agent) else "allowed"), delay
             robots_url = origin + "/robots.txt"
-            status, headers, body, final_url, outcome = await self.fetch(robots_url, purpose="robots", user_agent=user_agent,
-                                                                         use_robots=False, max_bytes=256 * 1024, allowed_hosts=allowed_hosts)
+            observed = []
+            token = self._physical_observer.set(observed)
+            try:
+                status, headers, body, final_url, outcome = await self.fetch(robots_url, purpose="robots", user_agent=user_agent,
+                    use_robots=False, max_bytes=256 * 1024, allowed_hosts=allowed_hosts)
+            finally:
+                self._physical_observer.reset(token)
+                self._robots_observations[origin] = tuple(observed)
             delay = None
             if outcome in {"timeout", "transport_error"} or status >= 500:
                 self._robots[origin] = ("", None, "unreachable")
@@ -762,6 +782,9 @@ class NetworkGateway:
                 return "budget_skipped", None
             if outcome in {"response_too_large", "decompression_limit", "unsupported_encoding",
                            "waf_challenge", "soft_404", "redirect_limit"}:
+                self._robots[origin] = ("", None, "unusable")
+                return "unusable", None
+            if status == 403:
                 self._robots[origin] = ("", None, "unusable")
                 return "unusable", None
             if 400 <= status < 500:
@@ -788,6 +811,7 @@ class NetworkGateway:
                     and final_parts.path == "/robots.txt" and not final_parts.query
                     and not final_parts.fragment and final_origin != origin):
                 self._robots.setdefault(final_origin, (rules, delay, "allowed"))
+                self._robots_observations.setdefault(final_origin, tuple(observed))
             return state, delay
 
     async def _pace(self, url: str, minimum: float = 0.0) -> None:
@@ -805,10 +829,15 @@ class NetworkGateway:
             self._last_request[host] = time.monotonic()
 
     def _record(self, url: str, purpose: str, status: int | None, size: int, start: float, outcome: str,
-                *, captured: dict[str, Any] | None = None) -> None:
-        self.ledger.entries.append(LedgerEntry(
+                *, captured: dict[str, Any] | None = None, error_type: str | None = None) -> None:
+        entry = LedgerEntry(
             captured["request_id"] if captured else str(uuid.uuid4()), url, purpose, status, size,
-            captured["elapsed_ms"] if captured else (time.monotonic() - start) * 1000, outcome))
+            captured["elapsed_ms"] if captured else (time.monotonic() - start) * 1000, outcome,
+            error_type=error_type or (captured or {}).get("error_type"))
+        self.ledger.entries.append(entry)
+        observer = self._physical_observer.get()
+        if observer is not None:
+            observer.append(entry)
 
 
 def _robots_disallows(text: str, path: str, user_agent: str) -> bool:

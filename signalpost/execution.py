@@ -31,9 +31,13 @@ class ExecutionTrace:
         if not self.replay:
             return None
         try:
-            return self.outcomes[phase][company]["outcome"]
+            outcome = self.outcomes[phase][company]["outcome"]
         except (KeyError, TypeError):
             self.recording._fail("missing company phase control: " + phase + ":" + company)
+        if outcome not in {"completed", "failed", "deadline_skipped", "budget_skipped",
+                           "not_attempted", "ineligible", "policy_skipped"}:
+            self.recording._fail("invalid company phase control: " + phase + ":" + company)
+        return outcome
 
     def admitted(self, phase: str, company: str) -> bool:
         return not self.replay or self.outcome(phase, company) in {"completed", "failed"}

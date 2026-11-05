@@ -153,7 +153,10 @@ class HttpRecording:
 
     def save(self, request: dict[str, Any], *, response: tuple[int, dict[str, str], bytes, str] | None,
              outcome: str, approved_ips: tuple[str, ...] | None, elapsed_ms: float,
-             retrieved_at: datetime | None = None, attempt: dict[str, Any] | None = None) -> dict[str, Any]:
+             retrieved_at: datetime | None = None, attempt: dict[str, Any] | None = None,
+             error_type: str | None = None) -> dict[str, Any]:
+        if error_type is not None and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", error_type):
+            self._fail("invalid transport exception type")
         attempt = attempt or self.begin(request, approved_ips=approved_ips)
         key, position = attempt["key"], attempt["position"]
         if (self.replay or (key, position) not in self._pending or
@@ -161,7 +164,7 @@ class HttpRecording:
             self._fail("invalid attempt reservation")
         payload = {"request": request, "outcome": outcome, "approved_ips": approved_ips,
                    **attempt, "retrieved_at": (retrieved_at or datetime.now(timezone.utc)).isoformat(),
-                   "elapsed_ms": elapsed_ms,
+                   "elapsed_ms": elapsed_ms, "error_type": error_type,
                    "response": None if response is None else
                    {"status": response[0], "headers": response[1],
                     "body": base64.b64encode(response[2]).decode(), "final_url": response[3]}}
@@ -197,6 +200,9 @@ class HttpRecording:
                 self._fail("recording request or outcome mismatch")
             if datetime.fromisoformat(payload["retrieved_at"]).tzinfo is None:
                 self._fail("recording retrieval time requires a timezone")
+            if payload.get("error_type") is not None and (not isinstance(payload["error_type"], str)
+                    or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", payload["error_type"])):
+                self._fail("invalid recorded transport exception type")
             ips = payload["approved_ips"]
             if ips is not None and (not isinstance(ips, list) or not ips or not all(isinstance(ip, str) for ip in ips)):
                 self._fail("malformed recorded addresses")

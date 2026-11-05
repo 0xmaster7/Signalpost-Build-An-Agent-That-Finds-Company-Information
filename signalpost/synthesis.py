@@ -6,6 +6,7 @@ from typing import Any
 
 from .identifiers import canonical_product_heading
 from .models import Envelope, PublicState
+from .profile import build_profile, validate_profile, validate_profile_schema
 
 SYNTHESIS_SCHEMA_VERSION = 1
 SYNTHESIS_ROOT_KEYS = frozenset({"summary", "brreg_observations", "baseline_identity",
@@ -16,6 +17,7 @@ summary brreg_observations baseline_identity live_identity_observation cutoff_id
 evidence_cutoff evidence_cutoff_source website_research schema_version mode sentences unknown_sections
 text fact_ids change_ids evidence_ids json_pointer organisation_number name legal_form as_of source_url content_sha256
 state reason fields retrieved_at accounts_state_evidence_id ceo_state entity_http_status
+foundation_breadth_only
 group_checked rule_id
 entity_removed_from_disclosure financial_records identity_profile identity_state_evidence_id
 business_address registered_workplace_address land landkode employees historical_names industry_codes latest_submitted_accounts
@@ -39,6 +41,10 @@ subject_ids method address municipality postcode street registered_role addition
 execution_state claims request_count jobs_candidates published explicit_zero identity_rejected
 candidate_count publication_tier identity_gate_tier
 annual_accounts_document pages_processed ocr_seconds processing_seconds financial_claims workforce_claims cache_hit
+download_seconds text_layer_seconds ocr_engine_seconds worker_seconds text_layer_pages ocr_pages
+unknown_extraction_pages extraction_method resolved_method worker_limit
+robots_cause robots_fetch_result candidate_source evidence_url evidence_sha256 statuses outcomes attempts
+fetch_result fetch_rejection_reason identity_rejection_reason rejection_reason outcome
 examined_pages strategy stopped_early fte_pages_examined financial_anchor_pages coverage_complete document_pages stop_reason
 financial_calibration claims_added calibration_id reference_subject_id anchor_metrics documented_api_unit_contract
 financial_cross_checks financial_cross_check_conflicts
@@ -59,6 +65,9 @@ def validate_synthesis_schema(synthesis: dict[str, Any]) -> None:
     if synthesis.get("schema_version", SYNTHESIS_SCHEMA_VERSION) != SYNTHESIS_SCHEMA_VERSION:
         raise ValueError("unsupported synthesis schema version")
     def visit(value: Any, path: tuple[str, ...] = ()) -> None:
+        if path == ("summary", "profile"):
+            validate_profile_schema(value)
+            return
         if path == ("brreg_observations", "annual_accounts_document", "financial_cross_checks", "*"):
             allowed = {"metric", "value", "page", "span", "unit_span", "year", "currency",
                 "inferred_api_unit", "api_value_multiplier"}
@@ -75,7 +84,8 @@ def validate_synthesis_schema(synthesis: dict[str, Any]) -> None:
                 raise ValueError("invalid unrequested ATS origin diagnostic")
             return
         if isinstance(value, dict):
-            unknown = set(value) - _SYNTHESIS_KEYS
+            allowed_keys = _SYNTHESIS_KEYS | {"profile"} if path == ("summary",) else _SYNTHESIS_KEYS
+            unknown = set(value) - allowed_keys
             if unknown:
                 raise ValueError(f"unknown nested synthesis fields: {', '.join(sorted(unknown))}")
             for key, child in value.items():
@@ -86,7 +96,8 @@ def validate_synthesis_schema(synthesis: dict[str, Any]) -> None:
     visit(synthesis)
     summary = synthesis.get("summary")
     if summary is not None:
-        if not isinstance(summary, dict) or set(summary) != {"schema_version", "mode", "sentences", "unknown_sections"}:
+        summary_keys = {"schema_version", "mode", "sentences", "unknown_sections"}
+        if not isinstance(summary, dict) or set(summary) not in (summary_keys, summary_keys | {"profile"}):
             raise ValueError("synthesis summary does not match schema v1")
         if summary.get("schema_version") != SYNTHESIS_SCHEMA_VERSION or summary.get("mode") != "deterministic_verified_facts":
             raise ValueError("unsupported synthesis summary schema or mode")
@@ -197,6 +208,7 @@ def synthesize(envelope: Envelope) -> dict[str, Any]:
             sentences.append({"text": _change_sentence(event), "fact_ids": [], "change_ids": [event.event_id],
                               "evidence_ids": event_evidence})
     result = {"schema_version": SYNTHESIS_SCHEMA_VERSION, "mode": "deterministic_verified_facts", "sentences": sentences,
+              "profile": build_profile(envelope),
               "unknown_sections": sorted(name for name, section in envelope.sections.items()
                   if section.state in {None, PublicState.NOT_AVAILABLE, PublicState.AMBIGUOUS,
                                        PublicState.BLOCKED, PublicState.FAILED}
@@ -209,7 +221,8 @@ def validate_synthesis(envelope: Envelope, synthesis: dict[str, Any]) -> None:
     """Reject any sentence without exact, same-company canonical support."""
     # The same closed sentence schema applies whether this is the canonical
     # summary object or a direct caller's synthesized result.
-    if set(synthesis) != {"schema_version", "mode", "sentences", "unknown_sections"}:
+    summary_keys = {"schema_version", "mode", "sentences", "unknown_sections"}
+    if set(synthesis) not in (summary_keys, summary_keys | {"profile"}):
         raise ValueError("synthesis summary does not match schema v1")
     if synthesis.get("schema_version") != SYNTHESIS_SCHEMA_VERSION:
         raise ValueError("unsupported synthesis summary schema")
@@ -275,3 +288,5 @@ def validate_synthesis(envelope: Envelope, synthesis: dict[str, Any]) -> None:
             if not item.source_snapshot_ids or any(ref not in {s.source_id for s in envelope.source_snapshots}
                                                     for ref in item.source_snapshot_ids):
                 raise ValueError("synthesis evidence lacks a bound source snapshot")
+    if "profile" in synthesis:
+        validate_profile(envelope, synthesis["profile"])

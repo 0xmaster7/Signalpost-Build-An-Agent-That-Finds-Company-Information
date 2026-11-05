@@ -63,6 +63,20 @@ def _page_order(count: int) -> list[int]:
     return [i for i in PAGE_PRIORITY if i < count] + [i for i in range(1, count) if i not in PAGE_PRIORITY]
 
 
+def _worker_limit() -> int:
+    """Use at most four single-threaded workers, bounded by available cores."""
+    cores = os.cpu_count() or 1
+    if hasattr(os, "sched_getaffinity"):
+        try:
+            cores = min(cores, len(os.sched_getaffinity(0)))
+        except OSError:
+            pass
+    requested = int(os.environ.get("SIGNALPOST_OCR_WORKERS", str(min(4, cores))))
+    if requested < 1:
+        raise ValueError("SIGNALPOST_OCR_WORKERS must be a positive integer")
+    return min(max(1, cores), 4, requested)
+
+
 def fold(text: str) -> str:
     value = text.casefold().replace("ø", "o").replace("æ", "ae")
     return "".join(c for c in unicodedata.normalize("NFKD", value) if not unicodedata.combining(c))
@@ -349,9 +363,11 @@ def reconcile(pages: list[dict[str, Any]], org: str, record: dict[str, Any], *,
 
 class OCRPages(list):
     """List-compatible OCR results with explicit, request-scoped page coverage."""
-    def __init__(self, pages: list[dict[str, Any]], coverage: dict[str, Any]):
+    def __init__(self, pages: list[dict[str, Any]], coverage: dict[str, Any],
+                 metrics: dict[str, float] | None = None):
         super().__init__(pages)
         self.coverage = coverage
+        self.metrics = metrics or {}
 
 
 def _searchable_words(page: Any) -> list[dict[str, Any]]:
@@ -361,9 +377,11 @@ def _searchable_words(page: Any) -> list[dict[str, Any]]:
     if hasattr(page, "get_rotation") and page.get_rotation() != 0:
         return []
     from pypdfium2 import raw as pdfium_raw
-    for obj in page.get_objects(max_depth=1):
-        if obj.type in {pdfium_raw.FPDF_PAGEOBJ_IMAGE, pdfium_raw.FPDF_PAGEOBJ_FORM}:
-            return []
+    for obj in page.get_objects(max_depth=8):
+        if obj.type == pdfium_raw.FPDF_PAGEOBJ_IMAGE:
+            bounds = obj.get_pos()
+            if (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]) >= page.get_width() * page.get_height() * 0.25:
+                return []
         if obj.type == pdfium_raw.FPDF_PAGEOBJ_TEXT and pdfium_raw.FPDFTextObj_GetTextRenderMode(obj) not in {0, 1, 2}:
             return []
     textpage = page.get_textpage()
@@ -402,6 +420,8 @@ def _searchable_words(page: Any) -> list[dict[str, Any]]:
 def _ocr_worker(pdf: bytes, org: str | None = None,
                 record: dict[str, Any] | None = None) -> list[dict[str, Any]] | dict[str, Any]:
     """Verify the cover and scan each remaining page at most once for company FTE."""
+    started = time.monotonic()
+    metrics = {"text_layer_seconds": 0.0, "ocr_engine_seconds": 0.0}
     import pypdfium2 as pdfium
     engine = None
     document = pdfium.PdfDocument(pdf)
@@ -410,34 +430,41 @@ def _ocr_worker(pdf: bytes, org: str | None = None,
         nonlocal engine
         page = document[index]
         try:
+            text_started = time.monotonic()
             try:
                 words = _searchable_words(page)
             except (AttributeError, ValueError, RuntimeError):
                 words = []
+            finally:
+                metrics["text_layer_seconds"] += time.monotonic() - text_started
             if words:
                 result = {"page": index + 1, "width": page.get_width(), "height": page.get_height(),
                     "words": words, "extraction": "pdf_text"}
                 pages.append(result)
                 return result
-            import numpy as np
-            from rapidocr_onnxruntime import RapidOCR
-            if engine is None:
-                engine = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
-            bitmap = page.render(scale=1.1, grayscale=True)
+            ocr_started = time.monotonic()
             try:
-                image = bitmap.to_pil().convert("RGB")
+                import numpy as np
+                from rapidocr_onnxruntime import RapidOCR
+                if engine is None:
+                    engine = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
+                bitmap = page.render(scale=1.1, grayscale=True)
                 try:
-                    output, _ = engine(np.asarray(image), use_cls=False)
-                    words = [{"text": text, "confidence": float(confidence), "x1": min(p[0] for p in box),
-                        "x2": max(p[0] for p in box), "y1": min(p[1] for p in box), "y2": max(p[1] for p in box)}
-                        for box, text, confidence in output or []]
-                    result = {"page": index + 1, "width": image.width, "height": image.height, "words": words, "extraction": "ocr"}
-                    pages.append(result)
-                    return result
+                    image = bitmap.to_pil().convert("RGB")
+                    try:
+                        output = engine(np.asarray(image), use_cls=False)[0]
+                        words = [{"text": text, "confidence": float(confidence), "x1": min(point[0] for point in box),
+                            "x2": max(point[0] for point in box), "y1": min(point[1] for point in box), "y2": max(point[1] for point in box)}
+                            for box, text, confidence in output or []]
+                        result = {"page": index + 1, "width": image.width, "height": image.height, "words": words, "extraction": "ocr"}
+                        pages.append(result)
+                        return result
+                    finally:
+                        image.close()
                 finally:
-                    image.close()
+                    bitmap.close()
             finally:
-                bitmap.close()
+                metrics["ocr_engine_seconds"] += time.monotonic() - ocr_started
         finally:
             page.close()
     try:
@@ -468,17 +495,19 @@ def _ocr_worker(pdf: bytes, org: str | None = None,
             coverage["stop_reason"] = "cover_not_processed"
         coverage["examined_pages"] = [p["page"] for p in pages]
         coverage["coverage_complete"] = len(pages) == len(document)
-        return {"pages": pages, "coverage": coverage}
+        metrics["worker_seconds"] = time.monotonic() - started
+        return {"pages": pages, "coverage": coverage, "metrics": metrics}
     finally:
         document.close()
 
 
 class DocumentProcessor:
-    """Two killable workers with context-bound, atomic persistent page results."""
+    """Core-bounded killable workers with context-bound, atomic persistent page results."""
     def __init__(self, seconds: float | None = None, *, deadline: float | None = None,
                  cache_path: str | Path | None = None, cache_only: bool = False, recording=None):
         """Optional run budget uses an absolute time.monotonic deadline."""
-        self.slots = asyncio.Semaphore(2)
+        self.worker_count = _worker_limit()
+        self.slots = asyncio.Semaphore(self.worker_count)
         self.cache: dict[str, list[dict[str, Any]]] = {}
         self.cache_only = cache_only
         self.cache_misses = 0
@@ -546,8 +575,10 @@ class DocumentProcessor:
 
     async def ocr(self, body: bytes, seconds: float, *, org: str | None = None,
                   record: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], bool]:
+        started = time.monotonic()
         if self.recording is None:
-            return await self._ocr(body, seconds, org=org, record=record)
+            pages, cache_hit = await self._ocr(body, seconds, org=org, record=record)
+            return self._measured_pages(pages, cache_hit, started), cache_hit
         control = {"pdf_sha256": hashlib.sha256(body).hexdigest(), "org": org, "record": record,
             "parser": PARSER_VERSION, "strategy": FTE_STRATEGY, "models": self.model_versions}
         key = "ocr:" + hashlib.sha256(json.dumps(control, sort_keys=True, separators=(",", ":"),
@@ -561,6 +592,7 @@ class DocumentProcessor:
             self.recording._fail("recorded OCR failure cannot be reconstructed: " + key)
         try:
             pages, cache_hit = await self._ocr(body, seconds, org=org, record=record)
+            pages = self._measured_pages(pages, cache_hit, started)
         except (asyncio.CancelledError, Exception) as exc:
             if not self.recording.replay:
                 state = ("cancelled" if isinstance(exc, asyncio.CancelledError) else
@@ -571,8 +603,21 @@ class DocumentProcessor:
         self.recording.assert_identity(key + ":pages", json.dumps(payload, sort_keys=True,
             separators=(",", ":"), allow_nan=False).encode())
         if not self.recording.replay:
-            self.recording.record_execution(key, {"status": "completed", "cache_hit": cache_hit})
+            self.recording.record_execution(key, {"status": "completed", "cache_hit": cache_hit,
+                "metrics": getattr(pages, "metrics", {})})
+        elif isinstance(pages, OCRPages) and "metrics" in saved:
+            pages.metrics = saved["metrics"]
         return pages, saved["cache_hit"] if saved is not None else cache_hit
+
+    @staticmethod
+    def _measured_pages(pages: list[dict[str, Any]], cache_hit: bool, started: float) -> list[dict[str, Any]]:
+        if not isinstance(pages, OCRPages):
+            return pages
+        metrics = {"text_layer_seconds": 0.0, "ocr_engine_seconds": 0.0, "worker_seconds": 0.0}
+        if not cache_hit:
+            metrics.update(pages.metrics)
+        metrics["request_seconds"] = time.monotonic() - started
+        return OCRPages(list(pages), pages.coverage, metrics)
 
     async def _ocr(self, body: bytes, seconds: float, *, org: str | None = None,
                    record: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], bool]:
@@ -639,7 +684,7 @@ class DocumentProcessor:
             if process.returncode:
                 raise RuntimeError("local_ocr_dependency_or_document_error: " + error.decode(errors="replace")[-220:])
             payload = json.loads(output)
-            pages = OCRPages(payload["pages"], payload["coverage"]) if isinstance(payload, dict) else payload
+            pages = OCRPages(payload["pages"], payload["coverage"], payload.get("metrics")) if isinstance(payload, dict) else payload
             return pages
         except BaseException:
             if process.returncode is None:
@@ -656,6 +701,10 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
     started = time.monotonic()
     audit = {"state": "not_available", "reason": "no_eligible_company_filing", "pages_processed": 0,
         "ocr_seconds": 0.0, "processing_seconds": 0.0, "financial_claims": 0, "workforce_claims": 0, "cache_hit": False,
+        "download_seconds": 0.0, "text_layer_seconds": 0.0, "ocr_engine_seconds": 0.0, "worker_seconds": 0.0,
+        "text_layer_pages": 0, "ocr_pages": 0, "unknown_extraction_pages": 0,
+        "extraction_method": "not_processed", "resolved_method": None,
+        "worker_limit": getattr(processor, "worker_count", None),
         "examined_pages": [], "strategy": FTE_STRATEGY, "stopped_early": False,
         "fte_pages_examined": [], "financial_anchor_pages": [], "coverage_complete": False,
         "document_pages": None, "stop_reason": "not_started"}
@@ -674,9 +723,14 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
         return result
     record = latest[0]
     url = f"{COPY_ROOT}/{org}/{record['period_end'][:4]}"
+    ocr_started = None
     try:
-        status, headers, body, final_url, outcome = await gateway.fetch(url, purpose="annual_account_copy",
-            max_bytes=MAX_PDF_BYTES, allowed_hosts={"data.brreg.no"}, access_profile="brreg_document_api")
+        download_started = time.monotonic()
+        try:
+            status, headers, body, final_url, outcome = await gateway.fetch(url, purpose="annual_account_copy",
+                max_bytes=MAX_PDF_BYTES, allowed_hosts={"data.brreg.no"}, access_profile="brreg_document_api")
+        finally:
+            audit["download_seconds"] = round(time.monotonic() - download_started, 6)
         retrieved = getattr(gateway, "observed_at", None) or datetime.now(timezone.utc)
         if status != 200 or outcome != "ok" or not body.startswith(b"%PDF"):
             audit.update(state="not_available" if status in {404, 410} else "blocked" if outcome.startswith("robots") or status in {401,403,429} or outcome == "budget_exhausted" else "failed",
@@ -694,10 +748,23 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
             pages, cache_hit = await processor.ocr(body, seconds, org=org, record=record)
         else:
             pages, cache_hit = await processor.ocr(body, seconds)
-        audit.update(ocr_seconds=round(time.monotonic() - ocr_started, 3), pages_processed=len(pages), cache_hit=cache_hit)
+        audit.update(pages_processed=len(pages), cache_hit=cache_hit,
+            text_layer_pages=sum(page.get("extraction") == "pdf_text" for page in pages),
+            ocr_pages=sum(page.get("extraction") == "ocr" for page in pages),
+            unknown_extraction_pages=sum(page.get("extraction") not in {"pdf_text", "ocr"} for page in pages))
+        methods = {page.get("extraction", "unknown") for page in pages}
+        audit["extraction_method"] = next(iter(methods)) if len(methods) == 1 else "mixed" if methods else "not_processed"
+        metrics = getattr(pages, "metrics", {})
+        audit["ocr_seconds"] = round(metrics.get("request_seconds", time.monotonic() - ocr_started), 3)
+        ocr_started = None
+        audit.update({key: round(metrics.get(key, 0.0), 6)
+            for key in ("text_layer_seconds", "ocr_engine_seconds", "worker_seconds")})
         audit.update(examined_pages=[p["page"] for p in pages], stop_reason="legacy_ocr_coverage_unknown")
         audit.update(getattr(pages, "coverage", {}))
         checked = reconcile(pages, org, record, workforce_strategy=FTE_STRATEGY)
+        if checked["workforce"]:
+            resolved_page = next(page for page in pages if page["page"] == checked["workforce"]["page"])
+            audit["resolved_method"] = resolved_page.get("extraction", "unknown")
         audit.update(state=checked["state"] if checked["state"] in {"blocked", "ambiguous"} else
             "available" if checked["workforce"] else "not_available", reason=checked["reason"],
             financial_cross_checks=[{**item, "inferred_api_unit": item["currency"], "api_value_multiplier": 1}
@@ -746,6 +813,8 @@ async def enrich_company(result: Any, org: str, gateway: Any, cutoff: datetime, 
         result.errors.append(RunError(code="ANNUAL_DOCUMENT_PROCESSING_FAILED", message=str(exc)[:240]))
         return result
     finally:
+        if ocr_started is not None:
+            audit["ocr_seconds"] = round(time.monotonic() - ocr_started, 3)
         audit["processing_seconds"] = round(time.monotonic() - started, 3)
         result.section_states["hiring_activity"] = PublicState.AVAILABLE if audit["workforce_claims"] else PublicState(audit["state"] if audit["state"] != "available" else "not_available")
         if audit["state"] in {"blocked", "failed", "ambiguous"}:

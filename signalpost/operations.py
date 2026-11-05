@@ -12,12 +12,15 @@ import sqlite3
 import tempfile
 import time
 import uuid
+from collections import ChainMap
+from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 from typing import Awaitable, Callable, Iterable, TypeVar
 
 from .models import Envelope
@@ -282,9 +285,60 @@ class Budget:
         return self._cost
 
 
+def _envelope_identity_graph(envelope: Envelope) -> dict:
+    snapshots = {}
+    for item in envelope.source_snapshots:
+        signature = item.model_dump(mode="json")
+        signature.pop("retrieved_at", None)
+        snapshots[item.source_id] = signature
+    return {"evidence": {item.evidence_id: item.model_dump(mode="json") for item in envelope.evidence},
+            "snapshots": snapshots}
+
+
+class _EnvelopeIdentityIndex:
+    def __init__(self):
+        self.rows: dict[int, dict] = {}
+        self.references: dict[str, dict[str, tuple[dict, int]]] = {"evidence": {}, "snapshots": {}}
+
+    def prepare(self, envelopes: Iterable[Envelope]) -> tuple[list[Envelope], dict[int, dict]]:
+        from .models import validate_batch_publication_graph
+        checked = validate_batch_publication_graph(list(envelopes))
+        if len({item.row_number for item in checked}) != len(checked):
+            raise ValueError("duplicate row_number in checkpoint update")
+        changes = {item.row_number: _envelope_identity_graph(item) for item in checked}
+        for kind, references in self.references.items():
+            removed: dict[str, int] = {}
+            for row_number in changes:
+                for identifier in self.rows.get(row_number, {}).get(kind, {}):
+                    removed[identifier] = removed.get(identifier, 0) + 1
+            for graph in changes.values():
+                for identifier, signature in graph[kind].items():
+                    previous = references.get(identifier)
+                    if (previous is not None and previous[1] > removed.get(identifier, 0)
+                            and previous[0] != signature):
+                        raise ValueError(f"conflicting {kind} identifier across envelopes: {identifier}")
+        return checked, changes
+
+    def apply(self, changes: dict[int, dict]) -> None:
+        for kind, references in self.references.items():
+            for row_number in changes:
+                for identifier in self.rows.get(row_number, {}).get(kind, {}):
+                    signature, count = references[identifier]
+                    if count == 1:
+                        del references[identifier]
+                    else:
+                        references[identifier] = signature, count - 1
+            for graph in changes.values():
+                for identifier, signature in graph[kind].items():
+                    previous = references.get(identifier)
+                    references[identifier] = signature, (previous[1] if previous else 0) + 1
+        self.rows.update(changes)
+
+
 class CheckpointStore:
     def __init__(self, path: str | Path):
         self._identity_graphs = None
+        self._identity_index: _EnvelopeIdentityIndex | None = None
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path)
@@ -314,6 +368,11 @@ class CheckpointStore:
     def phase_statuses(self, phase: str) -> dict[str, dict]:
         return {company: json.loads(payload) for company, payload in self.connection.execute(
             "SELECT company,payload FROM phase_status WHERE phase=?", (phase,))}
+
+    def phase_status(self, phase: str, company: str) -> dict | None:
+        row = self.connection.execute("SELECT payload FROM phase_status WHERE phase=? AND company=?",
+                                      (phase, company)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def set_meta(self, key: str, value: str) -> None:
         self.connection.execute("INSERT OR REPLACE INTO run_meta(key,value) VALUES (?,?)", (key, value))
@@ -345,30 +404,29 @@ class CheckpointStore:
             "SELECT row_number,execution_state FROM shells ORDER BY row_number")}
 
     def put(self, envelope: Envelope) -> None:
-        self.connection.execute("INSERT OR REPLACE INTO envelopes(row_number,payload) VALUES (?,?)", (envelope.row_number, envelope.model_dump_json()))
-        self.connection.commit()
-        self._identity_graphs = None
+        identity_index = self._get_identity_index()
+        checked, changes = identity_index.prepare([envelope])
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO envelopes(row_number,payload) VALUES (?,?)",
+                                    (checked[0].row_number, checked[0].model_dump_json()))
+        identity_index.apply(changes)
 
-    def validate_phase_update(self, envelopes: Iterable[Envelope]) -> dict:
-        def signatures(payload):
-            sources = {}
-            for item in payload["source_snapshots"]:
-                sources[item["source_id"]] = {key: value for key, value in item.items() if key != "retrieved_at"}
-            return {"evidence": {item["evidence_id"]: item for item in payload["evidence"]}, "snapshots": sources}
-        if self._identity_graphs is None:
-            self._identity_graphs = {row: signatures(json.loads(payload)) for row, payload in
-                self.connection.execute("SELECT row_number,payload FROM envelopes")}
-        updated = dict(self._identity_graphs)
-        for envelope in envelopes:
-            updated[envelope.row_number] = signatures(envelope.model_dump(mode="json"))
-        for kind in ("evidence", "snapshots"):
-            seen = {}
-            for graph in updated.values():
-                for identifier, signature in graph[kind].items():
-                    if identifier in seen and seen[identifier] != signature:
-                        raise ValueError(f"conflicting {kind} identifier across envelopes: {identifier}")
-                    seen[identifier] = signature
-        return updated
+    def _get_identity_index(self) -> _EnvelopeIdentityIndex:
+        if self._identity_index is None:
+            identity_index = _EnvelopeIdentityIndex()
+            for payload, in self.connection.execute("SELECT payload FROM envelopes"):
+                envelope = Envelope.model_validate_json(payload)
+                _, changes = identity_index.prepare([envelope])
+                identity_index.apply(changes)
+            self._identity_index = identity_index
+            self._identity_graphs = identity_index.rows
+        return self._identity_index
+
+    def validate_phase_update(self, envelopes: Iterable[Envelope]) -> Mapping[int, dict]:
+        """Validate without mutation and return a read-only combined row graph view."""
+        identity_index = self._get_identity_index()
+        _, changes = identity_index.prepare(envelopes)
+        return MappingProxyType(ChainMap(changes, identity_index.rows))
 
     def phase_results(self, phase: str) -> dict[str, object]:
         return {company: _checkpoint_decode(json.loads(payload)) for company, payload in
@@ -376,10 +434,8 @@ class CheckpointStore:
 
     def save_phase(self, phase: str, company: str, result: object,
                    envelopes: Iterable[Envelope] = ()) -> None:
-        from .models import validate_batch_publication_graph
-        envelopes = list(envelopes)
-        validate_batch_publication_graph(envelopes)
-        identity_graphs = self.validate_phase_update(envelopes)
+        identity_index = self._get_identity_index()
+        envelopes, changes = identity_index.prepare(envelopes)
         payload = json.dumps(_checkpoint_encode(result), ensure_ascii=False)
         with self.connection:
             self.connection.execute("INSERT OR REPLACE INTO phase_results VALUES (?,?,?)", (phase, company, payload))
@@ -388,7 +444,7 @@ class CheckpointStore:
                                         (envelope.row_number, envelope.model_dump_json()))
                 self.connection.execute("UPDATE shells SET execution_state='baseline_done' WHERE row_number=?",
                                         (envelope.row_number,))
-        self._identity_graphs = identity_graphs
+        identity_index.apply(changes)
 
     def rows(self) -> list[Envelope]:
         return [Envelope.model_validate_json(row[0]) for row in self.connection.execute("SELECT payload FROM envelopes ORDER BY row_number")]
@@ -618,6 +674,82 @@ class OrderedAtomicWriter:
             if os.path.exists(temporary):
                 os.unlink(temporary)
         return pending
+
+
+class PartialEnvelopePublisher:
+    """Publish complete provisional rows immediately and at bounded flush intervals."""
+
+    def __init__(self, writer: OrderedAtomicWriter, envelopes: Iterable[Envelope], *,
+                 serializer: Callable[[Envelope], dict[str, object]] | None = None,
+                 max_seconds: float = 5.0, max_updates: int = 25,
+                 monotonic: Callable[[], float] = time.monotonic):
+        if not math.isfinite(max_seconds) or max_seconds <= 0 or max_updates < 1:
+            raise ValueError("partial publication limits must be positive and finite")
+        self.writer = writer
+        self.max_seconds = max_seconds
+        self.max_updates = max_updates
+        self._monotonic = monotonic
+        self._serializer = serializer
+        self._identity_index = _EnvelopeIdentityIndex()
+        checked, changes = self._identity_index.prepare(envelopes)
+        self._rows = {item.row_number: item for item in checked}
+        self._payloads = {item.row_number: self._serialize(item) for item in checked}
+        self._identity_index.apply(changes)
+        self._pending_updates = 0
+        self._last_flush = monotonic()
+        self.marker_path = writer.output_path.with_name(writer.output_path.name + ".publication.json")
+        self._marker = OrderedAtomicWriter(self.marker_path, estimated_bytes=4096)
+        self.flush(force=True)
+
+    def _serialize(self, envelope: Envelope) -> dict[str, object]:
+        payload = self._serializer(envelope) if self._serializer else envelope.model_dump(mode="json")
+        if not isinstance(payload, dict):
+            raise ValueError("partial publication serializer must return an object")
+        return json.loads(json.dumps(payload, ensure_ascii=False))
+
+    def update(self, envelope: Envelope) -> bool:
+        return self.update_rows([envelope])
+
+    def update_rows(self, envelopes: Iterable[Envelope]) -> bool:
+        checked, changes = self._identity_index.prepare(envelopes)
+        for envelope in checked:
+            previous = self._rows.get(envelope.row_number)
+            if previous is None or (previous.input_ref, previous.organisation_number, previous.batch_id) != (
+                    envelope.input_ref, envelope.organisation_number, envelope.batch_id):
+                raise ValueError("partial publication update must preserve the input row identity")
+        payloads = {item.row_number: self._serialize(item) for item in checked}
+        self._identity_index.apply(changes)
+        self._rows.update({item.row_number: item for item in checked})
+        self._payloads.update(payloads)
+        self._pending_updates += len(checked)
+        return self.flush()
+
+    def flush(self, *, force: bool = False) -> bool:
+        if not force and (not self._pending_updates or (
+                self._pending_updates < self.max_updates
+                and self._monotonic() - self._last_flush < self.max_seconds)):
+            return False
+        self._marker.write_bytes(json.dumps({
+            "status": "partial", "output_path": str(self.writer.output_path),
+            "row_count": len(self._rows), "canonical_pair_committed": False,
+        }, sort_keys=True).encode("utf-8") + b"\n")
+        self.writer.write(self._rows.values(), serializer=lambda envelope: self._payloads[envelope.row_number])
+        self._pending_updates = 0
+        self._last_flush = self._monotonic()
+        return True
+
+    async def run(self, stop: asyncio.Event) -> None:
+        """Run beside workers; stop and await this runner before final paired publication."""
+        try:
+            while not stop.is_set():
+                remaining = (max(0.0, self.max_seconds - (self._monotonic() - self._last_flush))
+                             if self._pending_updates else self.max_seconds)
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=remaining)
+                except TimeoutError:
+                    self.flush()
+        finally:
+            self.flush(force=True)
 
 
 def publish_paired_artifacts(output_writer: OrderedAtomicWriter, state_writer: OrderedAtomicWriter,

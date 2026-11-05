@@ -246,6 +246,11 @@ def _identifier_values(value: Any) -> list[str]:
     return []
 
 
+def _identifier_spans(text: str) -> list[tuple[str, int, int]]:
+    return [(re.sub(r"\D", "", match.group(0)), match.start(), match.end())
+            for match in re.finditer(r"(?<!\d)\d(?:[\s.\-]*\d){8}(?!\d)", text)]
+
+
 @dataclass
 class PageRecord:
     requested_url: str
@@ -482,6 +487,33 @@ def _direct_typed_entities(value: Any, wanted: set[str] | None = None) -> list[d
     return result
 
 
+def _resolve_same_document_relationship(value: Any, document: Any) -> list[dict[str, Any]]:
+    roots = document if isinstance(document, list) else [document]
+    records = [node for root in roots if isinstance(root, dict)
+               for node in (root.get("@graph") if isinstance(root.get("@graph"), list) else [root])
+               if isinstance(node, dict)]
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for node in records:
+        node_id = node.get("@id")
+        if isinstance(node_id, str) and node_id.strip():
+            by_id.setdefault(node_id.strip(), []).append(node)
+    values = value if isinstance(value, list) else [value]
+    resolved: list[dict[str, Any]] = []
+    for node in values:
+        if not isinstance(node, dict):
+            continue
+        if node.get("@type"):
+            resolved.append(node)
+            continue
+        reference = node.get("@id")
+        if not isinstance(reference, str) or not reference.strip():
+            continue
+        matches = by_id.get(reference.strip(), [])
+        if len(matches) == 1:
+            resolved.append(matches[0])
+    return resolved
+
+
 def _schema_record_urls(node: dict[str, Any]) -> list[str]:
     """Return every explicit resource identity field without hiding conflicts."""
     values: list[str] = []
@@ -580,8 +612,8 @@ def _negative_subject_context(text: str, org: str, legal_names: list[str] | None
         lowered = segment.casefold()
         subject_spans: list[tuple[int, int]] = []
         if org:
-            subject_spans.extend((match.start(), match.end()) for match in
-                re.finditer(r"(?<!\d)" + re.escape(org) + r"(?!\d)", segment))
+            subject_spans.extend((start, end) for identifier, start, end in _identifier_spans(segment)
+                                 if identifier == org)
         # Match exact legal-name spellings (including punctuation variants
         # around legal suffixes), never partial brand tokens.
         for legal in legal_names or []:
@@ -705,7 +737,8 @@ def _site_shell_has_competing_identifier(profile: dict[str, Any], page: PageReco
             nav.decompose()
         if not fragment.select(".logo, [class~='site-name'], [itemprop='legalName'], [itemprop='name'], [id*='logo' i]"):
             continue
-        identifiers = re.findall(r"(?<!\d)\d{9}(?!\d)", fragment.get_text(" ", strip=True))
+        identifiers = [identifier for identifier, _start, _end
+                       in _identifier_spans(fragment.get_text(" ", strip=True))]
         if any(identifier != target and identifier not in related for identifier in identifiers):
             return True
     return False
@@ -826,15 +859,24 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
     if website_nodes and not bound_websites:
         abstain("unbound_site_operator_record")
 
-    site_publishers_by_record = [(website, _direct_typed_entities(website.get("publisher"),
-        {"organization", "corporation", "localbusiness"})) for website in bound_websites]
+    site_publishers_by_record = [(website, [node for node in _resolve_same_document_relationship(
+        website.get("publisher"), jsonld) if {kind.casefold().rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+        for kind in (node.get("@type") if isinstance(node.get("@type"), list) else [node.get("@type")])
+        if isinstance(kind, str)} & {"organization", "corporation", "localbusiness"}])
+        for website in bound_websites]
     site_publishers = [publisher for _website, publishers in site_publishers_by_record for publisher in publishers]
     site_publisher_values = [publisher for website in bound_websites
-        for publisher in _direct_typed_entities(website.get("publisher"))]
+        for publisher in _resolve_same_document_relationship(website.get("publisher"), jsonld)]
+    unresolved_site_publishers = [node for website in bound_websites
+        for node in (website.get("publisher") if isinstance(website.get("publisher"), list)
+                     else [website.get("publisher")])
+        if isinstance(node, dict) and isinstance(node.get("@id"), str) and not node.get("@type")
+        and not _resolve_same_document_relationship(node, jsonld)]
     unsupported_site_publishers = [node for node in site_publisher_values
         if not ({kind.casefold().rsplit("/", 1)[-1].rsplit("#", 1)[-1]
                  for kind in (node.get("@type") if isinstance(node.get("@type"), list) else [node.get("@type")])
                  if isinstance(kind, str)} & {"organization", "corporation", "localbusiness"})]
+    unsupported_site_publishers.extend(unresolved_site_publishers)
     site_operator_names = {_as_text(node.get("legalName") or node.get("name")) for node in site_publishers
                            if _as_text(node.get("legalName") or node.get("name"))}
     matching_target_site_publishers = [node for node in site_publishers if _schema_entity_matches(profile, node)
@@ -1161,7 +1203,8 @@ def _site_ownership_evidence(profile: dict[str, Any], page: PageRecord, *, candi
         compatible_name = _exact_name(legal_names, block)
         if not compatible_name:
             continue
-        exact_org = bool(org and re.search(r"(?<!\d)" + re.escape(org) + r"(?!\d)", block))
+        exact_org = bool(org and any(identifier == org for identifier, _start, _end
+                                      in _identifier_spans(block)))
         address = _address_match(profile, block)
         role = next((item for item in registered_roles if normalize_name(item) and normalize_name(item) in normalize_name(block)), None)
         if shared_domain and not is_homepage and not article_document and candidate_source in {"registry_live", "registry_frozen"} and (exact_org or address):
@@ -1996,6 +2039,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
             allowed_hosts = _internal_hosts(url)
             gateway.set_rate_limit(host, 1.0)
             robots_error = None
+            gateway_ledger = getattr(getattr(gateway, "ledger", None), "entries", [])
+            robots_ledger_start = len(gateway_ledger)
             try:
                 state, delay = await gateway.robots_decision(url, UA, allowed_hosts=allowed_hosts)
             except NetworkPolicyError as exc:
@@ -2003,16 +2048,36 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 # Other preflight rejections stay distinct as policy failures.
                 robots_error = str(exc)[:180]
                 state, delay = ("unreachable" if "did not resolve" in robots_error else "policy_skip"), None
+            source_ref = candidate["source_ref"]
             candidate_row: dict[str, Any] = {"url": url, "source": candidate["source"], "kind": "website", "registered_domain": root_domain,
                 "robots_state": state, "crawl_delay_seconds": delay, "rights_status": rights_status, "decision": "candidate",
-                "identity_gate_tier": "not_evaluated"}
+                "identity_gate_tier": "not_evaluated",
+                "candidate_source": {"kind": candidate["source"],
+                    "evidence_url": source_ref.get("source_url") or source_ref.get("url"),
+                    "evidence_sha256": source_ref.get("content_sha256") or source_ref.get("source_snapshot_sha256")}}
             if candidate.get("discovery"):
                 candidate_row["discovery"] = {key: candidate["discovery"].get(key) for key in
                     ("provider_id", "provider_version", "query_id", "result_id", "rank", "response_sha256")}
             if robots_error:
                 candidate_row["robots_error"] = robots_error
+            observations = getattr(gateway, "robots_observations", None)
+            robots_entries = observations(url) if observations else [entry for entry in gateway_ledger[robots_ledger_start:]
+                if entry.purpose == "robots" and urllib.parse.urlsplit(entry.url).netloc == parsed.netloc]
+            robots_statuses = [entry.status for entry in robots_entries if entry.status is not None]
+            robots_outcomes = [entry.outcome for entry in robots_entries]
+            robots_cause = ("disallow" if state == "disallowed" else
+                "403" if 403 in robots_statuses else "404_no_rules" if 404 in robots_statuses else
+                "5xx" if any(status >= 500 for status in robots_statuses) else
+                "timeout" if "timeout" in robots_outcomes else
+                "dns" if robots_error and "did not resolve" in robots_error else
+                "connect" if any("connect" in str(getattr(entry, "error_type", "")).casefold()
+                                  for entry in robots_entries) else
+                "transport" if "transport_error" in robots_outcomes else
+                "policy" if state in {"policy_skip", "unusable"} else "allowed")
+            candidate_row["robots_cause"] = robots_cause
+            candidate_row["robots_fetch_result"] = {"statuses": robots_statuses,
+                "outcomes": robots_outcomes, "attempts": len(robots_entries)}
             output.audit["candidates"].append(candidate_row)
-            source_ref = candidate["source_ref"]
             source_id = _source_evidence(source_ref, output.evidence, output.snapshots, org) if source_ref.get("source") else None
             if state == "disallowed":
                 candidate_row["decision"] = "blocked_robots"
@@ -2093,6 +2158,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     else:
                         candidate_row["decision"] = "blocked" if status in {401, 403, 451} else "unreachable" if status == 0 or status >= 500 else "rejected_http"
                     candidate_row["http_status"] = status
+                    candidate_row["fetch_result"] = {"status": status, "outcome": outcome}
+                    candidate_row["rejection_reason"] = candidate_row["decision"]
                     saw_blocked |= status in {401, 403, 451}
                     saw_failure |= status == 0 or status >= 500 or outcome == "robots_unreachable"
                     break
@@ -2107,6 +2174,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 output.audit["pages"].append({"url": page.final_url, "kind": _kind(page.final_url, page.title), "sha256": page.digest, "bytes": len(page.body)})
                 if page.soft_error:
                     candidate_row["decision"] = "rejected_" + page.soft_error
+                    candidate_row["fetch_result"] = {"status": status, "outcome": page.soft_error}
+                    candidate_row["rejection_reason"] = candidate_row["decision"]
                     break
                 if _normalized_site_host(page.final_url) != candidate_host_key:
                     candidate_row.setdefault("host_mismatch_pages", []).append({
@@ -2124,6 +2193,7 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                 candidate_row["final_url"] = page.final_url
                 candidate_row["content_sha256"] = page.digest
                 candidate_row["http_status"] = status
+                candidate_row["fetch_result"] = {"status": status, "outcome": "ok"}
                 candidate_row["page_count"] = len(pages)
                 # Continue only with likely legal/about/contact identity pages until the gate decides.
                 assessment = _assess_candidate(profile, pages, candidate, shared_domain=shared)
@@ -2153,6 +2223,8 @@ async def research_company(profile: dict[str, Any], gateway: NetworkGateway, *, 
                     "proof": None, "proof_page": None, "target_page": None}
             if assessment["decision"] in {"ambiguous", "rejected"}:
                 candidate_row["review_reason"] = assessment.get("reason")
+                candidate_row["identity_rejection_reason"] = assessment.get("reason")
+                candidate_row.setdefault("rejection_reason", assessment.get("reason"))
                 candidate_row["identity_gate_tier"] = "conflict" if "conflict" in str(assessment.get("reason", "")) else "ambiguous"
             candidate_row["decision"] = assessment["decision"] if candidate_row["decision"] == "candidate" else candidate_row["decision"]
             if assessment["decision"] == "accepted":

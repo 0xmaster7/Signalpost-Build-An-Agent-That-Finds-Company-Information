@@ -375,7 +375,17 @@ def _add_endpoint_evidence(evidence: list[Evidence], snapshots: list[SourceSnaps
 
 
 def _projection_helpers(org, gateway, claims, evidence, snapshots, errors):
+    entity_cache = getattr(gateway, "_brreg_entity_response_cache", None)
+    if entity_cache is None:
+        entity_cache = {}
+        try:
+            setattr(gateway, "_brreg_entity_response_cache", entity_cache)
+        except (AttributeError, TypeError):
+            entity_cache = None
+
     async def request(url: str, purpose: str, section: str) -> tuple[Any, str | None, int, datetime, str | None]:
+        if purpose == "entity" and entity_cache is not None and url in entity_cache:
+            return entity_cache[url]
         try:
             status, headers, payload, final_url, outcome = await gateway.fetch(url, purpose=purpose, user_agent=UA,
                                                                                 max_bytes=4 * 1024 * 1024,
@@ -393,7 +403,12 @@ def _projection_helpers(org, gateway, claims, evidence, snapshots, errors):
             return {"_http_status": status, "_outcome": "redirect_host_rejected"}, final_url, 0, retrieved, response_digest
         if status == 200 and outcome == "ok":
             try:
-                return json.loads(payload), final_url, status, retrieved, response_digest
+                body = json.loads(payload)
+                result = (body, final_url, status, retrieved, response_digest)
+                if (purpose == "entity" and entity_cache is not None and isinstance(body, dict)
+                        and body.get("organisasjonsnummer") == org):
+                    entity_cache[url] = result
+                return result
             except (ValueError, UnicodeDecodeError):
                 errors.append(RunError(code=f"BRREG_{purpose.upper()}_INVALID_JSON", message="Official endpoint returned invalid JSON.", source_id=section))
                 return None, final_url, status, retrieved, response_digest
@@ -555,7 +570,8 @@ async def fetch_financial_statements(result: BrregResult, org: str, gateway: Net
 
 
 async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
-                        allow_current_identity_after_run_start: bool = False, include_accounts: bool = True) -> BrregResult:
+                        allow_current_identity_after_run_start: bool = False, include_accounts: bool = True,
+                        include_people: bool = True) -> BrregResult:
     claims: list[Claim] = []
     evidence: list[Evidence] = []
     snapshots: list[SourceSnapshot] = []
@@ -680,189 +696,197 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
     # Subunit input is atomic. Do not use its parent to fill its legal identity.
     target_is_subunit = bool(isinstance(entity, dict) and entity.get("overordnetEnhet"))
     observations["target_is_subunit"] = target_is_subunit
-    roles_url = f"{BASE}/enheter/{org}/roller"
-    roles_body, roles_final, roles_status, roles_time, roles_hash = await request(roles_url, "roles", "leadership_workplaces")
-    if roles_status != 200:
-        observations["roles_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="roles_state",
-            url=roles_final or roles_url, retrieved_at=roles_time, status=roles_status, digest=roles_hash,
-            pointer="/", method="brreg_roles_endpoint_state_v1")
-    subunits_url = f"{BASE}/underenheter?overordnetEnhet={org}&size=1000"
-    subunit_body, subunit_final, subunit_status, subunit_time, subunit_hash = await request(subunits_url, "subunits", "leadership_workplaces")
-    if subunit_status != 200:
-        observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="subunits_state",
-            url=subunit_final or subunits_url, retrieved_at=subunit_time, status=subunit_status, digest=subunit_hash,
-            pointer="/", method="brreg_subunits_endpoint_state_v1")
-    roles_malformed = roles_status == 200 and not _role_collection_shape(roles_body)
-    if roles_malformed:
-        errors.append(RunError(code="BRREG_ROLES_MALFORMED", message="Official roles endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
-    roles = role_records(roles_body) if roles_status == 200 and not roles_malformed else []
-    observations["roles_count"] = len(roles)
-    observations["role_family_state"] = (
-        PublicState.AVAILABLE.value if roles else PublicState.FAILED.value if roles_malformed else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
-        PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
-    ceo_rows = [role for role in roles if str(role.get("role_code") or "").casefold() in {"dagl", "ceo"}
-                or "daglig leder" in str(role.get("role_description") or "").casefold()
-                or "managing director" in str(role.get("role_description") or "").casefold()]
-    observations["ceo_state"] = (PublicState.AVAILABLE.value if ceo_rows else
-                                 PublicState.FAILED.value if roles_malformed else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
-                                 PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
-    if roles_status == 200 and not roles_malformed:
-        roles_digest = roles_hash or hashlib.sha256(json.dumps(roles_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        completion_snapshot_id = _source_id(org, "roles", roles_digest, roles_final or roles_url)
-        observations["roles_completeness_evidence_id"] = f"{org}:roles-complete:{roles_digest[:12]}"
-        if not roles:
-            observations["roles_state_evidence_id"] = observations["roles_completeness_evidence_id"]
-        evidence.append(Evidence(evidence_id=observations["roles_completeness_evidence_id"], source_url=roles_final or roles_url,
-                                retrieved_at=roles_time, content_sha256=roles_digest,
-                                extraction_method="brreg_complete_role_collection_v1", json_pointer="/rollegrupper",
-                                subject_organisation_number=org, source_snapshot_ids=[completion_snapshot_id]))
-        if not any(item.source_id == completion_snapshot_id for item in snapshots):
-            snapshots.append(SourceSnapshot(source_id=completion_snapshot_id, source_url=roles_final or roles_url,
-                retrieved_at=roles_time, content_sha256=roles_digest, http_status=200, rights_status=RIGHTS))
-    for i, role in enumerate(roles):
-        holder = role.get("holder_organisation_number")
-        if holder:
-            normalized, valid = normalize_org_number(holder)
-            if not valid:
-                errors.append(RunError(code="BRREG_ROLE_HOLDER_INVALID_ORG", message="Role holder organisation number failed checksum."))
-                continue
-            role["holder_organisation_number"] = normalized
-        for key, value in role.items():
-            if value is None or key in {"_source_path", "_source_group_path"}: continue
-            role_source_paths = {"name": "/enhet/navn" if role.get("holder_kind") == "organisation" else "/person/navn", "holder_organisation_number": "/enhet/organisasjonsnummer",
-                                 "role_code": "/type/kode", "role_description": "/type/beskrivelse",
-                                 "role_group_code": "/type/kode", "role_group": "/type/beskrivelse",
-                                 "from_date": "/fraDato", "to_date": "/tilDato", "last_changed": "/sistEndret",
-                                 "inactive": "/", "holder_kind": "/"}
-            source_root = role["_source_group_path"] if key.startswith("role_group") or key == "last_changed" else role["_source_path"]
-            relative_pointer = role_source_paths.get(key, "/" + key)
-            role_path = source_root + (relative_pointer if relative_pointer != "/" else "")
-            method = "brreg_role_name_join_v1" if key == "name" and role.get("holder_kind") == "person" else "brreg_role_status_normalization_v1" if key in {"inactive", "holder_kind"} else "brreg_json_pointer_v1"
-            add_claim(f"role.{key}", value, "leadership_workplaces", "role", org, "person_role",
-                      roles_final or roles_url, roles_time, roles_body, role_path, "roles", source_hash=roles_hash,
-                      as_of=role.get("last_changed"),
-                      extraction_method=method)
-    locations: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
-    subunits_malformed = subunit_status == 200 and not _subunit_collection_shape(subunit_body)
-    if subunits_malformed:
-        errors.append(RunError(code="BRREG_SUBUNITS_MALFORMED", message="Official subunit endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
-    complete = subunit_status == 200 and not subunits_malformed
-    subunit_pages: list[dict[str, Any]] = []
-    subunit_page_pointers: dict[str, str] = {}
-    current = subunit_body
-    current_url = subunit_final or subunits_url
-    current_hash = subunit_hash
-    current_time = subunit_time
-    page_index = 0
-    while subunit_status == 200 and isinstance(current, dict) and _subunit_collection_shape(current):
-        if current_hash:
-            subunit_pages.append({"url": current_url, "content_sha256": current_hash,
-                                  "retrieved_at": current_time.isoformat(), "page_index": page_index})
-        collection_pointer = "/page/totalElements" if _empty_hal_subunit_page(current) else "/_embedded/underenheter"
-        subunit_page_pointers[current_url] = collection_pointer
-        rows, next_path, page_complete = subunit_page(current)
-        locations.extend((item, current, current_url, current_hash, current_time, i) for i, item in enumerate(rows))
-        if not rows:
-            observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name=f"subunits_page_{page_index}",
-                url=current_url, retrieved_at=current_time, status=200, digest=current_hash,
-                pointer=collection_pointer, method="brreg_subunit_page_collection_v1")
-        complete = page_complete
-        if not next_path: break
-        next_url = urljoin(current_url, next_path)
-        current, subunit_final, subunit_status, subunit_time, current_hash = await request(next_url, "subunits_page", "leadership_workplaces")
+    if not include_people:
+        observations["foundation_breadth_only"] = True
+        observations.pop("workplace_count", None)
+        observations.pop("workplaces_complete", None)
+        observations.pop("roles_count", None)
+        states["accounts_history"] = None
+        states["leadership_workplaces"] = None
+    if include_people:
+        roles_url = f"{BASE}/enheter/{org}/roller"
+        roles_body, roles_final, roles_status, roles_time, roles_hash = await request(roles_url, "roles", "leadership_workplaces")
+        if roles_status != 200:
+            observations["roles_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="roles_state",
+                url=roles_final or roles_url, retrieved_at=roles_time, status=roles_status, digest=roles_hash,
+                pointer="/", method="brreg_roles_endpoint_state_v1")
+        subunits_url = f"{BASE}/underenheter?overordnetEnhet={org}&size=1000"
+        subunit_body, subunit_final, subunit_status, subunit_time, subunit_hash = await request(subunits_url, "subunits", "leadership_workplaces")
+        if subunit_status != 200:
+            observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="subunits_state",
+                url=subunit_final or subunits_url, retrieved_at=subunit_time, status=subunit_status, digest=subunit_hash,
+                pointer="/", method="brreg_subunits_endpoint_state_v1")
+        roles_malformed = roles_status == 200 and not _role_collection_shape(roles_body)
+        if roles_malformed:
+            errors.append(RunError(code="BRREG_ROLES_MALFORMED", message="Official roles endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
+        roles = role_records(roles_body) if roles_status == 200 and not roles_malformed else []
+        observations["roles_count"] = len(roles)
+        observations["role_family_state"] = (
+            PublicState.AVAILABLE.value if roles else PublicState.FAILED.value if roles_malformed else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
+            PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
+        ceo_rows = [role for role in roles if str(role.get("role_code") or "").casefold() in {"dagl", "ceo"}
+                    or "daglig leder" in str(role.get("role_description") or "").casefold()
+                    or "managing director" in str(role.get("role_description") or "").casefold()]
+        observations["ceo_state"] = (PublicState.AVAILABLE.value if ceo_rows else
+                                     PublicState.FAILED.value if roles_malformed else PublicState.NOT_AVAILABLE.value if roles_status == 200 else
+                                     PublicState.BLOCKED.value if roles_status in {401, 403, 429, 451} else PublicState.FAILED.value)
+        if roles_status == 200 and not roles_malformed:
+            roles_digest = roles_hash or hashlib.sha256(json.dumps(roles_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            completion_snapshot_id = _source_id(org, "roles", roles_digest, roles_final or roles_url)
+            observations["roles_completeness_evidence_id"] = f"{org}:roles-complete:{roles_digest[:12]}"
+            if not roles:
+                observations["roles_state_evidence_id"] = observations["roles_completeness_evidence_id"]
+            evidence.append(Evidence(evidence_id=observations["roles_completeness_evidence_id"], source_url=roles_final or roles_url,
+                                    retrieved_at=roles_time, content_sha256=roles_digest,
+                                    extraction_method="brreg_complete_role_collection_v1", json_pointer="/rollegrupper",
+                                    subject_organisation_number=org, source_snapshot_ids=[completion_snapshot_id]))
+            if not any(item.source_id == completion_snapshot_id for item in snapshots):
+                snapshots.append(SourceSnapshot(source_id=completion_snapshot_id, source_url=roles_final or roles_url,
+                    retrieved_at=roles_time, content_sha256=roles_digest, http_status=200, rights_status=RIGHTS))
+        for i, role in enumerate(roles):
+            holder = role.get("holder_organisation_number")
+            if holder:
+                normalized, valid = normalize_org_number(holder)
+                if not valid:
+                    errors.append(RunError(code="BRREG_ROLE_HOLDER_INVALID_ORG", message="Role holder organisation number failed checksum."))
+                    continue
+                role["holder_organisation_number"] = normalized
+            for key, value in role.items():
+                if value is None or key in {"_source_path", "_source_group_path"}: continue
+                role_source_paths = {"name": "/enhet/navn" if role.get("holder_kind") == "organisation" else "/person/navn", "holder_organisation_number": "/enhet/organisasjonsnummer",
+                                     "role_code": "/type/kode", "role_description": "/type/beskrivelse",
+                                     "role_group_code": "/type/kode", "role_group": "/type/beskrivelse",
+                                     "from_date": "/fraDato", "to_date": "/tilDato", "last_changed": "/sistEndret",
+                                     "inactive": "/", "holder_kind": "/"}
+                source_root = role["_source_group_path"] if key.startswith("role_group") or key == "last_changed" else role["_source_path"]
+                relative_pointer = role_source_paths.get(key, "/" + key)
+                role_path = source_root + (relative_pointer if relative_pointer != "/" else "")
+                method = "brreg_role_name_join_v1" if key == "name" and role.get("holder_kind") == "person" else "brreg_role_status_normalization_v1" if key in {"inactive", "holder_kind"} else "brreg_json_pointer_v1"
+                add_claim(f"role.{key}", value, "leadership_workplaces", "role", org, "person_role",
+                          roles_final or roles_url, roles_time, roles_body, role_path, "roles", source_hash=roles_hash,
+                          as_of=role.get("last_changed"),
+                          extraction_method=method)
+        locations: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
+        subunits_malformed = subunit_status == 200 and not _subunit_collection_shape(subunit_body)
+        if subunits_malformed:
+            errors.append(RunError(code="BRREG_SUBUNITS_MALFORMED", message="Official subunit endpoint returned an invalid collection shape.", source_id="leadership_workplaces"))
+        complete = subunit_status == 200 and not subunits_malformed
+        subunit_pages: list[dict[str, Any]] = []
+        subunit_page_pointers: dict[str, str] = {}
+        current = subunit_body
+        current_url = subunit_final or subunits_url
+        current_hash = subunit_hash
         current_time = subunit_time
-        current_url = subunit_final or next_url
-        page_index += 1
-        if page_index >= 100:
-            complete = False
-            errors.append(RunError(code="BRREG_SUBUNITS_PAGE_LIMIT", message="Subunit pagination exceeded 100 pages."))
-            break
-    observations["workplace_rows_returned"] = len(locations)
-    observations["workplaces_complete"] = complete
-    candidates_by_child: dict[str, list[tuple[dict[str, Any], Any, str, str | None, datetime, int, str | None]]] = {}
-    for item, page_body, page_url, page_hash, page_time, page_row_index in locations:
-        child_org, child_valid = normalize_org_number(item.get("organisasjonsnummer"))
-        parent_org, parent_valid = normalize_org_number(item.get("overordnetEnhet"))
-        if not child_valid:
-            observations["workplaces_complete"] = False
-            errors.append(RunError(code="BRREG_SUBUNIT_RELATION_INVALID",
-                message="A returned workplace had an invalid child organisation number."))
-            continue
-        canonical_row = dict(item)
-        canonical_row["organisasjonsnummer"] = child_org
-        if parent_valid:
-            canonical_row["overordnetEnhet"] = parent_org
-        fingerprint = hashlib.sha256(json.dumps(canonical_row, sort_keys=True, ensure_ascii=False,
-            separators=(",", ":")).encode()).hexdigest()
-        candidates_by_child.setdefault(child_org, []).append(
-            (item, page_body, page_url, page_hash, page_time, page_row_index,
-             fingerprint if parent_valid else None))
-
-    publishable: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
-    for child_org, rows in sorted(candidates_by_child.items()):
-        relation_valid = all(normalize_org_number(row[0].get("overordnetEnhet"))[1]
-            and normalize_org_number(row[0].get("overordnetEnhet"))[0] == org
-            and child_org != org for row in rows)
-        fingerprints = {row[6] for row in rows}
-        if not relation_valid:
-            observations["workplaces_complete"] = False
-            errors.append(RunError(code="BRREG_SUBUNIT_RELATION_INVALID",
-                message="A returned workplace had an invalid parent or represented the target as its own child."))
-            continue
-        if len(fingerprints) != 1:
-            observations["workplaces_complete"] = False
-            errors.append(RunError(code="BRREG_SUBUNIT_DUPLICATE_CONFLICT",
-                message="Conflicting duplicate records were returned for one workplace; its facts were withheld."))
-            continue
-        # Identical duplicate rows are one deterministic source-backed workplace.
-        publishable.append(min(rows, key=lambda row: row[5])[:6])
-
-    observations["workplace_count"] = len(publishable)
-    if observations["workplaces_complete"]:
-        completeness_ids = []
-        for page in subunit_pages:
-            digest = page["content_sha256"]
-            source_id = _source_id(org, "subunits", digest, page["url"])
-            evidence_id = f"{org}:workplaces-page-complete:{page['page_index']}:{digest[:12]}"
-            completeness_ids.append(evidence_id)
-            if not any(item.source_id == source_id for item in snapshots):
-                snapshots.append(SourceSnapshot(source_id=source_id, source_url=page["url"],
-                    retrieved_at=datetime.fromisoformat(page["retrieved_at"]), content_sha256=digest,
-                    http_status=200, rights_status=RIGHTS))
-            evidence.append(Evidence(evidence_id=evidence_id, source_url=page["url"],
-                retrieved_at=datetime.fromisoformat(page["retrieved_at"]), content_sha256=digest,
-                extraction_method="brreg_complete_workplace_page_v1", json_pointer=subunit_page_pointers[page["url"]],
-                subject_organisation_number=org, source_snapshot_ids=[source_id]))
-        observations["workplaces_completeness_evidence_ids"] = completeness_ids
-        observations["workplaces_completeness_evidence_id"] = completeness_ids[0] if completeness_ids else None
-    for item, page_body, page_url, page_hash, page_time, page_row_index in publishable:
-        child_org = normalize_org_number(item.get("organisasjonsnummer"))[0]
-        parent_org = normalize_org_number(item.get("overordnetEnhet"))[0]
-        item["organisasjonsnummer"] = child_org
-        contact_leads(item, page_url, page_hash, page_time, 200, "subunits",
-            f"/_embedded/underenheter/{page_row_index}", workplace=True)
-        for key in ("organisasjonsnummer", "navn", "beliggenhetsadresse", "postadresse", "naeringskode1", "antallAnsatte", "overordnetEnhet"):
-            if target_legal_form == "ENK" and key in {"beliggenhetsadresse", "postadresse"}:
+        page_index = 0
+        while subunit_status == 200 and isinstance(current, dict) and _subunit_collection_shape(current):
+            if current_hash:
+                subunit_pages.append({"url": current_url, "content_sha256": current_hash,
+                                      "retrieved_at": current_time.isoformat(), "page_index": page_index})
+            collection_pointer = "/page/totalElements" if _empty_hal_subunit_page(current) else "/_embedded/underenheter"
+            subunit_page_pointers[current_url] = collection_pointer
+            rows, next_path, page_complete = subunit_page(current)
+            locations.extend((item, current, current_url, current_hash, current_time, i) for i, item in enumerate(rows))
+            if not rows:
+                observations["subunits_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name=f"subunits_page_{page_index}",
+                    url=current_url, retrieved_at=current_time, status=200, digest=current_hash,
+                    pointer=collection_pointer, method="brreg_subunit_page_collection_v1")
+            complete = page_complete
+            if not next_path: break
+            next_url = urljoin(current_url, next_path)
+            current, subunit_final, subunit_status, subunit_time, current_hash = await request(next_url, "subunits_page", "leadership_workplaces")
+            current_time = subunit_time
+            current_url = subunit_final or next_url
+            page_index += 1
+            if page_index >= 100:
+                complete = False
+                errors.append(RunError(code="BRREG_SUBUNITS_PAGE_LIMIT", message="Subunit pagination exceeded 100 pages."))
+                break
+        observations["workplace_rows_returned"] = len(locations)
+        observations["workplaces_complete"] = complete
+        candidates_by_child: dict[str, list[tuple[dict[str, Any], Any, str, str | None, datetime, int, str | None]]] = {}
+        for item, page_body, page_url, page_hash, page_time, page_row_index in locations:
+            child_org, child_valid = normalize_org_number(item.get("organisasjonsnummer"))
+            parent_org, parent_valid = normalize_org_number(item.get("overordnetEnhet"))
+            if not child_valid:
+                observations["workplaces_complete"] = False
+                errors.append(RunError(code="BRREG_SUBUNIT_RELATION_INVALID",
+                    message="A returned workplace had an invalid child organisation number."))
                 continue
-            val = item.get(key)
-            if val is not None:
-                add_claim(f"workplace.{key}", val, "leadership_workplaces", "workplace", child_org, "workplace",
-                          page_url, page_time, page_body, f"/_embedded/underenheter/{page_row_index}/{key}", "subunits",
-                          source_hash=page_hash)
-    role_claims = any(c.field_family == "role" for c in claims)
-    workplace_claims = any(c.field_family == "workplace" for c in claims)
-    observations["workplaces_state"] = (PublicState.AVAILABLE.value if observations["workplaces_complete"] else
-        PublicState.FAILED.value if subunits_malformed or subunit_status >= 500 or subunit_status == 0 else
-        PublicState.BLOCKED.value if subunit_status in {401, 403, 429, 451} else
-        PublicState.AMBIGUOUS.value)
-    states["leadership_workplaces"] = PublicState.AVAILABLE if role_claims or workplace_claims else (
-        PublicState.FAILED if roles_malformed or subunits_malformed or roles_status >= 500 or subunit_status >= 500 or roles_status == 0 or subunit_status == 0 else
-        PublicState.BLOCKED if roles_status in {401, 403, 429, 451} or subunit_status in {401, 403, 429, 451} else
-        PublicState.AMBIGUOUS if not observations["workplaces_complete"] else PublicState.NOT_AVAILABLE)
+            canonical_row = dict(item)
+            canonical_row["organisasjonsnummer"] = child_org
+            if parent_valid:
+                canonical_row["overordnetEnhet"] = parent_org
+            fingerprint = hashlib.sha256(json.dumps(canonical_row, sort_keys=True, ensure_ascii=False,
+                separators=(",", ":")).encode()).hexdigest()
+            candidates_by_child.setdefault(child_org, []).append(
+                (item, page_body, page_url, page_hash, page_time, page_row_index,
+                 fingerprint if parent_valid else None))
 
-    for section in states:
-        if section != "accounts_history" and states[section] == PublicState.NOT_AVAILABLE:
-            errors.append(RunError(code=f"BRREG_{section.upper()}_NO_DATA", message="Official lookup completed without a source record for this section."))
+        publishable: list[tuple[dict[str, Any], Any, str, str | None, datetime, int]] = []
+        for child_org, rows in sorted(candidates_by_child.items()):
+            relation_valid = all(normalize_org_number(row[0].get("overordnetEnhet"))[1]
+                and normalize_org_number(row[0].get("overordnetEnhet"))[0] == org
+                and child_org != org for row in rows)
+            fingerprints = {row[6] for row in rows}
+            if not relation_valid:
+                observations["workplaces_complete"] = False
+                errors.append(RunError(code="BRREG_SUBUNIT_RELATION_INVALID",
+                    message="A returned workplace had an invalid parent or represented the target as its own child."))
+                continue
+            if len(fingerprints) != 1:
+                observations["workplaces_complete"] = False
+                errors.append(RunError(code="BRREG_SUBUNIT_DUPLICATE_CONFLICT",
+                    message="Conflicting duplicate records were returned for one workplace; its facts were withheld."))
+                continue
+            # Identical duplicate rows are one deterministic source-backed workplace.
+            publishable.append(min(rows, key=lambda row: row[5])[:6])
+
+        observations["workplace_count"] = len(publishable)
+        if observations["workplaces_complete"]:
+            completeness_ids = []
+            for page in subunit_pages:
+                digest = page["content_sha256"]
+                source_id = _source_id(org, "subunits", digest, page["url"])
+                evidence_id = f"{org}:workplaces-page-complete:{page['page_index']}:{digest[:12]}"
+                completeness_ids.append(evidence_id)
+                if not any(item.source_id == source_id for item in snapshots):
+                    snapshots.append(SourceSnapshot(source_id=source_id, source_url=page["url"],
+                        retrieved_at=datetime.fromisoformat(page["retrieved_at"]), content_sha256=digest,
+                        http_status=200, rights_status=RIGHTS))
+                evidence.append(Evidence(evidence_id=evidence_id, source_url=page["url"],
+                    retrieved_at=datetime.fromisoformat(page["retrieved_at"]), content_sha256=digest,
+                    extraction_method="brreg_complete_workplace_page_v1", json_pointer=subunit_page_pointers[page["url"]],
+                    subject_organisation_number=org, source_snapshot_ids=[source_id]))
+            observations["workplaces_completeness_evidence_ids"] = completeness_ids
+            observations["workplaces_completeness_evidence_id"] = completeness_ids[0] if completeness_ids else None
+        for item, page_body, page_url, page_hash, page_time, page_row_index in publishable:
+            child_org = normalize_org_number(item.get("organisasjonsnummer"))[0]
+            parent_org = normalize_org_number(item.get("overordnetEnhet"))[0]
+            item["organisasjonsnummer"] = child_org
+            contact_leads(item, page_url, page_hash, page_time, 200, "subunits",
+                f"/_embedded/underenheter/{page_row_index}", workplace=True)
+            for key in ("organisasjonsnummer", "navn", "beliggenhetsadresse", "postadresse", "naeringskode1", "antallAnsatte", "overordnetEnhet"):
+                if target_legal_form == "ENK" and key in {"beliggenhetsadresse", "postadresse"}:
+                    continue
+                val = item.get(key)
+                if val is not None:
+                    add_claim(f"workplace.{key}", val, "leadership_workplaces", "workplace", child_org, "workplace",
+                              page_url, page_time, page_body, f"/_embedded/underenheter/{page_row_index}/{key}", "subunits",
+                              source_hash=page_hash)
+        role_claims = any(c.field_family == "role" for c in claims)
+        workplace_claims = any(c.field_family == "workplace" for c in claims)
+        observations["workplaces_state"] = (PublicState.AVAILABLE.value if observations["workplaces_complete"] else
+            PublicState.FAILED.value if subunits_malformed or subunit_status >= 500 or subunit_status == 0 else
+            PublicState.BLOCKED.value if subunit_status in {401, 403, 429, 451} else
+            PublicState.AMBIGUOUS.value)
+        states["leadership_workplaces"] = PublicState.AVAILABLE if role_claims or workplace_claims else (
+            PublicState.FAILED if roles_malformed or subunits_malformed or roles_status >= 500 or subunit_status >= 500 or roles_status == 0 or subunit_status == 0 else
+            PublicState.BLOCKED if roles_status in {401, 403, 429, 451} or subunit_status in {401, 403, 429, 451} else
+            PublicState.AMBIGUOUS if not observations["workplaces_complete"] else PublicState.NOT_AVAILABLE)
+
+        for section in states:
+            if section != "accounts_history" and states[section] == PublicState.NOT_AVAILABLE:
+                errors.append(RunError(code=f"BRREG_{section.upper()}_NO_DATA", message="Official lookup completed without a source record for this section."))
     evidence_by_id = {item.evidence_id: item for item in evidence}
     eligible_claims = []
     excluded_sections: set[str] = set()

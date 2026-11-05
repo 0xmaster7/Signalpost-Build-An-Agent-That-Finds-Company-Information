@@ -385,14 +385,21 @@ def test_searchable_pdf_uses_positioned_text_without_ocr(monkeypatch):
 
 
 @pytest.mark.parametrize("kind", ["image", "form", "invisible_text"])
-def test_image_mixed_or_invisible_text_page_requires_ocr(monkeypatch, kind):
+def test_large_image_or_invisible_form_text_page_requires_ocr(monkeypatch, kind):
     import pypdfium2.raw as raw
     types = {"image": raw.FPDF_PAGEOBJ_IMAGE, "form": raw.FPDF_PAGEOBJ_FORM,
         "invisible_text": raw.FPDF_PAGEOBJ_TEXT}
 
     class Page:
         def get_objects(self, **kwargs):
-            return [SimpleNamespace(type=types[kind])]
+            objects = [SimpleNamespace(type=types[kind], get_pos=lambda: (0, 0, 100, 100))]
+            return objects + [SimpleNamespace(type=raw.FPDF_PAGEOBJ_TEXT)] if kind == "form" else objects
+
+        def get_width(self):
+            return 100
+
+        def get_height(self):
+            return 100
 
         def get_textpage(self):
             raise AssertionError("unsafe text must not bypass OCR")

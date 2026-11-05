@@ -193,7 +193,7 @@ class DeadlineAndBudgetTests(unittest.IsolatedAsyncioTestCase):
             rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
             self.assertEqual(code, 0)
             self.assertEqual([row["input_ref"] for row in rows], ["row:1", "row:2"])
-            self.assertTrue(all(row["terminal_state"] == "failed" for row in rows))
+            self.assertTrue(all(row["terminal_state"] == "ambiguous" for row in rows))
             self.assertTrue(all(row["sections"]["website_owned_profiles"]["state"] is None for row in rows))
             self.assertTrue(all(row["sections"]["hiring_activity"]["state"] is None for row in rows))
             self.assertTrue(all(row["sections"]["website_owned_profiles"]["attempt_outcome"] == "deadline_skipped" for row in rows))
@@ -424,8 +424,16 @@ class CheckpointResumeTests(unittest.TestCase):
                 for row in range(1, 101):
                     store.connection.execute("INSERT INTO shells VALUES (?,?,?,'pending')", (row, f"row:{row}", "923609016"))
                 store.set_meta("input_fingerprint", "fixture")
+                reference = valid_envelope(1)
+
+                def shared_snapshot(row_number):
+                    envelope = reference.model_copy(deep=True)
+                    envelope.row_number = row_number
+                    envelope.input_ref = f"row:{row_number}"
+                    return envelope
+
                 for row in range(1, terminal_count + 1):
-                    store.put(valid_envelope(row))
+                    store.put(shared_snapshot(row))
                     store.set_shell_state(row, "terminalized")
                 store.close()  # Crash boundary: process exits with this durable partial checkpoint.
                 resumed = CheckpointStore(path)
@@ -435,7 +443,7 @@ class CheckpointResumeTests(unittest.TestCase):
                     self.assertEqual(envelope.row_number, row)
                     self.assertEqual([claim.claim_id for claim in envelope.claims], ["c1"])
                 for row in range(terminal_count + 1, 101):
-                    resumed.put(valid_envelope(row))
+                    resumed.put(shared_snapshot(row))
                     resumed.set_shell_state(row, "terminalized")
                 complete = resumed.terminalized()
                 self.assertEqual(len(complete), 100)
