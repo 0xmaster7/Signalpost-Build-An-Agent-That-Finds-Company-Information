@@ -155,6 +155,7 @@ def test_explicit_workforce_variants_and_abstention():
 
 
 def test_ocr_queue_deadline_and_cache(monkeypatch):
+    monkeypatch.setattr("signalpost.annual_accounts._worker_limit", lambda: 2)
     import asyncio
     import hashlib
     from signalpost.annual_accounts import DocumentProcessor
@@ -180,6 +181,7 @@ def test_ocr_queue_deadline_and_cache(monkeypatch):
 
 
 def test_ocr_timeout_kills_worker_and_releases_slot(monkeypatch):
+    monkeypatch.setattr("signalpost.annual_accounts._worker_limit", lambda: 2)
     import asyncio
     from signalpost.annual_accounts import DocumentProcessor
     class Worker:

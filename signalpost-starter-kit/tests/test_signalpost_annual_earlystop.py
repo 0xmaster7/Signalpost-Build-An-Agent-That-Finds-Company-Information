@@ -278,6 +278,7 @@ def test_cache_binds_partial_pages_to_filing_context_and_strategy(monkeypatch):
 
 
 def test_queue_startup_and_ocr_share_one_deadline(monkeypatch):
+    monkeypatch.setattr("signalpost.annual_accounts._worker_limit", lambda: 2)
     async def check():
         worker = Process(delay=10)
         processor = DocumentProcessor()
@@ -306,6 +307,7 @@ def test_queue_startup_and_ocr_share_one_deadline(monkeypatch):
 
 
 def test_startup_is_inside_deadline_and_global_budget_expires(monkeypatch):
+    monkeypatch.setattr("signalpost.annual_accounts._worker_limit", lambda: 2)
     calls = []
 
     async def spawn(*args, **kwargs):
@@ -332,6 +334,7 @@ def test_startup_is_inside_deadline_and_global_budget_expires(monkeypatch):
 
 
 def test_two_workers_maximum_and_cancellation_kills_without_caching(monkeypatch):
+    monkeypatch.setattr("signalpost.annual_accounts._worker_limit", lambda: 2)
     workers = []
     active = 0
     maximum = 0

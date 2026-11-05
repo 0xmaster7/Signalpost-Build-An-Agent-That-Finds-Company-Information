@@ -219,6 +219,7 @@ def test_concurrent_instances_share_one_worker(monkeypatch, tmp_path):
 
 
 def test_queue_startup_and_worker_keep_one_hard_deadline(monkeypatch, tmp_path):
+    monkeypatch.setattr("signalpost.annual_accounts._worker_limit", lambda: 2)
     worker = Process(delay=10)
 
     async def spawn(*args, **kwargs):
@@ -318,6 +319,7 @@ def test_production_enrichment_creates_only_fte_and_keeps_incidental_money_in_au
 
 
 def test_two_workers_and_cancelled_work_never_cached(monkeypatch, tmp_path):
+    monkeypatch.setattr("signalpost.annual_accounts._worker_limit", lambda: 2)
     workers = []
 
     class Held(Process):
