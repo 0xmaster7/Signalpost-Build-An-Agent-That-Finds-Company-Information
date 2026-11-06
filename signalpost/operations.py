@@ -301,18 +301,29 @@ class _EnvelopeIdentityIndex:
         self.references: dict[str, dict[str, tuple[dict, int]]] = {"evidence": {}, "snapshots": {}}
 
     def prepare(self, envelopes: Iterable[Envelope]) -> tuple[list[Envelope], dict[int, dict]]:
-        from .models import validate_batch_publication_graph
-        checked = validate_batch_publication_graph(list(envelopes))
+        from .models import validate_publication_graph
+        # Revalidate mutable nested models, then use the signatures below for
+        # both intra-update and existing-row collision checks. The batch helper
+        # would serialize shared evidence/snapshots again for every duplicate.
+        checked = [validate_publication_graph(item) for item in envelopes]
+        return self._prepare_checked(checked)
+
+    def _prepare_checked(self, checked: list[Envelope]) -> tuple[list[Envelope], dict[int, dict]]:
+        """Index rows already fully validated at the deserialization boundary."""
         if len({item.row_number for item in checked}) != len(checked):
             raise ValueError("duplicate row_number in checkpoint update")
         changes = {item.row_number: _envelope_identity_graph(item) for item in checked}
         for kind, references in self.references.items():
+            proposed: dict[str, dict] = {}
             removed: dict[str, int] = {}
             for row_number in changes:
                 for identifier in self.rows.get(row_number, {}).get(kind, {}):
                     removed[identifier] = removed.get(identifier, 0) + 1
             for graph in changes.values():
                 for identifier, signature in graph[kind].items():
+                    if identifier in proposed and proposed[identifier] != signature:
+                        raise ValueError(f"conflicting {kind} identifier across envelopes: {identifier}")
+                    proposed[identifier] = signature
                     previous = references.get(identifier)
                     if (previous is not None and previous[1] > removed.get(identifier, 0)
                             and previous[0] != signature):
@@ -331,6 +342,11 @@ class _EnvelopeIdentityIndex:
             for graph in changes.values():
                 for identifier, signature in graph[kind].items():
                     previous = references.get(identifier)
+                    # Equal shared identities need one retained signature, not
+                    # one deep evidence/excerpt dictionary per input row.
+                    if previous is not None:
+                        signature = previous[0]
+                        graph[kind][identifier] = signature
                     references[identifier] = signature, (previous[1] if previous else 0) + 1
         self.rows.update(changes)
 
@@ -354,6 +370,11 @@ class CheckpointStore:
     def save_phase_status(self, phase: str, company: str, state: str, seconds: float = 0.0,
                           *, reason: str | None = None, traceback_sha256: str | None = None) -> None:
         """Commit progress independently of later phase or process failures."""
+        self.save_phase_statuses([(phase, company, state, seconds, reason, traceback_sha256)])
+
+    @staticmethod
+    def _phase_status_payload(state: str, seconds: float, reason: str | None,
+                              traceback_sha256: str | None) -> str:
         status = state if state in {"failed", "deadline_skipped"} else "ran" if state == "completed" else "skipped"
         if reason is None and state != "completed":
             reason = "source_reported_failure" if state == "failed" else state
@@ -361,9 +382,23 @@ class CheckpointStore:
                        ran=state in {"completed", "failed"}, skipped=status == "skipped",
                        deadline_skipped=status == "deadline_skipped", failed=status == "failed",
                        reason=reason, traceback_sha256=traceback_sha256)
+        return json.dumps(payload)
+
+    def save_phase_statuses(self, statuses: Iterable[tuple[str, str, str, float, str | None, str | None]],
+                            *, only_missing: bool = False) -> None:
+        """Durably commit a batch once; each item is
+        (phase, company, state, seconds, reason, traceback_sha256).
+
+        only_missing preserves existing outcomes during terminal bookkeeping.
+        Encoding and iteration finish before opening the atomic transaction.
+        """
+        rows = [(phase, company, self._phase_status_payload(state, seconds, reason, digest))
+                for phase, company, state, seconds, reason, digest in statuses]
+        if not rows:
+            return
+        command = "INSERT OR IGNORE" if only_missing else "INSERT OR REPLACE"
         with self.connection:
-            self.connection.execute("INSERT OR REPLACE INTO phase_status VALUES (?,?,?)",
-                                    (phase, company, json.dumps(payload)))
+            self.connection.executemany(f"{command} INTO phase_status VALUES (?,?,?)", rows)
 
     def phase_statuses(self, phase: str) -> dict[str, dict]:
         return {company: json.loads(payload) for company, payload in self.connection.execute(
@@ -416,7 +451,7 @@ class CheckpointStore:
             identity_index = _EnvelopeIdentityIndex()
             for payload, in self.connection.execute("SELECT payload FROM envelopes"):
                 envelope = Envelope.model_validate_json(payload)
-                _, changes = identity_index.prepare([envelope])
+                _, changes = identity_index._prepare_checked([envelope])
                 identity_index.apply(changes)
             self._identity_index = identity_index
             self._identity_graphs = identity_index.rows
@@ -599,6 +634,10 @@ class OpportunityScheduler:
         row[field] = row.get(field, 0) + value  # type: ignore[operator]
 
 
+class _SerializedEnvelope(str):
+    """Already encoded JSON produced by the partial publisher's serializers."""
+
+
 class OrderedAtomicWriter:
     def __init__(self, output_path: str | Path, estimated_bytes: int = 1024 * 1024):
         self.output_path = Path(output_path)
@@ -609,7 +648,7 @@ class OrderedAtomicWriter:
         if shutil.disk_usage(self.output_path.parent).free < required:
             raise OSError(f"insufficient free space for atomic output (need {required} bytes)")
 
-    def write(self, envelopes: Iterable[Envelope], *, serializer: Callable[[Envelope], dict[str, object]] | None = None) -> None:
+    def write(self, envelopes: Iterable[Envelope], *, serializer: Callable[[Envelope], dict[str, object] | _SerializedEnvelope] | None = None) -> None:
         ordered = sorted(envelopes, key=lambda item: item.row_number)
         if len({item.row_number for item in ordered}) != len(ordered):
             raise ValueError("duplicate row_number in output")
@@ -617,8 +656,13 @@ class OrderedAtomicWriter:
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
                 for envelope in ordered:
-                    payload = serializer(envelope) if serializer else envelope.model_dump(mode="json")
-                    stream.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+                    if serializer is not None:
+                        payload = serializer(envelope)
+                        encoded = payload if isinstance(payload, _SerializedEnvelope) else json.dumps(
+                            payload, ensure_ascii=False, separators=(",", ":"))
+                    else:
+                        encoded = envelope.model_dump_json()
+                    stream.write(encoded + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.output_path)
@@ -701,11 +745,15 @@ class PartialEnvelopePublisher:
         self._marker = OrderedAtomicWriter(self.marker_path, estimated_bytes=4096)
         self.flush(force=True)
 
-    def _serialize(self, envelope: Envelope) -> dict[str, object]:
-        payload = self._serializer(envelope) if self._serializer else envelope.model_dump(mode="json")
+    def _serialize(self, envelope: Envelope) -> _SerializedEnvelope:
+        if self._serializer is None:
+            return _SerializedEnvelope(envelope.model_dump_json())
+        payload = self._serializer(envelope)
         if not isinstance(payload, dict):
             raise ValueError("partial publication serializer must return an object")
-        return json.loads(json.dumps(payload, ensure_ascii=False))
+        # Immutable encoded rows detach caller-owned dictionaries and let every
+        # subsequent full atomic flush copy unchanged JSON without re-encoding.
+        return _SerializedEnvelope(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
     def update(self, envelope: Envelope) -> bool:
         return self.update_rows([envelope])

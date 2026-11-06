@@ -31,6 +31,7 @@ from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, arti
                       compare_states, company_state, merge_prior_facts, validate_artifact, sha256_json)
 from .synthesis import synthesize
 from .phases import failure_error, error_fingerprint
+from .deadlines import ResearchDeadline, signal_deadline
 
 
 def _provisional_envelope(row, batch_id, cutoff, clock):
@@ -52,7 +53,7 @@ def _with_global_budget(budget, seconds):
     seconds = float(seconds)
     if not math.isfinite(seconds) or seconds <= 0:
         raise ValueError("--budget-seconds must be finite and positive")
-    reserve = min(300.0, seconds * 0.2)
+    reserve = seconds * 0.15
     return replace(budget, hard_seconds=seconds, soft_seconds=seconds - reserve,
         completion_reserve_seconds=reserve)
 
@@ -519,7 +520,10 @@ def run(args: argparse.Namespace) -> int:
         fixture, registry_hash = stream_registry_matches(args.registry_snapshot, {r.organisation_number for r in rows})
     budget_override = getattr(args, "budget_seconds", None)
     if budget_override is None:
-        budget_override = os.environ.get("SIGNALPOST_BUDGET_SECONDS")
+        budget_override = os.environ.get("SIGNALPOST_TIME_BUDGET_SECONDS", os.environ.get("SIGNALPOST_BUDGET_SECONDS"))
+    if budget_override is None:
+        configured = config_values.get("budget", config_values)
+        budget_override = configured.get("hard_seconds", 1.8 * len(rows))
     budget = _with_global_budget(
         RunBudget.from_mapping(config_values.get("budget", config_values), batch_rows=len(rows)),
         budget_override)
@@ -712,6 +716,15 @@ def run(args: argparse.Namespace) -> int:
                                      "request_configuration": effective_config_identity})
         recording = getattr(gateway, "http_recording", None)
         execution = ExecutionTrace(recording)
+        expected_frontier = execution.control("bounded_frontier") if execution.replay else None
+        persisted_frontier = set()
+        expected_keys = {tuple(item) for item in expected_frontier["keys"]} if expected_frontier else None
+
+        def checkpoint_boundary(phase, company):
+            persisted_frontier.add((phase, company))
+            if expected_keys is not None and expected_keys.issubset(persisted_frontier):
+                raise ResearchDeadline(expected_frontier["reason"])
+
         if live_brreg:
             gateway.set_rate_limit("data.brreg.no", 3.0)
         async def enrich():
@@ -864,6 +877,7 @@ def run(args: argparse.Namespace) -> int:
                     status["seconds"] + time.monotonic() - publication_started,
                     reason=status["reason"], traceback_sha256=status["traceback_sha256"])
                 checkpoint.save_phase(name, org, value, envelopes)
+                checkpoint_boundary(name, org)
                 partial.update_rows(envelopes)
                 for envelope in envelopes:
                     if envelope.organisation_number in breadth_timings:
@@ -928,6 +942,7 @@ def run(args: argparse.Namespace) -> int:
                         reason=reason or saved.get("reason"), traceback_sha256=digest)
                 checkpoint.save_phase(name, "batch", saved, [compose(row) for row in rows
                     if row.row_number not in prior_terminalized])
+                checkpoint_boundary(name, "batch")
                 return saved["value"]
 
             async def nav_phase(targets):
@@ -970,8 +985,8 @@ def run(args: argparse.Namespace) -> int:
                 finance_pending = [org for org in unique if org not in phase_cache["financial_statements"]]
                 remaining_work_seconds = max(0.0, min(budget.soft_seconds - run_budget.elapsed,
                     budget.hard_seconds - run_budget.elapsed - budget.completion_reserve_seconds))
-                requested_financial_seconds = max(budget.financial_seconds, len(finance_pending) * 0.5)
-                financial_allocation = min(requested_financial_seconds, remaining_work_seconds * 0.4)
+                requested_financial_seconds = max(budget.financial_seconds, len(finance_pending) * 0.8)
+                financial_allocation = min(requested_financial_seconds, remaining_work_seconds * 0.55)
                 financial_allocation = execution.control("financial_allocation", financial_allocation)
                 run_budget.financial_request_reserve = len(finance_pending) * budget.financial_requests_per_company
                 run_budget.financial_logical_reserve = len(finance_pending)
@@ -1044,6 +1059,7 @@ def run(args: argparse.Namespace) -> int:
                     by_org[org] = result
                     progress("official", org, result)
                     checkpoint.save_phase("official", org, result, projected)
+                    checkpoint_boundary("official", org)
                     partial.update_rows(projected)
                     breadth_timings[org] = {"completion_seconds": time.monotonic() - run_started,
                         "last_partial_update_seconds": time.monotonic() - run_started}
@@ -1137,7 +1153,7 @@ def run(args: argparse.Namespace) -> int:
                         value = copy.deepcopy(by_org[item.company])
                         value.observations["financial_calibration"] = {"state": "deadline_skipped"}
                         record_phase("financial_statements", "deadline_skipped", org=item.company)
-                        persist_phase("financial_statements", item.company, value)
+                        phase_cache["financial_statements"][item.company] = value
                 for org in by_org:
                     if org not in finance_pending:
                         record_phase("financial_statements", "not_attempted")
@@ -1228,7 +1244,7 @@ def run(args: argparse.Namespace) -> int:
                         retained = copy.deepcopy(by_org[item.company])
                         state = "deadline_skipped" if run_budget.soft_expired or run_budget.reserve_active else "budget_skipped"
                         record_phase("official_details", state, org=item.company)
-                        persist_phase("official_details", item.company, retained)
+                        phase_cache["official_details"][item.company] = retained
                 for org in by_org:
                     if org not in details_pending:
                         finance_state = (checkpoint.phase_status("financial_statements", org) or {}).get("outcome")
@@ -1381,7 +1397,7 @@ def run(args: argparse.Namespace) -> int:
                         result.observations["annual_accounts_document"] = {"state": "deadline_skipped",
                             "reason": "phase_deadline_or_completion_reserve"}
                         record_phase("annual_documents", "deadline_skipped", org=item.company)
-                        persist_phase("annual_documents", item.company, result)
+                        phase_cache["annual_documents"][item.company] = result
                 gateway.set_rate_limit("data.brreg.no", 3.0)
                 scheduler_report["annual_documents"] = {"passes": document_scheduler.metrics,
                     "companies": document_scheduler.company_metrics, "hard_deadline_cancelled": document_cancelled}
@@ -1525,18 +1541,11 @@ def run(args: argparse.Namespace) -> int:
                             result = copy.deepcopy(prior) if prior else WebsiteResearchResult(state=None, hiring_activity_state=None)
                             result.attempt_outcome = state
                             result.audit.update(execution_state=state, reason="phase_deadline_or_request_budget")
-                            persist_phase(name, org, result)
+                            phase_cache[name][org] = result
                             by_website_org[org] = result
                 return by_website_org
 
-            optional_results = []
-            for action in (network_discovery_phase, document_phase):
-                try:
-                    optional_results.append(await action())
-                except asyncio.CancelledError as exc:
-                    optional_results.append(exc)
-                except Exception as exc:
-                    optional_results.append(exc)
+            optional_results = await asyncio.gather(network_discovery_phase(), document_phase(), return_exceptions=True)
             optional_errors = []
             for name, result in zip(("website_phases", "annual_documents"), optional_results):
                 if isinstance(result, BaseException) and not isinstance(result, (Exception, asyncio.CancelledError)):
@@ -1594,7 +1603,47 @@ def run(args: argparse.Namespace) -> int:
             finally:
                 stop.set()
                 await flushing
-        envelopes = asyncio.run(guarded_enrich())
+        try:
+            with signal_deadline(max(0.001, budget.soft_seconds - run_budget.elapsed), enabled=not execution.replay):
+                if expected_keys == set():
+                    raise ResearchDeadline(expected_frontier["reason"])
+                envelopes = asyncio.run(guarded_enrich())
+            if recording and not execution.replay:
+                execution.control("bounded_frontier", None)
+        except ResearchDeadline as exc:
+            checkpoint.connection.rollback()
+            keys = [list(item) for item in checkpoint.connection.execute("SELECT phase,company FROM phase_results ORDER BY phase,company")]
+            if recording and not execution.replay:
+                execution.control("bounded_frontier", {"keys": keys, "reason": str(exc)})
+            phases = ("official", "financial_statements", "official_details", "annual_documents", "nav_batch",
+                "wiki_batch", "nav_apply", "website_verify", "website_shallow", "jobs_activity")
+            retained_keys = {tuple(item) for item in keys}
+            with checkpoint.connection:
+                for phase in phases:
+                    saved = checkpoint.phase_statuses(phase)
+                    for org in rows_by_org:
+                        if org not in saved or ((phase, org) not in retained_keys and (phase, "batch") not in retained_keys):
+                            payload = dict(status="deadline_skipped", outcome="deadline_skipped", seconds=0.0,
+                                ran=False, skipped=False, deadline_skipped=True, failed=False,
+                                reason="research_stopped_unknown_incomplete", traceback_sha256=None)
+                            checkpoint.connection.execute("INSERT OR REPLACE INTO phase_status VALUES (?,?,?)",
+                                (phase, org, json.dumps(payload)))
+            execution.save(checkpoint, phases)
+            if execution.replay:
+                async def drain_abandoned():
+                    drain = ExecutionTrace(recording)
+                    drain.admitted = lambda phase, company: False
+                    pending = recording.diagnostics()["unconsumed_requests"]
+                    for phase, org in dict.fromkeys((item["request"].get("phase"), item["request"].get("company")) for item in pending):
+                        await drain.consume_abandoned(gateway, phase, org)
+                asyncio.run(drain_abandoned())
+            saved = {item.row_number: item for item in checkpoint.rows()}
+            envelopes = [saved.get(row.row_number) or _provisional_envelope(row, batch_id, cutoff, run_start_utc) for row in rows]
+            for envelope in envelopes:
+                envelope.errors.append(RunError(code="RESEARCH_INCOMPLETE",
+                    message="Research stopped at its deadline or termination signal; unfinished fields are unknown, not zero.", retryable=True))
+            scheduler_report["bounded_stop"] = {"reason": str(exc), "checkpoint_phase_results": len(keys)}
+            scheduler_report["company_phases"] = {phase: checkpoint.phase_statuses(phase) for phase in phases}
     else:
         envelopes = []
         for row in rows:
@@ -1792,7 +1841,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", default=os.environ.get("SIGNALPOST_INPUT"))
     parser.add_argument("--output")
     parser.add_argument("--budget-seconds", type=float,
-        help="Total wall-time budget including finalization; overrides SIGNALPOST_BUDGET_SECONDS (default 1800s)")
+        help="Total seconds including 15% finalization; overrides SIGNALPOST_TIME_BUDGET_SECONDS (default 1.8 seconds per input)")
     parser.add_argument("--format", choices=("auto", "json", "jsonl", "csv", "tsv", "plain"), default="auto")
     parser.add_argument("--registry-snapshot", default=os.environ.get("SIGNALPOST_REGISTRY_SNAPSHOT"))
     parser.add_argument("--registry-snapshot-as-of", default=os.environ.get("SIGNALPOST_REGISTRY_SNAPSHOT_AS_OF"))

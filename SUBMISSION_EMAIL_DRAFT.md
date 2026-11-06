@@ -1,5 +1,7 @@
 # Submission email draft — NOT SENT / ACCEPTANCE FAILED
 
+Bounded-run remediation uses `SIGNALPOST_TIME_BUDGET_SECONDS=1800` for1000inputs,15%finalization reserve. Replacement safety is **unproven until the authorized live1000 run and exact replay pass**. Contact/recipient and `[JBOX_SITE_URL]` remain owner placeholders. This draft must not be sent automatically.
+
 Do not send automatically. The candidate is **not submission-ready**: live scale timed out and coverage gates failed. Owner must explicitly decide next steps. Replace owner/recipient/JBOX fields only with authorized details. Exact package SHA must be obtained from the checked-out commit; the measured implementation below is not presented as a successful final release.
 
 To: [VERIFIED_SUBMISSION_RECIPIENT]

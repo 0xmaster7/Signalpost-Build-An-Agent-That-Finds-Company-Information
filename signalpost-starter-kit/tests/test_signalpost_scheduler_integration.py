@@ -49,8 +49,8 @@ def test_global_budget_override_rejects_invalid_values(value):
 def test_global_budget_reserves_finalization_and_uses_requested_hard_limit():
     budget = run._with_global_budget(RunBudget(), 60)
     assert budget.hard_seconds == 60
-    assert budget.completion_reserve_seconds == 12
-    assert budget.soft_seconds == 48
+    assert budget.completion_reserve_seconds == 9
+    assert budget.soft_seconds == 51
 
 
 @pytest.mark.parametrize("source", ["flag", "environment"])

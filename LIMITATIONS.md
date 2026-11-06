@@ -1,5 +1,7 @@
 # Signalpost limitations — 6 November 2026
 
+**7 November time-boxed remediation:** a synchronous POSIX research cutoff at85% and checkpoint recovery are implemented; finalization gets15%. New env `SIGNALPOST_TIME_BUDGET_SECONDS`, default1.8seconds/input unless explicitly configured. SIGTERM recovery is tested on synthetic100/1000 inputs, not proof of a30-second bound for every real checkpoint. Network and OCR phases overlap again, undoing the diagnosed serialization regression without changing extraction or identity rules. Website/FTE coverage remains low: DNS/identity abstention and limited completed document work dominate. The authorized new live1000 attempt and replay must pass before this can be called safe to submit. This note does not supersede the failed measured results below.
+
 **Acceptance FAILED; not submission-ready.** The [final live report](docs/release/FINAL_RESULTS_2026-11-06.md) and sanitized receipts supersede preparation-only statements and historical baseline results.
 
 ## Measured coverage and scale
