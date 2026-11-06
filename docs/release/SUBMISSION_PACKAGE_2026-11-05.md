@@ -1,5 +1,7 @@
 # Submission package — updated 7 November 2026
 
+**Latest bounded-run acceptance FAILED:** [7 November result](TIMEBOX_RESULTS_2026-11-07.md). The process did not self-exit within1,800seconds and did not commit the final state pair/aggregate. Exact scale replay was not started. This is **not a safe replacement**, regardless of complete-shaped partial rows or prior small-cohort replay success.
+
 **Bounded-run follow-up:** research implementation `fc39bb01483e54e85e836c72ff3faa8312ac99c3` changes scheduling and checkpoint finalization only; it is not the historical implementation below. The one authorized live 1,000-company run and its exact replay are the replacement-safety gate. Until both pass, replacement safety remains unproven. No new website/FTE coverage claim is made.
 
 **Acceptance FAILED; not submission-ready.** [Final report](FINAL_RESULTS_2026-11-06.md) and [sanitized receipts](evidence/final-676d6e5/) record live smoke, matched100, fresh100 and the failed live scale1000. Research stayed frozen at `676d6e513b70c0e3cbf8e884602ad7e5674d5df9`; later commits only repair validation or add docs/public exports. Exact package SHA is the commit containing this file (obtain with `git rev-parse HEAD`); never substitute an older green SHA. Contact **[CONTACT_NAME / CONTACT_EMAIL]**, JBOX **[JBOX_SITE_URL]** remain owner fields. Deadline: **7 November2026 18:00IST (12:30UTC)**; no organizer extension inferred.
