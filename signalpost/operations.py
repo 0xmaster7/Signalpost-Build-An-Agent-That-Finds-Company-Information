@@ -446,6 +446,34 @@ class CheckpointStore:
                                     (checked[0].row_number, checked[0].model_dump_json()))
         identity_index.apply(changes)
 
+    def put_finalized(self, envelopes: Iterable[Envelope],
+                      statuses: Iterable[tuple[str, str, str, float, str | None, str | None]]) -> None:
+        """Atomically persist final rows, terminalized shells and phase statuses.
+
+        Status items use save_phase_statuses' format:
+        (phase, company, state, seconds, reason, traceback_sha256).
+        Validate the whole batch against the existing identity index once and
+        finish encoding before the single FULL-synchronous transaction. Failed
+        validation, encoding or SQL leaves persisted rows and the index intact.
+        """
+        identity_index = self._get_identity_index()
+        checked, changes = identity_index.prepare(envelopes)
+        rows = [(item.row_number, item.model_dump_json()) for item in checked]
+        shells = [(item.row_number, item.input_ref, item.organisation_number, "terminalized")
+                  for item in checked]
+        status_rows = [(phase, company, self._phase_status_payload(state, seconds, reason, digest))
+                       for phase, company, state, seconds, reason, digest in statuses]
+        if not rows and not status_rows:
+            return
+        with self.connection:
+            self.connection.executemany("INSERT OR REPLACE INTO envelopes VALUES (?,?)", rows)
+            self.connection.executemany(
+                "INSERT INTO shells VALUES (?,?,?,?) ON CONFLICT(row_number) DO UPDATE SET "
+                "input_ref=excluded.input_ref, organisation_number=excluded.organisation_number, "
+                "execution_state=excluded.execution_state", shells)
+            self.connection.executemany("INSERT OR REPLACE INTO phase_status VALUES (?,?,?)", status_rows)
+        identity_index.apply(changes)
+
     def _get_identity_index(self) -> _EnvelopeIdentityIndex:
         if self._identity_index is None:
             identity_index = _EnvelopeIdentityIndex()
@@ -456,6 +484,10 @@ class CheckpointStore:
             self._identity_index = identity_index
             self._identity_graphs = identity_index.rows
         return self._identity_index
+
+    def release_identity_cache(self) -> None:
+        self._identity_index = None
+        self._identity_graphs = None
 
     def validate_phase_update(self, envelopes: Iterable[Envelope]) -> Mapping[int, dict]:
         """Validate without mutation and return a read-only combined row graph view."""
@@ -754,6 +786,11 @@ class PartialEnvelopePublisher:
         # Immutable encoded rows detach caller-owned dictionaries and let every
         # subsequent full atomic flush copy unchanged JSON without re-encoding.
         return _SerializedEnvelope(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+
+    def release(self) -> None:
+        self._rows.clear()
+        self._payloads.clear()
+        self._identity_index = None
 
     def update(self, envelope: Envelope) -> bool:
         return self.update_rows([envelope])

@@ -1,0 +1,1164 @@
+{
+  "phases": {
+    "annual_documents": {
+      "outcomes": {
+        "deadline_skipped": 1000
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ran_seconds": {}
+    },
+    "finalization": {
+      "outcomes": {
+        "completed": 729
+      },
+      "all_seconds": {
+        "n": 729,
+        "sum": 98.73640665807761,
+        "mean": 0.13544088704811744,
+        "min": 0.0028141241054981947,
+        "p50": 0.09809330198913813,
+        "p90": 0.14181731422431776,
+        "p95": 0.19046184727922083,
+        "p99": 0.31424073227681326,
+        "max": 8.28413309995085
+      },
+      "ran_seconds": {
+        "n": 729,
+        "sum": 98.73640665807761,
+        "mean": 0.13544088704811744,
+        "min": 0.0028141241054981947,
+        "p50": 0.09809330198913813,
+        "p90": 0.14181731422431776,
+        "p95": 0.19046184727922083,
+        "p99": 0.31424073227681326,
+        "max": 8.28413309995085
+      }
+    },
+    "financial_statements": {
+      "outcomes": {
+        "completed": 947,
+        "deadline_skipped": 53
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 1347.692423188826,
+        "mean": 1.347692423188826,
+        "min": 0.0,
+        "p50": 0.9281041489448398,
+        "p90": 3.018092455808074,
+        "p95": 4.316356947913298,
+        "p99": 5.223992506877984,
+        "max": 7.279736189171672
+      },
+      "ran_seconds": {
+        "n": 947,
+        "sum": 1347.692423188826,
+        "mean": 1.4231176591223085,
+        "min": 0.8218914549797773,
+        "p50": 0.9328218260779977,
+        "p90": 3.112610327964647,
+        "p95": 4.418256151932291,
+        "p99": 5.25141475020442,
+        "max": 7.279736189171672
+      }
+    },
+    "jobs_activity": {
+      "outcomes": {
+        "deadline_skipped": 1000
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ran_seconds": {}
+    },
+    "nav_apply": {
+      "outcomes": {
+        "deadline_skipped": 1000
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ran_seconds": {}
+    },
+    "nav_batch": {
+      "outcomes": {
+        "deadline_skipped": 1000
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ran_seconds": {}
+    },
+    "official": {
+      "outcomes": {
+        "completed": 999,
+        "failed": 1
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 1770.323685790645,
+        "mean": 1.770323685790645,
+        "min": 0.7910936679691076,
+        "p50": 0.8107927100500092,
+        "p90": 1.067392574204132,
+        "p95": 1.1518431510776281,
+        "p99": 1.502749465224333,
+        "max": 452.08486016700044
+      },
+      "ran_seconds": {
+        "n": 1000,
+        "sum": 1770.323685790645,
+        "mean": 1.770323685790645,
+        "min": 0.7910936679691076,
+        "p50": 0.8107927100500092,
+        "p90": 1.067392574204132,
+        "p95": 1.1518431510776281,
+        "p99": 1.502749465224333,
+        "max": 452.08486016700044
+      }
+    },
+    "official_details": {
+      "outcomes": {
+        "deadline_skipped": 965,
+        "completed": 35
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 115.66508498531766,
+        "mean": 0.11566508498531766,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 5.4942328881938005,
+        "max": 8.1043117409572
+      },
+      "ran_seconds": {
+        "n": 35,
+        "sum": 115.66508498531766,
+        "mean": 3.304716713866219,
+        "min": 1.6940925170201808,
+        "p50": 1.8741642539389431,
+        "p90": 6.283875259757042,
+        "p95": 6.553149175620637,
+        "p99": 7.673978343820195,
+        "max": 8.1043117409572
+      }
+    },
+    "website_shallow": {
+      "outcomes": {
+        "deadline_skipped": 1000
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ran_seconds": {}
+    },
+    "website_verify": {
+      "outcomes": {
+        "deadline_skipped": 1000
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ran_seconds": {}
+    },
+    "wiki_batch": {
+      "outcomes": {
+        "completed": 1000
+      },
+      "all_seconds": {
+        "n": 1000,
+        "sum": 5486.672113183886,
+        "mean": 5.486672113183886,
+        "min": 5.486672113183886,
+        "p50": 5.486672113183886,
+        "p90": 5.486672113183886,
+        "p95": 5.486672113183886,
+        "p99": 5.486672113183886,
+        "max": 5.486672113183886
+      },
+      "ran_seconds": {
+        "n": 1000,
+        "sum": 5486.672113183886,
+        "mean": 5.486672113183886,
+        "min": 5.486672113183886,
+        "p50": 5.486672113183886,
+        "p90": 5.486672113183886,
+        "p95": 5.486672113183886,
+        "p99": 5.486672113183886,
+        "max": 5.486672113183886
+      }
+    }
+  },
+  "execution_top": {
+    "controls": [
+      "batch_report:nav_batch",
+      "batch_report:wiki_batch",
+      "bounded_frontier",
+      "company_phase_outcomes",
+      "financial_allocation",
+      "nav_dynamic_allocation",
+      "official_details_allocation",
+      "research_allocations"
+    ],
+    "identities": []
+  },
+  "controls": {
+    "batch_report:nav_batch": {
+      "cache_errors": 0,
+      "cache_hits": 0,
+      "cache_misses": 0,
+      "cache_writes": 0,
+      "complete": false,
+      "detail_elapsed_seconds": 0.0,
+      "detail_failures": 0,
+      "details": 0,
+      "elapsed_seconds": 2.066,
+      "feed_complete": false,
+      "feed_elapsed_seconds": 2.066,
+      "gateway_retries_use_shared_physical_budget": true,
+      "indexed_employers": 0,
+      "indexed_jobs": 0,
+      "items": 0,
+      "malformed_items": 0,
+      "matched_jobs": 0,
+      "max_details": 4096,
+      "max_pages": 256,
+      "max_requests": 486,
+      "negative_coverage": false,
+      "pages": 0,
+      "reason": "deadline",
+      "request_count_scope": "logical_gateway_calls",
+      "requests": 1,
+      "state": "blocked",
+      "time_seconds": 1.9977093804860488,
+      "truncated": true,
+      "unresolved_entries": 0,
+      "window_days": 40,
+      "window_end": "2026-11-06T20:51:42.098111+00:00",
+      "window_start": "2026-09-27T20:51:42.098111+00:00"
+    },
+    "batch_report:wiki_batch": {
+      "access_profile": "wikidata_sparql_api",
+      "candidate_count": 5,
+      "http_status": 200,
+      "omitted_companies": 800,
+      "outcome": "ok",
+      "requested_companies": 200,
+      "response_sha256": "7c560d64d11b93895648878173cbcb2b828d7052cedb459dd28a5c82f9ca49a8",
+      "state": "completed",
+      "user_agent": "Signalpost/1.0 (company-research; https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/issues)"
+    },
+    "financial_allocation": 800.0,
+    "nav_dynamic_allocation": 2.497709380486049,
+    "official_details_allocation": 68.55236595426686,
+    "research_allocations": {
+      "ocr": 5.456827455933672,
+      "website": 8.39511916297488
+    }
+  },
+  "frontier": {
+    "keys": 1983,
+    "reason": "deadline"
+  },
+  "manifest_top": {
+    "complete": false,
+    "header_policy": "exact-if-modified-since-no-credentials",
+    "run": {
+      "batch_id": "bounded-scale-20261107",
+      "cutoff": "2026-11-06T20:51:42.098111+00:00",
+      "cutoff_source": "run_start",
+      "implementation_identity": "50c2e692696296fac5fdc88a8388bdbed463b38057898ebdf612683d73ed9ebe",
+      "input_sha256": "c8d231c304a80151e569667c6a797ae38861ca69dc00ad787f18e619cff77927",
+      "request_configuration": {
+        "budget": {
+          "completion_reserve_seconds": 270.0,
+          "financial_requests_per_company": 1,
+          "financial_seconds": 180.0,
+          "global_http_concurrency": 32,
+          "hard_seconds": 1800.0,
+          "logical_request_limit": null,
+          "paid_cost_limit": "0",
+          "per_company_physical_limit": null,
+          "per_host_concurrency": 2,
+          "per_host_physical_limit": null,
+          "physical_request_limit": 8000,
+          "soft_seconds": 1530.0
+        },
+        "live_brreg": true,
+        "live_websites": true,
+        "network_policy": "direct",
+        "no_keyless_websites": false,
+        "registry_snapshot_as_of": null,
+        "registry_source_url": null,
+        "runtime_config": {
+          "budget": {
+            "completion_reserve_seconds": 300.0,
+            "financial_requests_per_company": 1,
+            "financial_seconds": 180,
+            "hard_seconds": 1800.0,
+            "nav_seconds": 360,
+            "ocr_budget_share": 0.65,
+            "ocr_seconds": 900,
+            "physical_request_limit": 8000,
+            "soft_seconds": 1500.0,
+            "website_seconds": 480,
+            "wikidata_seconds": 12
+          }
+        },
+        "source_policy_version": "sha256:391237c7f20f162820852c3f540234a64ba862074b5fad9779b50e5cafb6e2bf"
+      },
+      "run_started_at": "2026-11-06T20:51:42.098111+00:00"
+    },
+    "variant_policy": "ordered-physical-attempts",
+    "version": 2
+  },
+  "capture": {
+    "official": {
+      "companies_with_records": 1000,
+      "requests_per_company_observed": {
+        "n": 1000,
+        "sum": 1002,
+        "mean": 1.002,
+        "min": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 3
+      },
+      "request_count_histogram": {
+        "1": 999,
+        "3": 1
+      },
+      "requests_per_input_1000": {
+        "n": 1000,
+        "sum": 1002,
+        "mean": 1.002,
+        "min": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 3
+      },
+      "request_elapsed_seconds": {
+        "n": 1002,
+        "sum": 802.2296258984134,
+        "mean": 0.8006283691600932,
+        "min": 0.01940239197574556,
+        "p50": 0.7631557404529303,
+        "p90": 0.8439435707172379,
+        "p95": 1.086083789076656,
+        "p99": 1.3733598375553266,
+        "max": 1.68656599894166
+      },
+      "retrieved_min": "2026-11-06T20:51:43.701685+00:00",
+      "retrieved_max": "2026-11-06T20:59:15.023137+00:00",
+      "physical_attempt_records": 1002
+    },
+    "financial_statements": {
+      "companies_with_records": 949,
+      "requests_per_company_observed": {
+        "n": 949,
+        "sum": 949,
+        "mean": 1,
+        "min": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 1
+      },
+      "request_count_histogram": {
+        "1": 949
+      },
+      "requests_per_input_1000": {
+        "n": 1000,
+        "sum": 949,
+        "mean": 0.949,
+        "min": 0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 1
+      },
+      "request_elapsed_seconds": {
+        "n": 949,
+        "sum": 1178.730527937878,
+        "mean": 1.2420764256458146,
+        "min": 0.7556378140579909,
+        "p50": 0.7722618640400469,
+        "p90": 2.939213611232117,
+        "p95": 4.298517370549962,
+        "p99": 5.081335194194689,
+        "max": 7.122652718098834
+      },
+      "retrieved_min": "2026-11-06T20:59:15.934041+00:00",
+      "retrieved_max": "2026-11-06T21:12:37.553194+00:00",
+      "physical_attempt_records": 949
+    },
+    "official_details": {
+      "companies_with_records": 37,
+      "requests_per_company_observed": {
+        "n": 37,
+        "sum": 73,
+        "mean": 1.972972972972973,
+        "min": 1,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0,
+        "max": 2
+      },
+      "request_count_histogram": {
+        "2": 36,
+        "1": 1
+      },
+      "requests_per_input_1000": {
+        "n": 1000,
+        "sum": 73,
+        "mean": 0.073,
+        "min": 0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 2.0,
+        "max": 2
+      },
+      "request_elapsed_seconds": {
+        "n": 73,
+        "sum": 105.6507754791528,
+        "mean": 1.447270896974696,
+        "min": 0.00023779412731528282,
+        "p50": 0.7737280179280788,
+        "p90": 4.633697810675949,
+        "p95": 5.231359936855732,
+        "p99": 6.039426238695161,
+        "max": 6.802782024955377
+      },
+      "retrieved_min": "2026-11-06T21:12:38.743446+00:00",
+      "retrieved_max": "2026-11-06T21:13:47.760969+00:00",
+      "physical_attempt_records": 73
+    },
+    "nav_batch": {
+      "companies_with_records": 1,
+      "requests_per_company_observed": {
+        "n": 1,
+        "sum": 1,
+        "mean": 1,
+        "min": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 1
+      },
+      "request_count_histogram": {
+        "1": 1
+      },
+      "requests_per_input_1000": {
+        "n": 1000,
+        "sum": 0,
+        "mean": 0,
+        "min": 0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0
+      },
+      "request_elapsed_seconds": {
+        "n": 1,
+        "sum": 1.5199166510719806,
+        "mean": 1.5199166510719806,
+        "min": 1.5199166510719806,
+        "p50": 1.5199166510719806,
+        "p90": 1.5199166510719806,
+        "p95": 1.5199166510719806,
+        "p99": 1.5199166510719806,
+        "max": 1.5199166510719806
+      },
+      "retrieved_min": "2026-11-06T21:17:05.841072+00:00",
+      "retrieved_max": "2026-11-06T21:17:05.841072+00:00",
+      "physical_attempt_records": 1
+    },
+    "wiki_batch": {
+      "companies_with_records": 1,
+      "requests_per_company_observed": {
+        "n": 1,
+        "sum": 1,
+        "mean": 1,
+        "min": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 1
+      },
+      "request_count_histogram": {
+        "1": 1
+      },
+      "requests_per_input_1000": {
+        "n": 1000,
+        "sum": 0,
+        "mean": 0,
+        "min": 0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0
+      },
+      "request_elapsed_seconds": {
+        "n": 1,
+        "sum": 4.901696355082095,
+        "mean": 4.901696355082095,
+        "min": 4.901696355082095,
+        "p50": 4.901696355082095,
+        "p90": 4.901696355082095,
+        "p95": 4.901696355082095,
+        "p99": 4.901696355082095,
+        "max": 4.901696355082095
+      },
+      "retrieved_min": "2026-11-06T21:14:05.269043+00:00",
+      "retrieved_max": "2026-11-06T21:14:05.269043+00:00",
+      "physical_attempt_records": 1
+    },
+    "annual_documents": {
+      "companies_with_records": 1,
+      "requests_per_company_observed": {
+        "n": 1,
+        "sum": 1,
+        "mean": 1,
+        "min": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 1
+      },
+      "request_count_histogram": {
+        "1": 1
+      },
+      "requests_per_input_1000": {
+        "n": 1000,
+        "sum": 1,
+        "mean": 0.001,
+        "min": 0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 1
+      },
+      "request_elapsed_seconds": {
+        "n": 1,
+        "sum": 6.8093987121246755,
+        "mean": 6.8093987121246755,
+        "min": 6.8093987121246755,
+        "p50": 6.8093987121246755,
+        "p90": 6.8093987121246755,
+        "p95": 6.8093987121246755,
+        "p99": 6.8093987121246755,
+        "max": 6.8093987121246755
+      },
+      "retrieved_min": "2026-11-06T21:17:12.109575+00:00",
+      "retrieved_max": "2026-11-06T21:17:12.109575+00:00",
+      "physical_attempt_records": 1
+    }
+  },
+  "purposes": {
+    "('official', 'entity')": 1000,
+    "('financial_statements', 'accounts')": 949,
+    "('official_details', 'subunits')": 36,
+    "('official_details', 'roles')": 37,
+    "('official', 'robots')": 2,
+    "('nav_batch', 'robots')": 1,
+    "('wiki_batch', 'wikidata_batch_candidates')": 1,
+    "('annual_documents', 'annual_account_copy')": 1
+  },
+  "outcomes": {
+    "('official', '200', 'received')": 1000,
+    "('financial_statements', '200', 'received')": 935,
+    "('financial_statements', '404', 'received')": 12,
+    "('official_details', '200', 'received')": 71,
+    "('official_details', 'None', 'cancelled')": 2,
+    "('financial_statements', 'None', 'cancelled')": 2,
+    "('official', 'None', 'transport_error')": 2,
+    "('nav_batch', 'None', 'cancelled')": 1,
+    "('wiki_batch', '200', 'received')": 1,
+    "('annual_documents', 'None', 'cancelled')": 1
+  },
+  "request_settings": {
+    "('official', 20, 1)": 1001,
+    "('financial_statements', 20, 0)": 949,
+    "('official_details', 20, 1)": 73,
+    "('official', 40, 1)": 1,
+    "('nav_batch', 20, 1)": 1,
+    "('wiki_batch', 20, 1)": 1,
+    "('annual_documents', 20, 1)": 1
+  },
+  "ledger_counts": {},
+  "ledger_keys": [],
+  "shells": [
+    [
+      "baseline_done",
+      272,
+      729,
+      1000
+    ],
+    [
+      "terminalized",
+      728,
+      1,
+      728
+    ]
+  ],
+  "final_status_shell_join": [
+    [
+      "baseline_done",
+      1,
+      729,
+      729
+    ],
+    [
+      "terminalized",
+      728,
+      1,
+      728
+    ]
+  ],
+  "extra": {
+    "official_top": [
+      {
+        "row": 4,
+        "seconds": 452.08486016700044,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 3,
+        "seconds": 451.75557035487145,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 2,
+        "seconds": 3.2570499018765986,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 1,
+        "seconds": 3.2386160609312356,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 983,
+        "seconds": 1.733318411046639,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 970,
+        "seconds": 1.5766865981277078,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 934,
+        "seconds": 1.5467300629243255,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 982,
+        "seconds": 1.5424709890503436,
+        "outcome": "completed",
+        "reason": null
+      }
+    ],
+    "financial_statements_top": [
+      {
+        "row": 785,
+        "seconds": 7.279736189171672,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 913,
+        "seconds": 7.202844795305282,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 824,
+        "seconds": 6.888290802016854,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 867,
+        "seconds": 6.793131178244948,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 922,
+        "seconds": 5.749841704033315,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 639,
+        "seconds": 5.749156031990424,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 923,
+        "seconds": 5.536032358184457,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 887,
+        "seconds": 5.411316051147878,
+        "outcome": "completed",
+        "reason": null
+      }
+    ],
+    "finalization_top": [
+      {
+        "row": 135,
+        "seconds": 8.28413309995085,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 579,
+        "seconds": 4.749459814047441,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 281,
+        "seconds": 4.686827667988837,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 424,
+        "seconds": 4.672007302055135,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 711,
+        "seconds": 0.7457503168843687,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 712,
+        "seconds": 0.36457870504818857,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 708,
+        "seconds": 0.35152711090631783,
+        "outcome": "completed",
+        "reason": null
+      },
+      {
+        "row": 729,
+        "seconds": 0.32532518613152206,
+        "outcome": "completed",
+        "reason": null
+      }
+    ],
+    "capture_payload_keys": [
+      "approved_ips",
+      "elapsed_ms",
+      "error_type",
+      "key",
+      "outcome",
+      "position",
+      "request",
+      "request_id",
+      "response",
+      "retrieved_at",
+      "started_at"
+    ],
+    "outcomes": {
+      "('official', '200', 'received')": 1000,
+      "('financial_statements', '200', 'received')": 935,
+      "('financial_statements', '404', 'received')": 12,
+      "('official_details', '200', 'received')": 71,
+      "('official_details', 'None', 'cancelled')": 2,
+      "('financial_statements', 'None', 'cancelled')": 2,
+      "('official', 'None', 'transport_error')": 2,
+      "('nav_batch', 'None', 'cancelled')": 1,
+      "('wiki_batch', '200', 'received')": 1,
+      "('annual_documents', 'None', 'cancelled')": 1
+    },
+    "foundation_outlier_requests": [
+      {
+        "row": 4,
+        "requests": [
+          {
+            "phase": "official",
+            "purpose": "entity",
+            "elapsed": 0.7614854599814862,
+            "retrieved": "2026-11-06T20:59:15.023137+00:00",
+            "outcome": "received",
+            "status": 200
+          }
+        ]
+      },
+      {
+        "row": 3,
+        "requests": [
+          {
+            "phase": "official",
+            "purpose": "entity",
+            "elapsed": 0.7644203840754926,
+            "retrieved": "2026-11-06T20:59:14.692794+00:00",
+            "outcome": "received",
+            "status": 200
+          }
+        ]
+      },
+      {
+        "row": 2,
+        "requests": [
+          {
+            "phase": "financial_statements",
+            "purpose": "accounts",
+            "elapsed": 1.6089128879830241,
+            "retrieved": "2026-11-06T20:59:17.050813+00:00",
+            "outcome": "received",
+            "status": 200
+          },
+          {
+            "phase": "official_details",
+            "purpose": "subunits",
+            "elapsed": 0.9422148528974503,
+            "retrieved": "2026-11-06T21:12:40.089956+00:00",
+            "outcome": "received",
+            "status": 200
+          },
+          {
+            "phase": "official",
+            "purpose": "entity",
+            "elapsed": 1.68656599894166,
+            "retrieved": "2026-11-06T20:51:46.189511+00:00",
+            "outcome": "received",
+            "status": 200
+          },
+          {
+            "phase": "official_details",
+            "purpose": "roles",
+            "elapsed": 0.7574708368629217,
+            "retrieved": "2026-11-06T21:12:39.054018+00:00",
+            "outcome": "received",
+            "status": 200
+          }
+        ]
+      },
+      {
+        "row": 1,
+        "requests": [
+          {
+            "phase": "official",
+            "purpose": "robots",
+            "elapsed": 0.01940239197574556,
+            "retrieved": "2026-11-06T20:51:43.853962+00:00",
+            "outcome": "transport_error",
+            "status": null
+          },
+          {
+            "phase": "official",
+            "purpose": "robots",
+            "elapsed": 0.753833246184513,
+            "retrieved": "2026-11-06T20:51:43.701685+00:00",
+            "outcome": "transport_error",
+            "status": null
+          },
+          {
+            "phase": "financial_statements",
+            "purpose": "accounts",
+            "elapsed": 0.8055621369276196,
+            "retrieved": "2026-11-06T20:59:15.934041+00:00",
+            "outcome": "received",
+            "status": 200
+          },
+          {
+            "phase": "official",
+            "purpose": "entity",
+            "elapsed": 0.761386192869395,
+            "retrieved": "2026-11-06T20:51:44.929619+00:00",
+            "outcome": "received",
+            "status": 200
+          },
+          {
+            "phase": "annual_documents",
+            "purpose": "annual_account_copy",
+            "elapsed": 6.8093987121246755,
+            "retrieved": "2026-11-06T21:17:12.109575+00:00",
+            "outcome": "cancelled",
+            "status": null
+          },
+          {
+            "phase": "official_details",
+            "purpose": "subunits",
+            "elapsed": 0.7753687219228595,
+            "retrieved": "2026-11-06T21:12:39.589105+00:00",
+            "outcome": "received",
+            "status": 200
+          },
+          {
+            "phase": "official_details",
+            "purpose": "roles",
+            "elapsed": 0.781304300064221,
+            "retrieved": "2026-11-06T21:12:38.743446+00:00",
+            "outcome": "received",
+            "status": 200
+          }
+        ]
+      }
+    ],
+    "database_sizes": {
+      "checkpoint.sqlite": 750071808,
+      "checkpoint.sqlite-wal": 444065992,
+      "envelopes.jsonl": 485318083
+    },
+    "payload_sizes_by_phase": [
+      [
+        "financial_statements",
+        947,
+        220776158,
+        468247
+      ],
+      [
+        "official",
+        1000,
+        29545966,
+        40528
+      ],
+      [
+        "official_details",
+        35,
+        10665731,
+        514499
+      ],
+      [
+        "wiki_batch",
+        1,
+        2462,
+        2462
+      ]
+    ],
+    "envelope_sizes": [
+      [
+        1000,
+        481225757,
+        1655,
+        1138448
+      ]
+    ]
+  },
+  "capture_derived": {
+    "wrapper_hash_mismatches": 0,
+    "captured_attempt_count": 2027,
+    "robots": [
+      {
+        "phase": "official",
+        "status": null,
+        "outcome": "transport_error"
+      },
+      {
+        "phase": "nav_batch",
+        "status": null,
+        "outcome": "cancelled"
+      },
+      {
+        "phase": "official",
+        "status": null,
+        "outcome": "transport_error"
+      }
+    ],
+    "per_company_sum_request_elapsed": {
+      "official": {
+        "n": 1000,
+        "sum": 802.2296258984134,
+        "mean": 0.8022296258984134,
+        "min": 0.7557249399833381,
+        "p50": 0.763168130419217,
+        "p95": 1.0907804723829027,
+        "p99": 1.381501330749597,
+        "max": 1.68656599894166
+      },
+      "financial_statements": {
+        "n": 949,
+        "sum": 1178.730527937878,
+        "mean": 1.2420764256458146,
+        "min": 0.7556378140579909,
+        "p50": 0.7722618640400469,
+        "p95": 4.298517370549962,
+        "p99": 5.081335194194689,
+        "max": 7.122652718098834
+      },
+      "official_details": {
+        "n": 37,
+        "sum": 105.6507754791528,
+        "mean": 2.855426364301427,
+        "min": 0.00023779412731528282,
+        "p50": 1.553184794029221,
+        "p95": 6.2056674973107855,
+        "p99": 7.210754635427148,
+        "max": 7.586440166924149
+      },
+      "nav_batch": {
+        "n": 1,
+        "sum": 1.5199166510719806,
+        "mean": 1.5199166510719806,
+        "min": 1.5199166510719806,
+        "p50": 1.5199166510719806,
+        "p95": 1.5199166510719806,
+        "p99": 1.5199166510719806,
+        "max": 1.5199166510719806
+      },
+      "wiki_batch": {
+        "n": 1,
+        "sum": 4.901696355082095,
+        "mean": 4.901696355082095,
+        "min": 4.901696355082095,
+        "p50": 4.901696355082095,
+        "p95": 4.901696355082095,
+        "p99": 4.901696355082095,
+        "max": 4.901696355082095
+      },
+      "annual_documents": {
+        "n": 1,
+        "sum": 6.8093987121246755,
+        "mean": 6.8093987121246755,
+        "min": 6.8093987121246755,
+        "p50": 6.8093987121246755,
+        "p95": 6.8093987121246755,
+        "p99": 6.8093987121246755,
+        "max": 6.8093987121246755
+      }
+    },
+    "captured_start_gaps": {
+      "official": {
+        "n": 1001,
+        "sum": 451.30036902427673,
+        "mean": 0.450849519504772,
+        "min": 0.33336591720581055,
+        "p50": 0.42040109634399414,
+        "p95": 0.7899878025054932,
+        "p99": 1.11598801612854,
+        "max": 1.6874449253082275
+      },
+      "financial_statements": {
+        "n": 948,
+        "sum": 797.656005859375,
+        "mean": 0.8414092888811973,
+        "min": 0.33342909812927246,
+        "p50": 0.5530960559844971,
+        "p95": 3.5212480306625364,
+        "p99": 4.92461949110031,
+        "max": 7.117666006088257
+      },
+      "official_details": {
+        "n": 72,
+        "sum": 69.78476214408875,
+        "mean": 0.9692328075567881,
+        "min": 0.3334469795227051,
+        "p50": 0.503158450126648,
+        "p95": 4.683991205692291,
+        "p99": 5.752415587902078,
+        "max": 6.79325008392334
+      },
+      "nav_batch": {},
+      "wiki_batch": {},
+      "annual_documents": {}
+    },
+    "max_capture_interval_overlap": {
+      "official": 2,
+      "financial_statements": 2,
+      "official_details": 2,
+      "nav_batch": 1,
+      "wiki_batch": 1,
+      "annual_documents": 1
+    }
+  },
+  "durable_boundary": {
+    "finalized_payload_729_has_current_state_ref": true,
+    "finalized_payload_729_has_summary": true,
+    "payload_730_has_current_state_ref": false,
+    "payload_730_has_summary": false,
+    "shells_terminalized": 728,
+    "finalization_statuses_completed": 729,
+    "publication_status": "partial",
+    "canonical_pair_committed": false,
+    "failed_official_reason": "official publication failed: ValueError",
+    "failed_official_traceback_sha256": "b8a923035ebb34d0b5ad54ea40adee27daf6ccff1ea7429a58046e0626107e57"
+  }
+}

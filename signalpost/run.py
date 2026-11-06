@@ -10,6 +10,9 @@ import sys
 import time
 import uuid
 import copy
+import gc
+import signal
+import threading
 from dataclasses import fields, replace
 from types import SimpleNamespace
 from datetime import datetime, timezone
@@ -21,8 +24,9 @@ from .adapter import to_evaluator
 from .inputs import load_input, normalize_org_number, stream_registry_matches
 from .models import (Claim, Envelope, Evidence, PublicState, RefreshState, RunError, Section, SourceSnapshot,
                      empty_section, validate_batch_publication_graph)
-from .operations import (Budget, CheckpointStore, Opportunity, OpportunityFailed, OpportunityScheduler,
-                         OrderedAtomicWriter, PartialEnvelopePublisher, RunBudget, publish_paired_artifacts)
+from .operations import (Budget, CheckpointStore, Opportunity, OpportunityDeferred, OpportunityFailed, OpportunityScheduler,
+                         OrderedAtomicWriter, PartialEnvelopePublisher, RunBudget, publish_paired_artifacts,
+                         _SerializedEnvelope)
 from .network import NetworkGateway, StructuredLogger, registered_domain, request_company_scope, request_phase_scope
 from .execution import ExecutionTrace, implementation_identity
 from .recording import HttpRecording, ReplayError
@@ -38,7 +42,7 @@ def _provisional_envelope(row, batch_id, cutoff, clock):
     return Envelope(input_ref=row.input_ref, row_number=row.row_number,
         organisation_number=row.organisation_number, terminal_state=PublicState.AMBIGUOUS,
         sections={name: Section(state=None, attempt_outcome="not_attempted",
-            diagnostics=["unknown:research_incomplete"]) for name in (
+            diagnostics=["unknown:not_started"]) for name in (
             "identity_brand", "accounts_history", "leadership_workplaces", "website_owned_profiles",
             "hiring_activity", "claims_evidence_states", "refresh_changes")},
         refresh=RefreshState(last_attempt_at=clock), batch_id=batch_id,
@@ -81,7 +85,8 @@ def _phase_failure_envelope(row, batch_id, cutoff, phase, exc, clock):
         batch_id=batch_id, evidence_cutoff=cutoff, created_at=clock)
 
 
-def _finalize_company(envelope, old_state, previous_state_error, previous_ref, current_ref, current_state, cutoff):
+def _finalize_company(envelope, old_state, previous_state_error, previous_ref, current_ref, current_state, cutoff,
+                      *, validate_output=True):
     if previous_state_error:
         envelope.refresh.mode = "incompatible_prior_state"
         envelope.errors.append(RunError(code="REFRESH_PRIOR_STATE_INCOMPATIBLE",
@@ -101,8 +106,9 @@ def _finalize_company(envelope, old_state, previous_state_error, previous_ref, c
     section.attempt_outcome = envelope.refresh.mode
     section.diagnostics = [f"material_changes:{len(envelope.refresh.changes)}"]
     envelope.synthesis["summary"] = synthesize(envelope)
-    validate_batch_publication_graph([envelope])
-    to_evaluator(envelope)
+    if validate_output:
+        validate_batch_publication_graph([envelope])
+        to_evaluator(envelope)
     return envelope
 
 
@@ -441,7 +447,50 @@ async def _run_source_phase(awaitable: Any, budget: Budget, seconds: float) -> t
         return {}, True
 
 
+class CompanyDeadline(Exception):
+    pass
+
+
+async def _company_phase(awaitable, budget, replay=False):
+    if replay:
+        return await awaitable
+    remaining = min(30.0, max(0.001, budget.config.soft_seconds - budget.elapsed))
+    try:
+        return await asyncio.wait_for(awaitable, timeout=remaining)
+    except TimeoutError:
+        raise CompanyDeadline("company_deadline_unknown_incomplete") from None
+
+
+def _run_research(awaitable, on_stop=None):
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(awaitable)
+    finally:
+        if on_stop is not None:
+            on_stop()
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        if pending:
+            loop.run_until_complete(asyncio.wait(pending, timeout=1.0))
+        loop.close()
+        asyncio.set_event_loop(None)
+
+
 def run(args: argparse.Namespace) -> int:
+    args._watchdog = None
+    args._watchdog_handlers = {}
+    try:
+        return _run(args)
+    finally:
+        if args._watchdog is not None:
+            args._watchdog.stop()
+        for signum, handler in args._watchdog_handlers.items():
+            signal.signal(signum, handler)
+
+
+def _run(args: argparse.Namespace) -> int:
     run_started = time.monotonic()
     run_start_utc = datetime.now(timezone.utc)
     replay_metadata = None
@@ -672,7 +721,8 @@ def run(args: argparse.Namespace) -> int:
     frozen_cache = checkpoint.phase_results("frozen_foundation") if args.resume else {}
     partial = PartialEnvelopePublisher(writer,
         [prior_terminalized.get(row.row_number, _provisional_envelope(row, batch_id, cutoff, run_start_utc))
-            for row in rows], serializer=to_evaluator)
+            for row in rows], serializer=to_evaluator, max_seconds=30.0,
+        max_updates=max(100, len(rows)))
 
     def frozen_envelope(row):
         saved = frozen_cache.get(row.organisation_number, {}).get(str(row.row_number))
@@ -704,7 +754,7 @@ def run(args: argparse.Namespace) -> int:
     recording = None
     execution = ExecutionTrace(None)
     if live_brreg or live_websites:
-        gateway = NetworkGateway(timeout=20, retries=1, budget=run_budget,
+        gateway = NetworkGateway(timeout=10, retries=1, budget=run_budget,
                                  trusted_proxy=args.network_policy == "trusted-proxy",
                                  global_concurrency=budget.global_http_concurrency,
                                  record_http=getattr(args, "record_http", None),
@@ -726,7 +776,9 @@ def run(args: argparse.Namespace) -> int:
                 raise ResearchDeadline(expected_frontier["reason"])
 
         if live_brreg:
-            gateway.set_rate_limit("data.brreg.no", 3.0)
+            gateway.set_rate_limit("data.brreg.no", 8.0)
+            if hasattr(gateway, "set_host_concurrency"):
+                gateway.set_host_concurrency("data.brreg.no", 8)
         async def enrich():
             unique = list(dict.fromkeys(r.organisation_number for r in rows
                                         if r.row_number not in prior_terminalized and len(r.organisation_number) == 9 and r.organisation_number.isdigit()))
@@ -935,13 +987,14 @@ def run(args: argparse.Namespace) -> int:
                 record_phase(name, saved["state"], elapsed)
                 phase_metrics[name]["wall_seconds"] = elapsed
                 phase_cache[name]["batch"] = saved
+                statuses = []
                 for org in unique:
                     errors = [saved["company_errors"][org]] if org in saved.get("company_errors", {}) else saved.get("errors", [])
                     reason, digest = error_fingerprint(errors)
-                    checkpoint.save_phase_status(name, org, "failed" if errors else saved["state"], elapsed,
-                        reason=reason or saved.get("reason"), traceback_sha256=digest)
-                checkpoint.save_phase(name, "batch", saved, [compose(row) for row in rows
-                    if row.row_number not in prior_terminalized])
+                    statuses.append((name, org, "failed" if errors else saved["state"], elapsed,
+                        reason or saved.get("reason"), digest))
+                checkpoint.save_phase_statuses(statuses)
+                checkpoint.save_phase(name, "batch", saved)
                 checkpoint_boundary(name, "batch")
                 return saved["value"]
 
@@ -954,6 +1007,9 @@ def run(args: argparse.Namespace) -> int:
                 scheduler_report.setdefault("phase_reservations", {})["nav_dynamic_allocation_seconds"] = nav_allocation
                 recorded_nav = execution.control("batch_report:nav_batch") if execution.replay else None
                 if recorded_nav and recorded_nav.get("state") in {"not_attempted", "deadline_skipped", "budget_skipped"}:
+                    drain = ExecutionTrace(recording)
+                    drain.admitted = lambda phase, company: False
+                    await drain.consume_abandoned(gateway, "nav_batch", None)
                     scheduler_report["nav_jobs"] = recorded_nav
                     return {}, {}
                 if run_budget.soft_expired or run_budget.reserve_active:
@@ -990,7 +1046,7 @@ def run(args: argparse.Namespace) -> int:
                 financial_allocation = execution.control("financial_allocation", financial_allocation)
                 run_budget.financial_request_reserve = len(finance_pending) * budget.financial_requests_per_company
                 run_budget.financial_logical_reserve = len(finance_pending)
-                scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
+                scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
                 baseline_orgs = set(by_org)
                 works = [Opportunity(key=org, company=org, pass_name="official_foundation",
                                      expected_company_family_gain=3, expected_atomic_claim_gain=4,
@@ -1010,15 +1066,18 @@ def run(args: argparse.Namespace) -> int:
                     try:
                         with request_phase_scope("official"), request_company_scope(item.company):
                             logical_requests_before = gateway.ledger.logical_requests
-                            result = await fetch_company(item.company, gateway, cutoff,
+                            result = await _company_phase(fetch_company(item.company, gateway, cutoff,
                                 allow_current_identity_after_run_start=cutoff_source == "run_start",
-                                include_accounts=False, include_people=False)
+                                include_accounts=False, include_people=False), run_budget, execution.replay)
                         if (gateway.ledger.logical_requests == logical_requests_before
                                 and result.observations.get("foundation_breadth_only")):
                             result.observations.pop("foundation_breadth_only", None)
                         if result.terminal_state == PublicState.FAILED:
                             state = "failed"
                         return result
+                    except CompanyDeadline:
+                        state = "deadline_skipped"
+                        raise OpportunityDeferred("company_deadline_unknown_incomplete")
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
                         raise
@@ -1066,7 +1125,8 @@ def run(args: argparse.Namespace) -> int:
                 official_started = time.monotonic()
                 _, official_deadline_cancelled = await _run_before_completion_reserve(
                     scheduler.run(works, official, on_complete=checkpoint_completed,
-                        permitted=lambda item: execution.admitted("official", item.company)), run_budget,
+                        permitted=lambda item: execution.admitted("official", item.company)
+                            and (execution.replay or not run_budget.soft_expired)), run_budget,
                     reserved_seconds=financial_allocation if finance_pending else 0)
                 scheduler_report["official_foundation"] = {"passes": scheduler.metrics,
                     "companies": scheduler.company_metrics,
@@ -1087,8 +1147,10 @@ def run(args: argparse.Namespace) -> int:
                             terminal_state=PublicState.AMBIGUOUS, observations={"execution_state": "deadline_skipped"})
                         record_phase("official", "deadline_skipped", org=org)
                         await checkpoint_completed(Opportunity(key=org, company=org, pass_name="official_foundation"), by_org[org])
+                partial.flush(force=True)
+                scheduler_report["official_foundation"]["wall_seconds"] = time.monotonic() - official_started
                 from .operations import financial_request_scope
-                finance_scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
+                finance_scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
                 finance_works = [Opportunity(key=org, company=org, pass_name="financial_statements",
                     expected_company_family_gain=1, expected_atomic_claim_gain=10,
                     expected_requests=1, expected_seconds=1, sequence=index)
@@ -1100,11 +1162,14 @@ def run(args: argparse.Namespace) -> int:
                     errors = []
                     try:
                         with financial_request_scope(), request_company_scope(item.company), request_phase_scope("financial_statements"):
-                            result = await fetch_financial_statements(copy.deepcopy(by_org[item.company]),
-                                item.company, gateway, cutoff)
+                            result = await _company_phase(fetch_financial_statements(copy.deepcopy(by_org[item.company]),
+                                item.company, gateway, cutoff), run_budget, execution.replay)
                             if result.section_states.get("accounts_history") == PublicState.FAILED:
                                 state = "failed"
                             return result
+                    except CompanyDeadline:
+                        state = "deadline_skipped"
+                        raise OpportunityDeferred("company_deadline_unknown_incomplete")
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
                         raise
@@ -1129,7 +1194,8 @@ def run(args: argparse.Namespace) -> int:
                     if financial_allocation > 0:
                         await asyncio.wait_for(_run_before_completion_reserve(
                             finance_scheduler.run(finance_works, financial_statement,
-                                permitted=lambda item: execution.admitted("financial_statements", item.company),
+                                permitted=lambda item: execution.admitted("financial_statements", item.company)
+                                    and (execution.replay or not run_budget.soft_expired),
                                 on_complete=lambda item, value: persist_phase("financial_statements", item.company, value)),
                             run_budget), timeout=financial_allocation)
                 except asyncio.TimeoutError:
@@ -1160,6 +1226,8 @@ def run(args: argparse.Namespace) -> int:
                 by_org.update(phase_cache["financial_statements"])
                 scheduler_report["financial_statements"] = {"passes": finance_scheduler.metrics,
                     "companies": finance_scheduler.company_metrics}
+                partial.flush(force=True)
+                phase_metrics["financial_statements"]["wall_seconds"] = time.monotonic() - started
 
                 details_pending = [org for org in by_org if org not in phase_cache["official_details"]
                     and by_org[org].observations.get("foundation_breadth_only") is True
@@ -1170,7 +1238,10 @@ def run(args: argparse.Namespace) -> int:
                 details_allocation = min(300.0, len(details_pending) * 1.0,
                     remaining_depth_seconds * 0.25)
                 details_allocation = execution.control("official_details_allocation", details_allocation)
-                details_scheduler = OpportunityScheduler(concurrency=min(4, budget.global_http_concurrency))
+                if any((checkpoint.phase_status(phase, org) or {}).get("outcome") not in {"completed", "failed"}
+                        for org in unique for phase in ("official", "financial_statements")):
+                    raise ResearchDeadline("breadth_incomplete")
+                details_scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
                 details_works = [Opportunity(key=org, company=org, pass_name="official_details",
                     expected_company_family_gain=2, expected_atomic_claim_gain=8,
                     expected_requests=2.0, expected_seconds=2.0, sequence=index)
@@ -1208,10 +1279,13 @@ def run(args: argparse.Namespace) -> int:
                     state = "completed"
                     try:
                         with request_phase_scope("official_details"), request_company_scope(item.company):
-                            details = await fetch_company(item.company, gateway, cutoff,
+                            details = await _company_phase(fetch_company(item.company, gateway, cutoff,
                                 allow_current_identity_after_run_start=cutoff_source == "run_start",
-                                include_accounts=False, include_people=True)
+                                include_accounts=False, include_people=True), run_budget, execution.replay)
                         return merge_official_details(by_org[item.company], details)
+                    except CompanyDeadline:
+                        state = "deadline_skipped"
+                        raise OpportunityDeferred("company_deadline_unknown_incomplete")
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
                         raise
@@ -1232,7 +1306,8 @@ def run(args: argparse.Namespace) -> int:
                     try:
                         await asyncio.wait_for(_run_before_completion_reserve(
                             details_scheduler.run(details_works, official_details,
-                                permitted=lambda item: execution.admitted("official_details", item.company),
+                                permitted=lambda item: execution.admitted("official_details", item.company)
+                                    and (execution.replay or not run_budget.soft_expired),
                                 on_complete=lambda item, value: persist_phase("official_details", item.company, value)),
                             run_budget), timeout=details_allocation)
                     except asyncio.TimeoutError:
@@ -1255,6 +1330,7 @@ def run(args: argparse.Namespace) -> int:
                     "companies": details_scheduler.company_metrics,
                     "allocation_seconds": details_allocation,
                     "allocation_rule": "min(300s, 1s per pending company, 25% of remaining soft budget)"}
+                partial.flush(force=True)
             live_by_org.update(by_org)
             for saved in baseline_saved.values():
                 if saved.organisation_number in live_by_org:
@@ -1347,7 +1423,8 @@ def run(args: argparse.Namespace) -> int:
                     errors = []
                     try:
                         with request_company_scope(item.company), request_phase_scope("annual_documents"):
-                            result = await enrich_company(copy.deepcopy(by_org[item.company]), item.company, gateway, cutoff, processor)
+                            result = await _company_phase(enrich_company(copy.deepcopy(by_org[item.company]),
+                                item.company, gateway, cutoff, processor), run_budget, execution.replay)
                             from .financial_calibration import calibrate_company_financials
                             calibrate_company_financials(result, item.company, cutoff)
                             validate_batch_publication_graph([_live_envelope(row, result, batch_id, cutoff, previous,
@@ -1355,6 +1432,9 @@ def run(args: argparse.Namespace) -> int:
                             if result.observations.get("annual_accounts_document", {}).get("state") == "failed":
                                 state = "failed"
                             return result
+                    except CompanyDeadline:
+                        state = "deadline_skipped"
+                        raise OpportunityDeferred("company_deadline_unknown_incomplete")
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
                         raise
@@ -1398,7 +1478,7 @@ def run(args: argparse.Namespace) -> int:
                             "reason": "phase_deadline_or_completion_reserve"}
                         record_phase("annual_documents", "deadline_skipped", org=item.company)
                         phase_cache["annual_documents"][item.company] = result
-                gateway.set_rate_limit("data.brreg.no", 3.0)
+                gateway.set_rate_limit("data.brreg.no", 8.0)
                 scheduler_report["annual_documents"] = {"passes": document_scheduler.metrics,
                     "companies": document_scheduler.company_metrics, "hard_deadline_cancelled": document_cancelled}
 
@@ -1444,13 +1524,16 @@ def run(args: argparse.Namespace) -> int:
                     errors = []
                     try:
                         with request_company_scope(item.company), request_phase_scope(item.pass_name):
-                            result = await research_company(profiles[item.company], gateway, shared_domains=shared_roots,
+                            result = await _company_phase(research_company(profiles[item.company], gateway, shared_domains=shared_roots,
                                 enable_keyless=not args.no_keyless_websites, evidence_cutoff=cutoff,
                                 phase=phase, previous=copy.deepcopy(previous), rights_decisions=website_rights_decisions,
-                                allow_current_registry_references=cutoff_source == "run_start")
+                                allow_current_registry_references=cutoff_source == "run_start"), run_budget, execution.replay)
                             if result.state == PublicState.FAILED:
                                 state = "failed"
                             return result
+                    except CompanyDeadline:
+                        state = "deadline_skipped"
+                        raise OpportunityDeferred("company_deadline_unknown_incomplete")
                     except asyncio.CancelledError:
                         state = "deadline_skipped"
                         raise
@@ -1591,9 +1674,6 @@ def run(args: argparse.Namespace) -> int:
                       else compose(row) for row in rows]
             for envelope in output:
                 envelope.errors.extend(optional_errors)
-                checkpoint.put(envelope)
-                checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
-            checkpoint.connection.commit()
             return output
         async def guarded_enrich():
             stop = asyncio.Event()
@@ -1603,14 +1683,29 @@ def run(args: argparse.Namespace) -> int:
             finally:
                 stop.set()
                 await flushing
+        args._research_active = True
+        def stop_research_signals():
+            args._research_active = False
+            if os.name == "posix" and threading.current_thread() is threading.main_thread():
+                signal.setitimer(signal.ITIMER_REAL, 0)
+        if (getattr(args, "_enable_watchdog", False) and not execution.replay
+                and os.name == "posix" and threading.current_thread() is threading.main_thread()):
+            from .watchdog import Watchdog
+            def interrupt_research(signum, frame):
+                if args._research_active:
+                    raise ResearchDeadline("deadline" if signum != signal.SIGTERM else "sigterm")
+            for signum in (signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM):
+                args._watchdog_handlers[signum] = signal.signal(signum, interrupt_research)
+            args._watchdog = Watchdog(budget.hard_seconds, time.monotonic() - run_started)
         try:
             with signal_deadline(max(0.001, budget.soft_seconds - run_budget.elapsed), enabled=not execution.replay):
                 if expected_keys == set():
                     raise ResearchDeadline(expected_frontier["reason"])
-                envelopes = asyncio.run(guarded_enrich())
+                envelopes = _run_research(guarded_enrich(), stop_research_signals)
             if recording and not execution.replay:
                 execution.control("bounded_frontier", None)
         except ResearchDeadline as exc:
+            args._research_active = False
             checkpoint.connection.rollback()
             keys = [list(item) for item in checkpoint.connection.execute("SELECT phase,company FROM phase_results ORDER BY phase,company")]
             if recording and not execution.replay:
@@ -1642,8 +1737,14 @@ def run(args: argparse.Namespace) -> int:
             for envelope in envelopes:
                 envelope.errors.append(RunError(code="RESEARCH_INCOMPLETE",
                     message="Research stopped at its deadline or termination signal; unfinished fields are unknown, not zero.", retryable=True))
+                for section in envelope.sections.values():
+                    if section.state is None:
+                        section.attempt_outcome = "deadline_skipped"
+                        section.diagnostics.append("unknown:research_stopped_incomplete")
             scheduler_report["bounded_stop"] = {"reason": str(exc), "checkpoint_phase_results": len(keys)}
             scheduler_report["company_phases"] = {phase: checkpoint.phase_statuses(phase) for phase in phases}
+        finally:
+            args._research_active = False
     else:
         envelopes = []
         for row in rows:
@@ -1662,6 +1763,10 @@ def run(args: argparse.Namespace) -> int:
         scheduler_report["company_phases"] = {name: checkpoint.phase_statuses(name) for name in (
             "official", "financial_statements", "annual_documents", "nav_batch", "wiki_batch", "nav_apply",
             "website_verify", "website_shallow", "jobs_activity")}
+    finalization_started = time.monotonic()
+    partial.release()
+    live_by_org.clear()
+    gc.collect()
     capture_error = None
     if recording and recording.replay:
         try:
@@ -1708,6 +1813,8 @@ def run(args: argparse.Namespace) -> int:
         current_states[org] = new_state
     state_payload = artifact_payload(current_states, config_fingerprint)
     current_ref = artifact_ref(state_payload)
+    final_statuses = []
+    output_payloads = {}
     for index, envelope in enumerate(envelopes):
         started = time.monotonic()
         org = envelope.organisation_number
@@ -1716,7 +1823,9 @@ def run(args: argparse.Namespace) -> int:
             if org in finalization_errors:
                 raise finalization_errors[org]
             envelope = _finalize_company(envelope, old_state, previous_state_error, previous_ref,
-                current_ref, current_states[org], cutoff)
+                current_ref, current_states[org], cutoff, validate_output=False)
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+                ensure_ascii=False, separators=(",", ":")))
         except Exception as exc:
             row = next(row for row in rows_by_org[org] if row.row_number == envelope.row_number)
             envelope = _phase_failure_envelope(row, batch_id, cutoff, "finalization", exc, run_start_utc)
@@ -1727,14 +1836,13 @@ def run(args: argparse.Namespace) -> int:
             envelope.synthesis["summary"] = canonical_synthesis(envelope)
             current_states[org] = canonical_company_state(envelope, config_fingerprint, old_state)
             finalization_errors[org] = exc
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+                ensure_ascii=False, separators=(",", ":")))
         envelopes[index] = envelope
         reason, digest = error_fingerprint(envelope.errors)
-        checkpoint.save_phase_status("finalization", org, "failed" if org in finalization_errors else "completed",
-            time.monotonic() - started, reason=reason if org in finalization_errors else None,
-            traceback_sha256=digest if org in finalization_errors else None)
-        checkpoint.put(envelope)
-        checkpoint.connection.execute("UPDATE shells SET execution_state='terminalized' WHERE row_number=?", (envelope.row_number,))
-    checkpoint.connection.commit()
+        final_statuses.append(("finalization", org, "failed" if org in finalization_errors else "completed",
+            time.monotonic() - started, reason if org in finalization_errors else None,
+            digest if org in finalization_errors else None))
     if finalization_errors:
         state_payload = artifact_payload(current_states, config_fingerprint)
         current_ref = artifact_ref(state_payload)
@@ -1743,19 +1851,22 @@ def run(args: argparse.Namespace) -> int:
             for event in envelope.refresh.changes:
                 event.current_state_ref = current_ref
             envelope.synthesis["summary"] = synthesize(envelope)
-            checkpoint.put(envelope)
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+                ensure_ascii=False, separators=(",", ":")))
+    checkpoint.put_finalized(envelopes, final_statuses)
+    checkpoint.release_identity_cache()
+    gc.collect()
     expected_rows = [(row.row_number, row.input_ref) for row in rows]
     actual_rows = [(item.row_number, item.input_ref) for item in sorted(envelopes, key=lambda item: item.row_number)]
     if len(actual_rows) != len(expected_rows) or actual_rows != expected_rows:
         raise RuntimeError("terminal output does not exactly match input row cardinality/order")
-    finalization_started = time.monotonic()
-    validate_batch_publication_graph(envelopes)
     scheduler_report.setdefault("company_phases", {})["finalization"] = checkpoint.phase_statuses("finalization")
     if recording and capture_error is None:
         try:
-            fresh_bytes = b"".join((json.dumps(to_evaluator(envelope), ensure_ascii=False,
-                separators=(",", ":")) + "\n").encode() for envelope in sorted(envelopes, key=lambda item: item.row_number))
+            fresh_bytes = b"".join((output_payloads[envelope.row_number] + "\n").encode()
+                for envelope in sorted(envelopes, key=lambda item: item.row_number))
             recording.assert_identity("envelopes", fresh_bytes)
+            del fresh_bytes
             recording.assert_identity("state", canonical_json(state_payload) + b"\n")
             if recording.replay:
                 recording.assert_complete()
@@ -1780,15 +1891,23 @@ def run(args: argparse.Namespace) -> int:
                 event.current_state_ref = current_ref
             envelope.synthesis["summary"] = synthesize(envelope)
             checkpoint.put(envelope)
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+                ensure_ascii=False, separators=(",", ":")))
     publication_marker = publish_paired_artifacts(writer, state_writer, envelopes,
-        canonical_json(state_payload) + b"\n", serializer=to_evaluator)
+        canonical_json(state_payload) + b"\n", serializer=lambda envelope: output_payloads[envelope.row_number])
+    if args._watchdog is not None:
+        args._watchdog.mark_committed()
     finalization_seconds = time.monotonic() - finalization_started
     pending_path.unlink(missing_ok=True)
     ledger_purposes = {}
     ledger_hosts = {}
     ledger_outcomes = {}
+    ledger_phases = {}
     if gateway:
         for entry in gateway.ledger.entries:
+            if getattr(entry, "recorded_physical_attempt", False):
+                phase = getattr(entry, "phase", None) or "unscoped"
+                ledger_phases[phase] = ledger_phases.get(phase, 0) + 1
             ledger_purposes[entry.purpose] = ledger_purposes.get(entry.purpose, 0) + 1
             host = urlsplit(entry.url).hostname or ""
             ledger_hosts[host] = ledger_hosts.get(host, 0) + 1
@@ -1814,6 +1933,7 @@ def run(args: argparse.Namespace) -> int:
                                     logical_gateway_requests=(gateway.ledger.logical_requests if gateway else 0),
                                     requests_by_purpose=ledger_purposes, errors_by_code=error_counts,
                                     physical_requests_by_host=ledger_hosts,
+                                    recorded_requests_by_phase=ledger_phases,
                                     physical_requests_by_company=run_budget.requests_by_company,
                                     physical_request_outcomes=ledger_outcomes,
                                     scheduler_passes=scheduler_report,
@@ -1862,11 +1982,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--batch-id")
     from .recording import ReplayError
     try:
-        return run(parser.parse_args(argv))
+        args = parser.parse_args(argv)
+        args._enable_watchdog = argv is None
+        return run(args)
     except ReplayError as exc:
         print(f"Replay/capture error: {exc}", file=sys.stderr)
         return 2
 
 
+def cli_main():
+    code = 1
+    try:
+        code = main()
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+    except KeyboardInterrupt:
+        code = 130
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    os._exit(code)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli_main()

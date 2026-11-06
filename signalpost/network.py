@@ -8,6 +8,7 @@ import hashlib
 import http.client
 import ipaddress
 import json
+import math
 import re
 import socket
 import time
@@ -29,6 +30,15 @@ from .recording import HttpRecording
 
 _REQUEST_COMPANY: ContextVar[str | None] = ContextVar("signalpost_request_company", default=None)
 _REQUEST_PHASE: ContextVar[str | None] = ContextVar("signalpost_request_phase", default=None)
+
+
+MAX_PHYSICAL_REQUEST_SECONDS = 10.0
+
+
+def _bounded_timeout(timeout: float) -> float:
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be finite and positive")
+    return min(timeout, MAX_PHYSICAL_REQUEST_SECONDS)
 
 
 @contextmanager
@@ -139,6 +149,9 @@ class LedgerEntry:
     outcome: str
     redirect_location: str | None = None
     error_type: str | None = None
+    phase: str | None = None
+    company: str | None = None
+    recorded_physical_attempt: bool = False
 
 
 @dataclass
@@ -195,8 +208,10 @@ class UrlLibTransport:
 
     async def request(self, url: str, headers: dict[str, str], timeout: float, approved_ips: tuple[str, ...] | None = None,
                       max_bytes: int = 2 * 1024 * 1024) -> tuple[int, dict[str, str], bytes, str]:
+        timeout = _bounded_timeout(timeout)
         if approved_ips and not self.proxy_enabled:
-            return await asyncio.to_thread(self._pinned_request, url, headers, timeout, approved_ips, max_bytes)
+            work = asyncio.to_thread(self._pinned_request, url, headers, timeout, approved_ips, max_bytes)
+            return await asyncio.wait_for(work, timeout=timeout)
         def read() -> tuple[int, dict[str, str], bytes, str]:
             request = urllib.request.Request(url, headers=headers, method="GET")
             try:
@@ -208,10 +223,14 @@ class UrlLibTransport:
                 return int(response.status), dict(response.headers.items()), body, response.geturl()
             finally:
                 response.close()
-        return await asyncio.to_thread(read)
+        # Socket timeouts bound each connect/read; this also bounds a response
+        # that trickles bytes forever. Cancellation releases the await, not the
+        # worker thread; the parent supervisor owns final process termination.
+        return await asyncio.wait_for(asyncio.to_thread(read), timeout=timeout)
 
     @staticmethod
     def _pinned_request(url: str, headers: dict[str, str], timeout: float, addresses: tuple[str, ...], max_bytes: int) -> tuple[int, dict[str, str], bytes, str]:
+        timeout = _bounded_timeout(timeout)
         if len(addresses) != 1:
             raise NetworkPolicyError("each pinned connection requires its own gateway reservation")
         parsed = urllib.parse.urlsplit(url)
@@ -345,6 +364,7 @@ class NetworkGateway:
                                if replay_http is not None or record_http is not None else None)
         self.replay_mode = replay_http is not None
         self.transport = transport if self.replay_mode else transport or UrlLibTransport(proxy_url=proxy_url, trust_env=trusted_proxy)
+        _bounded_timeout(timeout)
         self.timeout = timeout
         self.retries = retries
         self.redirect_limit = redirect_limit
@@ -362,6 +382,7 @@ class NetworkGateway:
             raise ValueError("global concurrency must be positive")
         self._global_slots = asyncio.Semaphore(concurrency)
         self._host_slots: dict[str, _AdaptiveHostLimit] = {}
+        self._host_concurrency: dict[str, int] = {}
         self._rates: dict[str, float] = {}
         self._last_request: dict[str, float] = {}
         self._rate_slots: dict[str, asyncio.Lock] = {}
@@ -430,7 +451,10 @@ class NetworkGateway:
                             approved_ips: tuple[str, ...] | None,
                             timeout: float | None = None) -> tuple[int, dict[str, str], bytes, str]:
         self._assert_recordable_url(target)
-        request_timeout = timeout or self.timeout
+        request_timeout = self.timeout if timeout is None else timeout
+        # Keep configured settings in capture keys so existing recordings still
+        # replay exactly; only live socket and whole-attempt waits are clamped.
+        effective_timeout = _bounded_timeout(request_timeout)
         request = {"method": "GET", "url": target,
                    "params": [list(pair) for pair in urllib.parse.parse_qsl(
                        urllib.parse.urlsplit(target).query, keep_blank_values=True)],
@@ -475,9 +499,9 @@ class NetworkGateway:
         headers = {"User-Agent": user_agent, "Accept-Encoding": "identity", **(api_headers or {})}
         try:
             response = await asyncio.wait_for(
-                self.transport.request(target, headers, request_timeout, approved_ips=approved_ips, max_bytes=cap)
+                self.transport.request(target, headers, effective_timeout, approved_ips=approved_ips, max_bytes=cap)
                 if isinstance(self.transport, UrlLibTransport) else
-                self.transport.request(target, headers, request_timeout), timeout=request_timeout)
+                self.transport.request(target, headers, effective_timeout), timeout=effective_timeout)
         except (asyncio.CancelledError, Exception) as exc:
             cause = getattr(exc, "reason", exc)
             error_type = type(cause).__name__ if isinstance(cause, BaseException) else type(exc).__name__
@@ -509,6 +533,27 @@ class NetworkGateway:
         normalized = host.casefold()
         self._rates[normalized] = 1.0 / requests_per_second
         self._default_rates[normalized] = 1.0 / requests_per_second
+
+    def set_host_concurrency(self, host: str, workers: int = 8) -> None:
+        """Set an exact host's ceiling before scheduling requests to that host.
+
+        For example, set_host_concurrency("data.brreg.no", 8) enables eight
+        workers for the official endpoint without raising website defaults.
+        Callers select official hosts explicitly; 1–16 workers are supported.
+        Global concurrency, pacing, robots policy and adaptive reductions still
+        apply. This changes capacity only, never source access permissions.
+        """
+        normalized = host.casefold().rstrip(".")
+        if not normalized or any(char in normalized for char in "/:@?#") or any(char.isspace() for char in normalized):
+            raise ValueError("host must be an exact hostname, without a URL or port")
+        if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 16:
+            raise ValueError("workers must be an integer from 1 to 16")
+        if normalized in self._host_slots:
+            raise ValueError("set host concurrency before scheduling requests to the host")
+        self._host_concurrency[normalized] = workers
+
+    def _host_concurrency_limit(self, host: str) -> int:
+        return self._host_concurrency.get(host, self.budget.config.per_host_concurrency if self.budget else 2)
 
     async def fetch(self, url: str, *, purpose: str = "page", user_agent: str = "SignalpostBot/1.0 (+contact pending)",
                     max_bytes: int | None = None, use_robots: bool = True,
@@ -605,7 +650,7 @@ class NetworkGateway:
             parsed = urllib.parse.urlsplit(target)
             retry_limit = min(1, self.retries) if purpose == "robots" else self.retries
             slot = self._host_slots.setdefault(parsed.hostname or "", _AdaptiveHostLimit(
-                self.budget.config.per_host_concurrency if self.budget else 2))
+                self._host_concurrency_limit(parsed.hostname or "")))
             async with self._global_slots, slot:
                 for attempt in range(retry_limit + 1):
                     await self._pace(target, delay or 0.0)
@@ -728,7 +773,7 @@ class NetworkGateway:
             self._host_successes[host] = 0
             limiter = self._host_slots.get(host)
             if limiter:
-                await limiter.recover(self.budget.config.per_host_concurrency if self.budget else 2)
+                await limiter.recover(self._host_concurrency_limit(host))
 
     def _assert_proxy_route(self, url: str) -> None:
         if self.replay_mode or not self.trusted_proxy:
@@ -833,7 +878,9 @@ class NetworkGateway:
         entry = LedgerEntry(
             captured["request_id"] if captured else str(uuid.uuid4()), url, purpose, status, size,
             captured["elapsed_ms"] if captured else (time.monotonic() - start) * 1000, outcome,
-            error_type=error_type or (captured or {}).get("error_type"))
+            error_type=error_type or (captured or {}).get("error_type"),
+            phase=_REQUEST_PHASE.get(), company=_REQUEST_COMPANY.get(),
+            recorded_physical_attempt=captured is not None)
         self.ledger.entries.append(entry)
         observer = self._physical_observer.get()
         if observer is not None:
