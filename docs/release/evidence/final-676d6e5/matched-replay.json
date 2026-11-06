@@ -1,0 +1,296 @@
+{
+  "gate_pass": true,
+  "execution_gate_pass": true,
+  "gates": {
+    "process_succeeded": true,
+    "exact_final_cardinality_and_order": true,
+    "complete_final_envelope_shape": true,
+    "zero_aborted_inputs": true,
+    "recognized_final_statuses": true,
+    "paired_state_present": true,
+    "zero_duplicate_ids": true,
+    "durable_company_phase_metrics_complete": true,
+    "completion_aggregate_present": true,
+    "replay_aggregate_keys_present": true,
+    "replay_zero_misses_and_network": true,
+    "replay_capture_sealed_and_fully_consumed": true,
+    "exact_output_bytes_equal": true,
+    "exact_state_bytes_equal": true
+  },
+  "final_envelopes": 100,
+  "terminal_states": {
+    "available": 100
+  },
+  "run_statuses": {
+    "absent": 100
+  },
+  "aborted_inputs": 0,
+  "failed_finals": 0,
+  "partial_finals": 0,
+  "unfinalized_inputs": 0,
+  "phase_failed": 1,
+  "elapsed_seconds": 295.508,
+  "exit_code": 0,
+  "runtime_seconds": 294.645,
+  "phase_wall_seconds": {
+    "official": 0.0,
+    "financial_statements": 27.06065754406154,
+    "official_details": 35.947886070935056,
+    "wiki_batch": 0.020228219917044044,
+    "nav_batch": 7.118973077973351,
+    "nav_apply": 4.690882832277566,
+    "website_verify": 87.71022422704846,
+    "website_shallow": 3.381306305527687e-05,
+    "jobs_activity": 1.2292992323637009e-05,
+    "annual_documents": 15.09584253304638
+  },
+  "finalization_seconds": 25.936,
+  "checkpoint": {
+    "complete": true,
+    "shell_states": {
+      "terminalized": 100
+    },
+    "final_envelopes": 100,
+    "company_phase_rows": 1100,
+    "phase_counters": {
+      "official_foundation": {
+        "ran": 100,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 20.230949079152197,
+        "wall_seconds": null
+      },
+      "financial_statements": {
+        "ran": 100,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 91.23746042326093,
+        "wall_seconds": null
+      },
+      "official_details": {
+        "ran": 80,
+        "skipped": 20,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 123.06074569607154,
+        "wall_seconds": null
+      },
+      "wiki_batch": {
+        "ran": 100,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 2.0228219917044044,
+        "wall_seconds": null
+      },
+      "nav_batch": {
+        "ran": 100,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 711.8973077973351,
+        "wall_seconds": null
+      },
+      "nav_apply": {
+        "ran": 3,
+        "skipped": 97,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 97,
+        "not_attempted": 0,
+        "worker_seconds": 1.8809928968548775,
+        "wall_seconds": null
+      },
+      "website_verify": {
+        "ran": 100,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 608.6903224778362,
+        "wall_seconds": null
+      },
+      "website_shallow": {
+        "ran": 0,
+        "skipped": 100,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 100,
+        "not_attempted": 0,
+        "worker_seconds": 0.0,
+        "wall_seconds": null
+      },
+      "jobs_activity": {
+        "ran": 0,
+        "skipped": 100,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 100,
+        "not_attempted": 0,
+        "worker_seconds": 0.0,
+        "wall_seconds": null
+      },
+      "annual_documents": {
+        "ran": 29,
+        "skipped": 71,
+        "deadline_skipped": 69,
+        "failed": 1,
+        "ineligible": 2,
+        "not_attempted": 0,
+        "worker_seconds": 35.499998179031536,
+        "wall_seconds": null
+      },
+      "finalization": {
+        "ran": 100,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 16.13180486811325,
+        "wall_seconds": null
+      }
+    },
+    "failed": 1,
+    "problems": [],
+    "phase_failure_fingerprints": []
+  },
+  "quality_observations": {
+    "zero_failed_finals": true,
+    "zero_phase_failures": false,
+    "runtime_within_1200_seconds": true
+  },
+  "duplicate_count": 0,
+  "conflicting_identifier_count": 0,
+  "missing_identifier_count": 0,
+  "replay_misses": {
+    "http_misses": 0,
+    "http_failures": 0,
+    "ocr_misses": 0
+  },
+  "replay_missing_request_keys": 0,
+  "replay_unconsumed_request_keys": 0,
+  "artifacts": {
+    "envelopes.jsonl": "6f79f06c76f4b9c2b44f159eb3b63e9e29d87acfc1d76bb9f3fdda55794566a1",
+    "state.json": "064f1a6bfa4d717c1201d8b9943b41fdfa312792285b1cfe56035465c3b1dade",
+    "checkpoint.sqlite": "3b1ef9adf1b644e98f443d5011115965b2f165e885816c18c5933d1e7901fa7e",
+    "stdout.log": "e80adb39eef810581136f5da036a557a5efefca0009f34cf1af796df81baf786",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation.json": "da2f9754bbbc58784074b8ab9101ab5c89a274439e90e2eb94f46db213c7dd59"
+  },
+  "status": "passed",
+  "stage": "matched",
+  "replay": true,
+  "wrong_company_audit": "UNKNOWN: parent manual review required",
+  "population": "active AS employers with registered employees >= 1; generalization beyond this frame is unproven",
+  "phase_status_counts": {
+    "official_foundation": {
+      "ran": 100,
+      "skipped": 0,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 20.230949079152197,
+      "wall_seconds": null
+    },
+    "financial_statements": {
+      "ran": 100,
+      "skipped": 0,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 91.23746042326093,
+      "wall_seconds": 27.06065754406154
+    },
+    "official_details": {
+      "ran": 80,
+      "skipped": 20,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 123.06074569607154,
+      "wall_seconds": 35.947886070935056
+    },
+    "wiki_batch": {
+      "ran": 100,
+      "skipped": 0,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 2.0228219917044044,
+      "wall_seconds": 0.020228219917044044
+    },
+    "nav_batch": {
+      "ran": 100,
+      "skipped": 0,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 711.8973077973351,
+      "wall_seconds": 7.118973077973351
+    },
+    "nav_apply": {
+      "ran": 3,
+      "skipped": 97,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 1.8809928968548775,
+      "wall_seconds": 4.690882832277566
+    },
+    "website_verify": {
+      "ran": 100,
+      "skipped": 0,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 608.6903224778362,
+      "wall_seconds": 87.71022422704846
+    },
+    "website_shallow": {
+      "ran": 0,
+      "skipped": 100,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 0.0,
+      "wall_seconds": 3.381306305527687e-05
+    },
+    "jobs_activity": {
+      "ran": 0,
+      "skipped": 100,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 0.0,
+      "wall_seconds": 1.2292992323637009e-05
+    },
+    "annual_documents": {
+      "ran": 28,
+      "skipped": 2,
+      "deadline_skipped": 69,
+      "failed": 1,
+      "company_seconds": 35.499998179031536,
+      "wall_seconds": 15.09584253304638
+    },
+    "finalization": {
+      "ran": 100,
+      "skipped": 0,
+      "deadline_skipped": 0,
+      "failed": 0,
+      "company_seconds": 16.13180486811325,
+      "wall_seconds": null
+    }
+  },
+  "company_counts": {
+    "finance_companies": 98,
+    "explicit_fte_companies": 18,
+    "verified_website_companies": 0,
+    "jobs_companies": 3,
+    "companies_with_available_claims": 100
+  }
+}

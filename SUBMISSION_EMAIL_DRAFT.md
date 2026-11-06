@@ -1,38 +1,35 @@
-# Submission email draft — NOT SENT
+# Submission email draft — NOT SENT / ACCEPTANCE FAILED
 
-Owner review only. Do not send or submit this file automatically. Replace every bracketed placeholder, verify the intended recipient and reviewer access, and attach the actual final-source report before sending. The task deadline is **7 November 2026, 18:00 IST (12:30 UTC)**; an organizer extension has not been verified here.
+Do not send automatically. The candidate is **not submission-ready**: live scale timed out and coverage gates failed. Owner must explicitly decide next steps. Replace owner/recipient/JBOX fields only with authorized details. Exact package SHA must be obtained from the checked-out commit; the measured implementation below is not presented as a successful final release.
 
 To: [VERIFIED_SUBMISSION_RECIPIENT]
-Subject: Signalpost — company information agent — [FINAL_COMMIT_SHA]
+Subject: Signalpost — measured candidate, acceptance gates not met — [PACKAGE_COMMIT_SHA]
 
-Agent name: Signalpost
+Agent: Signalpost
 Repository: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information
-Final commit: [FINAL_COMMIT_SHA]
-Smoke/acceptance report: [FINAL_REPORT_URL_OR_PATH]
+Exact package commit: [PACKAGE_COMMIT_SHA]
+Measured implementation: 676d6e513b70c0e3cbf8e884602ad7e5674d5df9
+Smoke/acceptance report: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/blob/main/docs/release/FINAL_RESULTS_2026-11-06.md
 Contact: [AUTHORIZED_CONTACT_NAME] <[AUTHORIZED_CONTACT_EMAIL]>
-JBOX site: [JBOX_SITE_URL]
+JBOX: [JBOX_SITE_URL]
 
-Please review Signalpost at the exact commit above. Reviewer repository access and any public artifact must be verified before this draft is sent.
-
-From the repository root, with CPython 3.12+ and outbound HTTPS available:
+From a fresh clone with CPython3.12+, curl and outbound HTTPS:
 
 ```sh
 ./setup.sh
 ./run.sh --input companies.jsonl --output output.jsonl
 ```
 
-The requested JSONL file contains the ordered company profiles; stdout is a separate machine-readable batch report and stderr contains diagnostics. The intended contract is one terminal envelope per input row, including failures and duplicates. Official parser compatibility remains to be confirmed.
+Setup installs locked production dependencies. Run performs no installation and enables live BRREG, structured financials, PDF/local OCR, NAV and permitted website research. JSONL profiles go to the output file; stdout is a separate aggregate. `--budget-seconds` overrides `SIGNALPOST_BUDGET_SECONDS`, then config; default1800 seconds. Explicit totals reserve min(300s,20%) within the total. **Measured scale exceeded the internal deadline and did not finalize.**
 
-The total-budget interface is `--budget-seconds` / `SIGNALPOST_BUDGET_SECONDS`, with a conservative default of 1,800 seconds including finalization. [PARENT: CONFIRM INTEGRATION, PRECEDENCE, FINAL RESERVE AND VALIDATION; REMOVE THIS NOTE ONLY AFTER VERIFICATION.] Baseline configuration reserves 300 seconds; the reserve must fit inside the total rather than extend it.
+Matched/fresh each finalized100/100 and replayed identical output/state bytes: finance98/93, FTE18/19, verified websites0/1, jobs3/2, runtime1595/1584 seconds, zero duplicate IDs. The1000-company operational run was externally terminated at2100 seconds:1000 partial rows survived, but no final state pair/aggregate or complete phase metrics. FTE, website, fresh-finance,20-minute and scale-completion gates failed. No official score, qualification, coverage improvement or full-field accuracy is claimed.
 
-No LLM, paid API or personal API key is required. Local OCR uses locked RapidOCR 1.4.4 and ONNX Runtime 1.31.0 with PDFium via pypdfium2 4.30.0. Existing notices identify the bundled PP-OCR assets as Apache-2.0; [PARENT: VERIFY INSTALLED MODEL ASSETS/HASHES/NOTICES]. Sources include BRREG records and official filing copies, NAV public vacancy metadata, bounded company websites and candidate-only Wikidata SPARQL. Source-specific rights, dependency declarations and model verification limits are recorded in `docs/release/SUBMISSION_PACKAGE_2026-11-05.md`, `docs/source-rights.md` and `THIRD_PARTY_NOTICES.md`. No new project-code license grant is made.
+No LLM/paid API/personal key is required. Local models: RapidOCR1.4.4 bundled PP-OCR ONNX assets (existing Apache2 notices), ONNX Runtime1.31.0(MIT), pypdfium2 4.30.0 with PDFium third-party notices. Sources: BRREG, NAV, candidate-only Wikidata and rights-permitted company websites. Component hashes/rights/limits are documented in the package and notices; no new project-code license grant is made.
 
-API billing is assumed to be $0 under the public-source/local-inference configuration; this is not measured billing. CPU/OCR, RAM, disk, network, installation and hosting have resource costs and are not priced here. [PARENT: INSERT ACTUAL FINAL-SOURCE RUNTIME/RESOURCE RESULTS OR STATE NOT MEASURED.] No paid service is necessary to reproduce the declared workflow.
+API billing is assumed $0, not measured billing. VM/OCR CPU, RAM, disk, network, install and hosting costs are not priced. Two-core/7.7GB Linux host; the scale attempt consumed35 minutes without clean completion, so successful official-batch cost is unproven.
 
-Coverage is limited. The supplied working baseline is roughly 23–29 FTE-covered companies and zero verified websites; [PARENT: ATTACH EXACT COHORT, DENOMINATOR, SOURCE AND REPORT]. New coverage is unproven pending the final run. Prior aborted runs do not establish optional coverage. Clean-machine setup, fresh final-source 100-company acceptance and 1,000-company scale checks remain pending unless the report above explicitly records their outcomes. No score or qualification is claimed.
-
-URL/DNS and redirect checks, host/path restrictions, bounded requests and robots/source policy govern acquisition. Raw captures, tokens and private checkpoints are excluded from the public artifact. No precomputed company corpus is proposed as scoring input. See `LIMITATIONS.md` for remaining rights, security, coverage and parser gaps.
+Raw captures, credentials, PDFs and private checkpoints are not public. Public site-data is a saved demonstration, not precomputed evaluator input. Official parser/resources and a deployed JBOX site remain unverified.
 
 [AUTHORIZED_CONTACT_NAME]
 
-This is an **unsent draft**, not a record of submission.
+**Unsent draft.** Task deadline7November2026 18:00IST; no organizer extension is independently established.

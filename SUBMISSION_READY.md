@@ -1,4 +1,10 @@
-# Current submission dry-run status — 2026-10-17
+# Current status — 6 November 2026: NOT READY
+
+The [final live report](docs/release/FINAL_RESULTS_2026-11-06.md) supersedes earlier readiness statements: coverage gates failed and the live1000 run timed out without final publication. Main is public/default; no email or Builderr submission was made. Further engineering and separately authorized measurement are required. Contact/JBOX details remain owner tasks.
+
+---
+
+# Historical submission dry-run status — 2026-10-17
 
 Accepted product checkpoint: `64f69071b241614a1826c342ef65020db7a125d4`. The UI has owner acceptance and is frozen. The final package adds documentation/evidence only; its exact commit and CI are named in the owner handoff (`git rev-parse HEAD`).
 

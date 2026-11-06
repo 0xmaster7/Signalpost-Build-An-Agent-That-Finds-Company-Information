@@ -72,7 +72,12 @@ def run_fault_cases(base, source_responses=None):
         assert rows[0]["terminal_state"]==expected,(mode,rows[0]["terminal_state"])
         if mode!="partial":assert not rows[0]["claims"]
         else:
-            assert rows[0]["sections"]["leadership_workplaces"]["state"] in STATES
+            leadership = rows[0]["sections"]["leadership_workplaces"]
+            if leadership["state"] is None:
+                assert not leadership["claims"]
+                assert "leadership_workplaces" in rows[0]["synthesis"]["summary"]["unknown_sections"]
+            else:
+                assert leadership["state"] in STATES
             assert not any(c["field_family"]=="financial" for c in rows[0]["claims"])
             if source_responses:
                 raw=json.loads((Path(source_responses)/"entity-equinor.json").read_text())

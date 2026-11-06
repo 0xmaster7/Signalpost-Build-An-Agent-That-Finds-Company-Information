@@ -1,0 +1,987 @@
+{
+  "baseline_commit": "725eb6375feb0529da4cbe4f73bff05bd6e693f2",
+  "current_implementation_commit": "676d6e513b70c0e3cbf8e884602ad7e5674d5df9",
+  "definition": "Joined by organisation and identical non-null PDF hash only. Null document hashes are unpaired and all baseline values are omitted. Null timing means unavailable or unattempted, not zero. Processing includes acquisition and OCR; scheduling and survivorship prevent a causal speedup estimate.",
+  "documents": [
+    {
+      "organisation_number": "817203752",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "821194652",
+      "document_sha256": "4d1eb27c35a2cb6b0425a0d00c93235604b7dc96b8976ac8759ca4a749a4a10f",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 23.851,
+      "current_worker_seconds": 15.890977,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "827442852",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "831163542",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 93.201,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "882316092",
+      "document_sha256": "dbba814c3b1c61b2e02de7876439f726187f780e9a87481c73f1a598722a72b4",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 12.916,
+      "current_worker_seconds": 8.069151,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "882692302",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "886658702",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "890397832",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "890651372",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "911564092",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 72.29,
+      "current_worker_seconds": 69.961915,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 10,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "912156915",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "912444899",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "913015185",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "913542185",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "913543351",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "914631408",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "914786703",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "914790514",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "914970334",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "915931987",
+      "document_sha256": "89ec3ccc07ee29951a12424522c5f198d6d5bb69fd45cfb19c6b7ad30766267c",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 15.966,
+      "current_worker_seconds": 12.91831,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "915985203",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "916251335",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "916359667",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "916652968",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "917445060",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 20.237,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "918113843",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "920365515",
+      "document_sha256": "87b284910aea57cf101586ac9e102bdc8723d85781192c70711833af6142db9c",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 15.541,
+      "current_worker_seconds": 10.880116,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "920710514",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "921153279",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "921257953",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "922043701",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "922146179",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "923614400",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "923774688",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "923799206",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "924356715",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 101.512,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "924843810",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "925733415",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "925995762",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 95.087,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "926379046",
+      "document_sha256": "643baa79c07915d8158c6dc92f260c0dc1fbfde991ce9f3b1f4c70e02e773a71",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 17.018,
+      "current_worker_seconds": 12.024031,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "926476149",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "928501892",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "928587894",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "930181358",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "930827088",
+      "document_sha256": "647c3ab4b032e3fc4ae108cc06b5402011830607b7af9bc80720a29b93deeab5",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 17.062,
+      "current_worker_seconds": 12.378652,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "931123920",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "931769944",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "932225999",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "932687909",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "934093054",
+      "document_sha256": "972cacc7c579fef5a9b320dd78793c73dc3a572552d34914782259256a83a44b",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 14.49,
+      "current_worker_seconds": 10.365306,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "934938836",
+      "document_sha256": "4b7b64c9d9468658bdf7b014e44df92743a4841c36b7787f883ba75edc703584",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 16.983,
+      "current_worker_seconds": 12.145044,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "935588553",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "935821622",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "935834759",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "936295630",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "936704719",
+      "document_sha256": "461049ca102880f61782da8cb6363729a2223af1fe2e0e06afd4535dca91e3bc",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 17.538,
+      "current_worker_seconds": 15.274003,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "937060092",
+      "document_sha256": "f31d60e391eab36925624b611d1aac8fef3c1a8aeca03c12d0f411444f11724d",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 21.83,
+      "current_worker_seconds": 19.169977,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "940940842",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "941831753",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "945748931",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "952151533",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "952780093",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 93.732,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "958260563",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "963915411",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 93.277,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "967149098",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "968091336",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "971583061",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "975381781",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "976466306",
+      "document_sha256": "4815c2833739ac5dccb38dbf49e2e18902305042196a1896b65e90c9a4a543bc",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 19.222,
+      "current_worker_seconds": 13.494939,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "976537076",
+      "document_sha256": "24e905a2bb47733d58ff347d928179aeafd905bfca367dd9ecfbb8531be27f58",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 31.663,
+      "current_worker_seconds": 25.828347,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 4,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "976934318",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "979164920",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "979573464",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "979684479",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "979952228",
+      "document_sha256": "86786beeea07e9e12183df641bf5953a6887170cbe923a6ab7f5749e027fc79c",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 14.079,
+      "current_worker_seconds": 11.142541,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "979956258",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "980170519",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "985865108",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "988953202",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "989030760",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "989389009",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "989748319",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 94.605,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "989811541",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 94.146,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "990598991",
+      "document_sha256": "e09ffbc43fc6530dd608b665805b8c8d010b60520d044e9396a8199a2243d8e9",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 17.284,
+      "current_worker_seconds": 12.262984,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "991504125",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "991667873",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "992936916",
+      "document_sha256": "73bbd330f2d3a77641a546c809169e5555b670b74b32916be39e181eb863178f",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 15.977,
+      "current_worker_seconds": 11.858252,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "993955299",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "994308777",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "995871807",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "996335291",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "997397649",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 96.524,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "997722094",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "998413281",
+      "document_sha256": "5fa266045069b8704326e94dba4c3ea899d2dddcc485af8dd48d401664802970",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 28.548,
+      "current_worker_seconds": 25.47739,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 4,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "998463548",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": null,
+      "current_worker_seconds": null,
+      "current_text_layer_pages": null,
+      "current_ocr_pages": null,
+      "current_resolution_method": null
+    },
+    {
+      "organisation_number": "998547113",
+      "document_sha256": "a01013f87da74e5172a95559770bc9867280f2cb34a9494cd045600ea80ad0b2",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 16.437,
+      "current_worker_seconds": 13.101421,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    },
+    {
+      "organisation_number": "998617901",
+      "document_sha256": null,
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 92.881,
+      "current_worker_seconds": 0.0,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 0,
+      "current_resolution_method": "not_processed"
+    },
+    {
+      "organisation_number": "998688957",
+      "document_sha256": "4ae8bbaaf82f67b24992d241fb1e6b4ffa920ff2f1cf2429a0507e04e7c1bff2",
+      "baseline_processing_seconds": null,
+      "current_processing_seconds": 18.165,
+      "current_worker_seconds": 11.955664,
+      "current_text_layer_pages": 0,
+      "current_ocr_pages": 2,
+      "current_resolution_method": "ocr"
+    }
+  ]
+}

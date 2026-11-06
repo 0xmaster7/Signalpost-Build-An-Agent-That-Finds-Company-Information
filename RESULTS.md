@@ -1,8 +1,10 @@
 # Signalpost — Results
 
+**Latest measured candidate, 6 November 2026: acceptance FAILED.** See the [final live report](docs/release/FINAL_RESULTS_2026-11-06.md): matched/fresh100 each finalized and replayed exactly, but FTE18/19, websites0/1 and runtime1595/1584 seconds miss targets; fresh finance93 also misses. Live scale1000 timed out with1000 partial rows and no final state pair. No coverage improvement or submission readiness is claimed. Sections below preserve historical experiments, not current acceptance.
+
 Signalpost researches Norwegian companies by organisation number and returns evidence-backed JSONL profiles.
 
-## Latest experiment: failed acceptance
+## Historical 27 October experiment: failed acceptance
 
 The [27 October phase-budget results](docs/release/PHASE_BUDGET_RESULTS_2026-10-27.md) preserve both preregistered runs. Matched coverage fell from 50 to **28 FTE companies** and 77 to **42 financial companies**; verified websites and jobs remained zero. Runtime improved to **1,190.614 seconds**, with 100 terminal envelopes. Monetary breadth reached 2,491 observations, including 2,100 explicitly assumption-backed and 22 separately scoped group observations. Only runtime/cardinality gates passed.
 
