@@ -185,8 +185,11 @@ class DeadlineAndBudgetTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             source, output, state, config = (root / name for name in ("input.txt", "out.jsonl", "state.sqlite", "config.json"))
             source.write_text("923609016\n923609016\n", encoding="utf-8")
-            config.write_text(json.dumps({"budget": {"hard_seconds": 0.08, "soft_seconds": 0.03,
-                "completion_reserve_seconds": 0.05, "physical_request_limit": 10}}), encoding="utf-8")
+            # Let the hanging foundation reach the global research deadline; a
+            # financial reservation would cancel only that phase early.
+            config.write_text(json.dumps({"budget": {"hard_seconds": 0.08, "soft_seconds": 0.068,
+                "completion_reserve_seconds": 0.012, "financial_seconds": 0,
+                "physical_request_limit": 10}}), encoding="utf-8")
             with patch("signalpost.run.NetworkGateway", FakeGateway), patch("signalpost.run.fetch_company", hanging_fetch):
                 code = await asyncio.to_thread(main, ["--input", str(source), "--output", str(output),
                     "--state-output", str(state), "--config", str(config), "--live-websites"])

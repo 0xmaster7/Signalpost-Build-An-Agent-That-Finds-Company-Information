@@ -329,7 +329,7 @@ class M05HiringActivityTests(unittest.TestCase):
             (root / "input").write_text(target + "\n")
             (root / "registry.jsonl").write_text(json.dumps({"organisation_number": target, "name": LEGAL,
                 "source_url": "https://registry.example/snapshot", "website": "https://company.no/"}) + "\n")
-            (root / "config.json").write_text(json.dumps({"budget": {"physical_request_limit": 3}}))
+            (root / "config.json").write_text(json.dumps({"budget": {"hard_seconds": 30, "soft_seconds": 25.5, "completion_reserve_seconds": 4.5, "physical_request_limit": 3}}))
             with patch.object(run_module, "NetworkGateway", factory), patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(NetworkGateway, "robots_decision", return_value=("allowed", None)):
                 code = run_module.main(["--input", str(root / "input"), "--registry-snapshot", str(root / "registry.jsonl"),
                     "--live-websites", "--no-keyless-websites", "--config", str(root / "config.json"),

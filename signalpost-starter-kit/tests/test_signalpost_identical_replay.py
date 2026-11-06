@@ -54,11 +54,13 @@ def test_recorded_pipeline_replays_identical_complete_envelopes(tmp_path, monkey
     source.write_text(json.dumps({"organisation_number": organisation}) + "\n")
     capture = tmp_path / "private-capture"
 
+    # Exercise complete capture/replay, including NAV and OCR where eligible,
+    # independently of the 1.8-second production budget for a single input.
     def arguments(name):
         return ["--input", str(source), "--output", str(tmp_path / (name + ".jsonl")),
             "--state-output", str(tmp_path / (name + ".state")),
             "--checkpoint", str(tmp_path / (name + ".sqlite")),
-            "--live-brreg", "--live-websites", "--no-keyless-websites"]
+            "--live-brreg", "--live-websites", "--no-keyless-websites", "--budget-seconds", "100"]
 
     assert run.main(arguments("live") + ["--record-http", str(capture)]) == 0
     assert bool(calls) is not dns_failure

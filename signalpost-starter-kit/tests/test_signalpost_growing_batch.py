@@ -42,9 +42,9 @@ class GrowingBatchTests(unittest.TestCase):
                 state=json.loads((folder/"state.json").read_text());validate_artifact(state)
                 return rows,folder/"state.json",state
             initial,baseline,state=run("baseline",orgs[:1])
-            # Reproduce the exact old operational identity, then prove a matching
-            # legacy handoff migrates without changing its content-addressed ref.
-            legacy_identity={"source_policy_version":SOURCE_POLICY_VERSION,"runtime_config":{},"registry_source_url":None,"registry_snapshot_as_of":None,"network_policy":"direct","live_brreg":False,"live_websites":False,"no_keyless_websites":False,"budget":{"hard_seconds":1800.0,"soft_seconds":1350.0,"completion_reserve_seconds":300.0,"physical_request_limit":1012,"logical_request_limit":None,"paid_cost_limit":"0","global_http_concurrency":32,"per_host_concurrency":2,"per_company_physical_limit":None,"per_host_physical_limit":None}}
+            # Reproduce the legacy identity format with current one-row defaults,
+            # then prove migration preserves its content-addressed reference.
+            legacy_identity={"source_policy_version":SOURCE_POLICY_VERSION,"runtime_config":{},"registry_source_url":None,"registry_snapshot_as_of":None,"network_policy":"direct","live_brreg":False,"live_websites":False,"no_keyless_websites":False,"budget":{"hard_seconds":1.8,"soft_seconds":1.8 - 1.8 * 0.15,"completion_reserve_seconds":1.8 * 0.15,"physical_request_limit":1012,"logical_request_limit":None,"paid_cost_limit":"0","global_http_concurrency":32,"per_host_concurrency":2,"per_company_physical_limit":None,"per_host_physical_limit":None}}
             # CLI defaults are intentionally checked here, not inferred from a
             # matching production hash helper.
             legacy_fingerprint=sha256_json(legacy_identity)

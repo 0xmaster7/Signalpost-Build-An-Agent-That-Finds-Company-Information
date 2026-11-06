@@ -64,10 +64,12 @@ def test_record_and_replay_full_pipeline_with_warm_ocr_and_no_network(tmp_path, 
     source.write_text(json.dumps({"organisation_number": ORG}) + "\n")
     capture = tmp_path / "capture"
 
+    # Exercise complete capture/replay, including NAV and OCR where eligible,
+    # independently of the 1.8-second production budget for a single input.
     def arguments(name):
         return ["--input", str(source), "--output", str(tmp_path / (name + ".jsonl")),
             "--state-output", str(tmp_path / (name + ".state")), "--checkpoint", str(tmp_path / (name + ".sqlite")),
-            "--live-brreg", "--live-websites", "--no-keyless-websites"]
+            "--live-brreg", "--live-websites", "--no-keyless-websites", "--budget-seconds", "100"]
 
     assert run.main(arguments("live") + ["--record-http", str(capture)]) == 0
     before = json.loads((tmp_path / "live.jsonl").read_text())

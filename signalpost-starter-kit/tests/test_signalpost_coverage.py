@@ -154,7 +154,7 @@ class CoverageTests(unittest.TestCase):
             root = Path(temporary)
             (root / "input").write_text(ORG + "\n")
             (root / "registry.jsonl").write_text(json.dumps({"organisation_number": ORG, "name": NAME, "website": HOME, "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/" + ORG}) + "\n")
-            (root / "config.json").write_text(json.dumps({"budget": {"physical_request_limit": 3}}))
+            (root / "config.json").write_text(json.dumps({"budget": {"hard_seconds": 30, "soft_seconds": 25.5, "completion_reserve_seconds": 4.5, "physical_request_limit": 3}}))
             with patch.object(run, "NetworkGateway", factory), patch("signalpost.network.validate_public_host", return_value=("8.8.8.8",)), patch.object(NetworkGateway, "robots_decision", return_value=("allowed", None)):
                 code = run.main(["--input", str(root / "input"), "--registry-snapshot", str(root / "registry.jsonl"), "--output", str(root / "output"), "--state-output", str(root / "state"), "--checkpoint", str(root / "checkpoint"), "--config", str(root / "config.json"), "--live-websites", "--no-keyless-websites", "--evidence-cutoff", CUT.isoformat()])
             self.assertEqual(code, 0)
