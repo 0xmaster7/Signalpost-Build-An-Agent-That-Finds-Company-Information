@@ -1,0 +1,175 @@
+{
+  "stage": "1000",
+  "elapsed_seconds": 1659.0338227858301,
+  "exit_code": 0,
+  "final_envelopes": 1000,
+  "counts": {
+    "finance_companies": 983,
+    "explicit_fte_companies": 8,
+    "verified_website_companies": 0,
+    "jobs_companies": 1
+  },
+  "gates": {
+    "process_succeeded": true,
+    "process_elapsed_within_budget": true,
+    "complete_valid_output": true,
+    "zero_duplicate_ids": true,
+    "committed_output": true
+  },
+  "secondary": {
+    "committed_output_state_pair": false,
+    "recording_status": "unknown",
+    "recording_capture_complete": null
+  },
+  "duplicate_count": 0,
+  "phases": {
+    "annual_documents": {
+      "physical_attempts": 30,
+      "receipt_span_seconds": 503.673131942749,
+      "transport_seconds_sum": 169.14835150027648,
+      "outcomes": {
+        "received": 25,
+        "timeout": 3,
+        "transport_error": 2
+      },
+      "peak_receipt_overlap": 2,
+      "company_status_counts": {
+        "failed": 2,
+        "completed": 8,
+        "deadline_skipped": 990
+      },
+      "company_status_seconds_sum": 227.9261747393757,
+      "phase_wall_seconds": 550.884516421007
+    },
+    "financial_statements": {
+      "physical_attempts": 1000,
+      "receipt_span_seconds": 389.60595417022705,
+      "transport_seconds_sum": 1258.9428577232175,
+      "outcomes": {
+        "received": 997,
+        "timeout": 3
+      },
+      "peak_receipt_overlap": 7,
+      "company_status_counts": {
+        "completed": 997,
+        "failed": 3
+      },
+      "company_status_seconds_sum": 2929.921221516328,
+      "phase_wall_seconds": 449.19394926098175
+    },
+    "nav_batch": {
+      "physical_attempts": 63,
+      "receipt_span_seconds": 240.18482112884521,
+      "transport_seconds_sum": 196.3052924037911,
+      "outcomes": {
+        "received": 60,
+        "timeout": 1,
+        "cancelled": 1,
+        "transport_error": 1
+      },
+      "peak_receipt_overlap": 1,
+      "company_status_counts": {
+        "completed": 1000
+      },
+      "company_status_seconds_sum": 240774.93204013444,
+      "phase_wall_seconds": 240.77493204013444
+    },
+    "official": {
+      "physical_attempts": 14,
+      "receipt_span_seconds": 52.74227786064148,
+      "transport_seconds_sum": 41.59948657802306,
+      "outcomes": {
+        "received": 10,
+        "transport_error": 3,
+        "timeout": 1
+      },
+      "peak_receipt_overlap": 1,
+      "company_status_counts": {
+        "completed": 998,
+        "failed": 2
+      },
+      "company_status_seconds_sum": 25.885079953819513,
+      "phase_wall_seconds": 34.279432838084176
+    },
+    "official_details": {
+      "physical_attempts": 831,
+      "receipt_span_seconds": 279.1399450302124,
+      "transport_seconds_sum": 1101.9981740459334,
+      "outcomes": {
+        "received": 824,
+        "cancelled": 7
+      },
+      "peak_receipt_overlap": 8,
+      "company_status_counts": {
+        "completed": 408,
+        "deadline_skipped": 592
+      },
+      "company_status_seconds_sum": 2105.440908791963,
+      "phase_wall_seconds": 279.2024398029316
+    },
+    "website_verify": {
+      "physical_attempts": 559,
+      "receipt_span_seconds": 482.67430305480957,
+      "transport_seconds_sum": 2766.987980634207,
+      "outcomes": {
+        "received": 439,
+        "timeout": 35,
+        "cancelled": 42,
+        "transport_error": 42,
+        "incomplete": 1
+      },
+      "peak_receipt_overlap": 8,
+      "company_status_counts": {
+        "completed": 173,
+        "failed": 23,
+        "deadline_skipped": 804
+      },
+      "company_status_seconds_sum": 1406.2323930158745,
+      "phase_wall_seconds": 0
+    },
+    "wiki_batch": {
+      "physical_attempts": 1,
+      "receipt_span_seconds": 5.699663877487183,
+      "transport_seconds_sum": 5.46192619507201,
+      "outcomes": {
+        "received": 1
+      },
+      "peak_receipt_overlap": 1,
+      "company_status_counts": {
+        "completed": 1000
+      },
+      "company_status_seconds_sum": 6203.542073024437,
+      "phase_wall_seconds": 6.203542073024437
+    },
+    "nav_apply": {
+      "physical_attempts": 0,
+      "company_status_counts": {
+        "completed": 1,
+        "deadline_skipped": 999
+      },
+      "company_status_seconds_sum": 0.3417043040972203,
+      "phase_wall_seconds": 0.6428798970300704
+    },
+    "website_shallow": {
+      "physical_attempts": 0,
+      "company_status_counts": {
+        "deadline_skipped": 1000
+      },
+      "company_status_seconds_sum": 0
+    },
+    "jobs_activity": {
+      "physical_attempts": 0,
+      "company_status_counts": {
+        "deadline_skipped": 1000
+      },
+      "company_status_seconds_sum": 0
+    }
+  },
+  "finalization_seconds": 0.024307776940986514,
+  "finalization_preparation_seconds_per_company": 0.05273515770294256,
+  "completion_reserve_seconds": 180,
+  "output_preparation_seconds": 8.722519711824134,
+  "note": "Receipt spans include overlapping physical attempts, not full phase wall time. Company status seconds sum duplicates shared batch-phase elapsed time; it is not CPU time or phase wall time.",
+  "runtime_commit": "f0902cb0cbb1a4cd5e9ac1d471f0c8459545ed73",
+  "input_sha256": "c8d231c304a80151e569667c6a797ae38861ca69dc00ad787f18e619cff77927"
+}

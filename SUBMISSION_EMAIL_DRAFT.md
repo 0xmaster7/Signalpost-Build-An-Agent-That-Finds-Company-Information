@@ -1,41 +1,36 @@
-# Submission email draft — NOT SENT / ACCEPTANCE FAILED
+# Submission email draft — NOT SENT
 
-Latest evidence: [200-company gate failed](docs/release/HARD_DEADLINE_RESULTS_2026-11-07.md) at implementation `3e8a8a0`, despite green CI. There is no successful new1,000-company acceptance or full replay. **Do not submit as a safe replacement.** `[JBOX_SITE_URL]` remains a placeholder.
-
-**Latest replacement gate FAILED:** the [7 November result](docs/release/TIMEBOX_RESULTS_2026-11-07.md) records external termination at1,830.864seconds, incomplete checkpoint finalization and no committed final state pair. Exact scale replay was not run. Do not present the bounded candidate as safe or send this draft. `[JBOX_SITE_URL]` remains a placeholder.
-
-Bounded-run remediation uses `SIGNALPOST_TIME_BUDGET_SECONDS=1800` for1000inputs,15%finalization reserve. Replacement safety is **unproven until the authorized live1000 run and exact replay pass**. Contact/recipient and `[JBOX_SITE_URL]` remain owner placeholders. This draft must not be sent automatically.
-
-Do not send automatically. The candidate is **not submission-ready**: live scale timed out and coverage gates failed. Owner must explicitly decide next steps. Replace owner/recipient/JBOX fields only with authorized details. Exact package SHA must be obtained from the checked-out commit; the measured implementation below is not presented as a successful final release.
+NOSEND. Owner must approve recipient, contact details and any submission. JBOX is a placeholder. The latest output-only operational gate passed; original coverage/state/replay qualification is not claimed.
 
 To: [VERIFIED_SUBMISSION_RECIPIENT]
-Subject: Signalpost — measured candidate, acceptance gates not met — [PACKAGE_COMMIT_SHA]
+Subject: Signalpost — output-first operational candidate — f0902cb
 
 Agent: Signalpost
 Repository: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information
-Exact package commit: [PACKAGE_COMMIT_SHA]
-Measured implementation: 676d6e513b70c0e3cbf8e884602ad7e5674d5df9
-Smoke/acceptance report: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/blob/main/docs/release/FINAL_RESULTS_2026-11-06.md
+Exact measured runtime: f0902cb0cbb1a4cd5e9ac1d471f0c8459545ed73
+Package/documentation commit: [RUN git rev-parse HEAD IN THE CHECKED-OUT PACKAGE]
+Acceptance report: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/blob/main/docs/release/OUTPUT_FIRST_RESULTS_2026-11-07.md
+Exact-runtime CI: https://github.com/0xmaster7/Signalpost-Build-An-Agent-That-Finds-Company-Information/actions/runs/42364033937
 Contact: [AUTHORIZED_CONTACT_NAME] <[AUTHORIZED_CONTACT_EMAIL]>
 JBOX: [JBOX_SITE_URL]
 
-From a fresh clone with CPython3.12+, curl and outbound HTTPS:
+Install and run from a fresh clone with CPython3.12+, curl and outbound HTTPS:
 
 ```sh
 ./setup.sh
-./run.sh --input companies.jsonl --output output.jsonl
+SIGNALPOST_TIME_BUDGET_SECONDS=1800 ./run.sh --output-first --input companies.jsonl --output output.jsonl
 ```
 
-Setup installs locked production dependencies. Run performs no installation and enables live BRREG, structured financials, PDF/local OCR, NAV and permitted website research. JSONL profiles go to the output file; stdout is a separate aggregate. `--budget-seconds` overrides `SIGNALPOST_BUDGET_SECONDS`, then config; default1800 seconds. Explicit totals reserve min(300s,20%) within the total. **Measured scale exceeded the internal deadline and did not finalize.**
+Setup installs pinned dependencies from `signalpost-starter-kit/uv.lock`; run installs nothing. Default budget1.8seconds/input includes measured finalization reserve with a10%floor. Complete validated primary JSONL commits before secondary canonical state and recording. Exit0 means complete output, not complete research or paired state.
 
-Matched/fresh each finalized100/100 and replayed identical output/state bytes: finance98/93, FTE18/19, verified websites0/1, jobs3/2, runtime1595/1584 seconds, zero duplicate IDs. The1000-company operational run was externally terminated at2100 seconds:1000 partial rows survived, but no final state pair/aggregate or complete phase metrics. FTE, website, fresh-finance,20-minute and scale-completion gates failed. No official score, qualification, coverage improvement or full-field accuracy is claimed.
+Live200 passed in332.033seconds, then the single authorized live1000 in1659.034seconds, both clean exit0 with all valid envelopes and zero duplicate IDs. Counts200/1000: finance196/983, explicit FTE1/8, verified websites0/0, jobs1/1. No extractor/identity tuning occurred. These are counts, not scored recall/precision.
 
-No LLM/paid API/personal key is required. Local models: RapidOCR1.4.4 bundled PP-OCR ONNX assets (existing Apache2 notices), ONNX Runtime1.31.0(MIT), pypdfium2 4.30.0 with PDFium third-party notices. Sources: BRREG, NAV, candidate-only Wikidata and rights-permitted company websites. Component hashes/rights/limits are documented in the package and notices; no new project-code license grant is made.
+Both state pairs, checkpoint terminalization and sealed exact replay remain incomplete. Websites/FTE remain low; no new wrong-company precision audit or official score is claimed. Organizer numeric resources and final private parser remain unverified. This passes the latest output-only operational replacement definition only; blocked filesystem/native calls or different resources can still overrun.
 
-API billing is assumed $0, not measured billing. VM/OCR CPU, RAM, disk, network, install and hosting costs are not priced. Two-core/7.7GB Linux host; the scale attempt consumed35 minutes without clean completion, so successful official-batch cost is unproven.
+No required LLM, paid API or personal key. Local components include RapidOCR1.4.4 bundled PP-OCR ONNX assets (existing Apache2 notices), ONNX Runtime1.31.0(MIT), and pypdfium2 4.30.0/PDFium notices. Sources: BRREG/NLOD2, NAV-specific terms, candidate-only Wikidata/CC0, and rights-permitted company pages. See source-rights, notices and LIMITATIONS; no new project-code license grant is made.
 
-Raw captures, credentials, PDFs and private checkpoints are not public. Public site-data is a saved demonstration, not precomputed evaluator input. Official parser/resources and a deployed JBOX site remain unverified.
+Public API charges assumed $0, not a measured bill. CPU/RAM/disk/network/hosting unpriced. The scale VM had roughly two cores/7.7GiB RAM and swap; no extrapolation to unstated organizer resources. Raw captures, credentials, PDFs and private checkpoints stay outside Git. Public site-data is historical demonstration data, not evaluator answers.
 
 [AUTHORIZED_CONTACT_NAME]
 
-**Unsent draft.** Task deadline7November2026 18:00IST; no organizer extension is independently established.
+**Unsent draft. No email or submission was sent.**
