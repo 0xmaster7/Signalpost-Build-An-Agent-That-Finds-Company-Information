@@ -1,0 +1,146 @@
+# Signalpost
+
+**Latest measured operational gate PASSED:** [output-first results](docs/release/OUTPUT_FIRST_RESULTS_2026-11-07.md). Frozen runtime `f0902cb0cbb1a4cd5e9ac1d471f0c8459545ed73` self-exited with code 0: 200/200 valid envelopes in 332.033s, then 1000/1000 in 1659.034s, zero duplicate IDs. Exact-runtime CI is green (1,342 tests, 252 subtests). **State pairs and exact replay remain incomplete; coverage is low.** This passes the latest output-only replacement definition, not the original coverage/state/replay acceptance. Historical and preparation-only notes below do not supersede these measurements. No extractor/identity tuning or submission occurred.
+
+**Current output-first candidate — live acceptance PENDING (7 November 2026).** `--output-first` makes complete, validated, ordered JSONL the primary committed artifact, ahead of secondary canonical state/pair publication and HTTP recording finalization. It is the production CLI default for non-replay runs; direct programmatic callers can request it explicitly. Exit code **0 means valid complete output, not research success**, coverage, accuracy, a committed canonical state pair or a complete recording. `state_incomplete: true` honestly reports that secondary artifacts may be unfinished; unavailable research remains unknown/incomplete, never fabricated as zero.
+
+Recording/replay and frozen-fixture invocations retain strict paired-state behavior unless `--output-first` is explicitly supplied. The default applies to ordinary live CLI research only.
+
+The authorized sequence completed **200 inputs / 360 seconds**, then **1,000 / 1,800 seconds** on unchanged runtime source after the small gate passed. See the measured report above. Historical failures below remain failures of those dated candidates. The email remains an [unsent draft](SUBMISSION_EMAIL_DRAFT.md); owner/contact and JBOX placeholders are retained. **NOSEND: do not send email or submit.**
+
+**Historical 7 November 200-company gate FAILED:** [independent-watchdog results](docs/release/HARD_DEADLINE_RESULTS_2026-11-07.md). Implementation `3e8a8a0` has green CI and 200 terminalized checkpoint rows, but emergency termination at354.431seconds left no committed state pair/aggregate. No subsequent1,000-company run or acceptance replay was launched. **Not safe to submit as a replacement.**
+
+**Historical 7 November live bounded-run result: FAILED — not a safe replacement.** [Result and phase counters](docs/release/TIMEBOX_RESULTS_2026-11-07.md): 1,000 complete-shaped rows survived, but only 728 checkpoint rows terminalized; no committed state pair or aggregate. External termination at 1,830.864 seconds exceeded the 1,800-second budget. Exact scale replay was not started. No coverage improvement or successful finalization is claimed.
+
+**Historical 7 November bounded-run remediation:** the earlier 15% reserve/85% research cutoff did not establish live completion; the dated failed runs above remain failed. The current output-first contract below supersedes that scheduling description without claiming a measured improvement. No website/FTE extractor or identity thresholds were tuned.
+
+[Recorded 3 November baseline and exact-commit CI](docs/release/BASELINE_ACCEPTANCE_2026-11-03.md) — historical results, not final-source coverage.
+
+**6 November measured candidate — acceptance FAILED:** [Final live results and failed gates](docs/release/FINAL_RESULTS_2026-11-06.md). Matched/fresh runs finalized 100/100 envelopes and replayed exactly: finance **98/93**, explicit FTE **18/19**, verified websites **0/1**, jobs **3/2**, runtime **1595/1584 seconds**. The live 1,000-company run **timed out at 2100 seconds**, preserving 1000 partial rows but no final state pair or complete phase counters. This candidate is **not submission-ready**. FTE, website, fresh-finance, 20-minute and scale-completion gates failed; no improvement is claimed. Research was frozen at `676d6e513b70c0e3cbf8e884602ad7e5674d5df9` throughout those cohorts; their later validation/docs/export receipts do not verify the current output-first candidate. [Public site data](site-data/README.md), [JBOX prompt](JBOX_PROMPT.md), [limitations](LIMITATIONS.md), [package](docs/release/SUBMISSION_PACKAGE_2026-11-05.md) and [unsent email](SUBMISSION_EMAIL_DRAFT.md) describe the handoff. No submission or email was sent. Task deadline: **7 November 2026, 18:00 IST (12:30 UTC)**.
+
+**Historical failed experiment:** [28 October reliability/finance experiment](docs/release/RELIABILITY_FINANCE_RESULTS_2026-10-28.md). Both frozen 100-company cohorts aborted during foundation projection on repeated role-group claim IDs, before finance/OCR/discovery. Neither produced final envelopes; coverage is unknown, not zero. The duplicate-observation repair and later supplied baseline artifacts are separate evidence; they do not establish new live improvement or final-source acceptance. Public `main` has **not** demonstrated all acceptance gates.
+
+**Previous experiment:** [27 October matched rerun and fresh holdout](docs/release/PHASE_BUDGET_RESULTS_2026-10-27.md). The matched 100 produced 0 verified-site companies, 0 jobs, 28 FTE companies and 42 financial companies in 1,190.614 seconds, with 2,491 monetary observations (2,100 explicitly assumption-backed). Its holdout failed publication; optional coverage is unknown.
+
+**[Results — live evaluation and evidence](RESULTS.md)**
+
+**Earlier comparison baseline:** [100 active AS employers, compared with Arnav's unchanged repository](docs/release/LIVE_COMPARISON_2026-10-27.md), with per-company CSV/JSONL. Signalpost / Arnav coverage: verified websites 0/25, jobs 0/3, FTE 50/29, financials 77/98. The subsequent [concurrent research treatment](docs/release/CONCURRENT_RESEARCH_2026-10-27.md) ran website verification for all 100, but attribution/robots checks still yielded no verified sites. Coverage is not independently measured accuracy.
+
+Signalpost researches Norwegian companies by organisation number and returns ordered, evidence-backed JSONL profiles. Its read-only dashboard lets users find saved companies, compare facts, verify propositions and inspect sources and history.
+
+**Status:** the public `main` branch is canonical, not a claim that the latest live acceptance gates passed. The [historical six-company measurement](docs/release/FINAL_CAPABILITY_INTEGRATION_2026-10-17.md) recovered 57 additional financial claims and registered workplace locations for 6/6 companies. Website, jobs and news coverage remain limited. No official Builderr score or submission is claimed.
+
+**Earlier review (26 October 2026):** [audit, reference comparison and fixes](docs/release/CURRENT_AUDIT_2026-10-26.md). Additional explicit FTE statement formats, corrected million-scale parsing and bounded OCR queue time are covered by offline regressions. See the latest experiment above for subsequent live outcomes; external coverage remains limited.
+
+**Discovery update:** [independent NAV jobs and registry URL-only references](docs/release/PUBLIC_DISCOVERY_2026-10-26.md) no longer require website ownership to publish those specific facts. NAV coverage is a bounded partial scan, not proof of zero jobs. The [27 October Wikidata correction](docs/release/WIKIDATA_API_2026-10-27.md) separates the documented SPARQL API from company-site crawler robots and supplies a project/contact User-Agent. Results remain discovery candidates, not ownership proof; no post-fix coverage gain is claimed.
+
+## Install and run: two commands
+
+Clone this public repository and enter its directory, then run:
+
+```sh
+./setup.sh
+./run.sh --input companies.jsonl --output output.jsonl
+```
+
+For recorded live smoke and strict offline replay, see the
+[crash-safe acceptance workflow](signalpost-starter-kit/scripts/crashsafe_acceptance_usage.md).
+Implementation tests alone do not establish live coverage or replay acceptance.
+
+Prerequisites: **CPython 3.12+** (3.12 recommended), Linux with glibc or macOS on x86_64/arm64, and `curl` for the first setup. Setup downloads checksum-verified **uv 0.8.0**, creates `signalpost-starter-kit/.venv`, installs production dependencies from [uv.lock](signalpost-starter-kit/uv.lock), and checks the local PDF/OCR modules. Tools, caches and temporary installation files stay inside the checkout. Setup is safe to rerun; it does not install Python, modify shell profiles, use sudo or require Tesseract, Docker, API keys or paid services. Outbound HTTPS is needed for installation and live research. Set `SIGNALPOST_PYTHON=/path/to/python3.12` during setup if interpreter selection needs an override.
+
+`run.sh` performs **no installation**. By default it enables the real production evaluator's **live BRREG, official annual-account PDF/local OCR, independent NAV jobs, and permitted website research** paths. NAV and batch candidate discovery share the existing gateway, budgets and completion reserve; current public feeds are not used to reconstruct an explicit historical cutoff. Arguments and exit codes are preserved; relative input/output paths resolve from your current directory. From another directory, use `/absolute/path/to/checkout/run.sh ...`.
+
+The input contains company organisation numbers. Output-first publication validates and commits ordered JSONL with one terminal profile per input row before secondary finalization. Historical live scale failures remain failed; current live acceptance is pending. Stdout is a separate machine-readable batch report and stderr contains diagnostics. State/checkpoint paths can be supplied with `--state-output` and `--checkpoint`. Current research limits and source/identity safeguards still apply.
+
+An explicit `--registry-snapshot PATH` preserves the canonical CLI's offline mode unless you also supply `--live-brreg --live-websites`. For advanced direct Python, refresh, resume, configuration and dashboard commands, see the [submission guide](submission/README.md). The underlying production launcher remains `signalpost-starter-kit/run_signalpost.py`.
+
+For a private HTTP/PDF capture, add `--record-http .signalpost-recordings/run1`. Recording finalization is secondary in output-first mode: exit code 0 alone does not establish a complete replayable capture. Check recording completion before attempting replay. To rerun the pipeline offline, use the same input/configuration and warm OCR cache with `--replay-http .signalpost-recordings/run1`, choosing separate output, state and checkpoint paths. Replay never contacts sources or silently starts OCR on a cache miss; incomplete captures fail explicitly. Captures contain raw source material and may include NAV's public token: **never publish or commit them**. See the [ordered reliability/finance audit](docs/release/RELIABILITY_FINANCE_AUDIT_2026-10-28.md). Offline checks alone do not establish improved live coverage.
+
+Input:
+
+~~~json
+{"organisation_number":"923609016"}
+{"organisation_number":"976390512"}
+~~~
+
+JSONL, JSON, CSV, TSV and plain-number inputs are supported. IDs remain strings. Each row receives one terminal JSONL result in input order, including duplicates, invalid IDs and unavailable companies. Malformed files fail before acquisition with a nonzero exit code. **Profiles are in the output file:** stdout carries a separate machine-readable batch report; stderr carries diagnostics.
+
+The [repository output contract](signalpost/adapter.py) contains input_ref, organisation_number, terminal_state, seven sections, claims, evidence, source_snapshots, refresh, synthesis, errors, operations, run and batch. States are available, not_available, blocked, not_applicable, ambiguous and failed. Missing values are never zero.
+
+Builderr confirms these semantic requirements, but the runnable starter emits a different structure from both our output and its own example. **Official parser compatibility remains unverified.** Its parser, frozen-registry handoff and numeric resource limits need [clarification](docs/release/FINAL_COVERAGE_SUBMISSION_2026-10-17.md#organizer-clarification).
+
+## Architecture and information
+
+Input → ordered batch/checkpoints → BRREG identity/records → bounded website verification → extraction → validated primary JSONL commit → secondary canonical state/pair and recording finalization.
+
+| Production layer | Responsibility |
+|---|---|
+| [run](signalpost/run.py), [operations](signalpost/operations.py) | Runtime input, budgets, concurrency, checkpoint/resume and terminal cardinality |
+| [BRREG](signalpost/brreg.py) | Exact identity, registered activity/purpose, filings, official roles and workplaces |
+| [gateway](signalpost/network.py) | Physical accounting, pacing, public-IP and redirect checks, robots and response bounds |
+| [websites](signalpost/websites.py) | Candidate verification, permitted pages, linked profiles, structured jobs and dated activity |
+| [NAV](signalpost/nav.py), [batch discovery](signalpost/public_discovery.py) | Exact-employer jobs without websites; candidate-only batch discovery with access-policy gates |
+| [models](signalpost/models.py), [adapter](signalpost/adapter.py) | Claim/evidence/snapshot integrity and deterministic publication |
+| [history](signalpost/history.py), [synthesis](signalpost/synthesis.py) | Prior evidence, material changes and supported deterministic summaries |
+| [web app](signalpost/web.py) | Server-rendered saved-data Find, Profile, Compare, Verify and Changes |
+
+Seven sections cover identity/brand, accounts/history, leadership/workplaces, websites/owned profiles, hiring/activity, evidence/states, and refresh/changes. A present section does not mean every field is available.
+
+Verified website/content publication requires direct company ownership or permitted page-representation proof. `registry_declared_website_url` and `shared_website` are separate registry references, never verified ownership or content. Mentions/search results do not establish ownership; group and page-only scope remain separate. Hiring needs an actual employer-bound posting; activity needs a supported subject and date. Registered activity is not dated news.
+
+Financial figures require exact-entity period, currency, scope and **unit/scale** proof. Official annual-account PDF rows are reconciled with BRREG JSON; each supported value publishes independently, while ambiguous values remain withheld. Currency alone does not prove NOK versus NOK-thousands.
+
+## Refresh and operation
+
+For a new observation, use new output/state/checkpoint paths and add --previous-state state.json. Preserve the output and adjacent .publication.json marker. Use a state/output pair for refresh only after verifying canonical pair completion; `output_committed` with `state_incomplete` is not a completed pair. Failed sources preserve prior supported facts and expose failure. Identical snapshots produce no false changes. Growing/subset batches retain compatible history; checkpoint resume requires identical input and configuration.
+
+To resume interruption, repeat the original command with --resume. Refresh and unfinished resume can make external requests.
+
+Use `--config` for supplied resource limits. `--budget-seconds` overrides `SIGNALPOST_TIME_BUDGET_SECONDS`, then legacy `SIGNALPOST_BUDGET_SECONDS`, then the configured total. Without an override the total is **1.8 seconds/input**, or **1,800 seconds for 1,000 inputs**. In output-first mode the completion reserve is **max(2 × (measured per-row preparation time × N + measured full-output flush time), 10% of total budget)**. Preparation includes validation and JSON/UTF-8 encoding; N is the input row count. This measured estimate is not a bound on filesystem latency. The watchdog may request output publication but **never sends TERM/KILL before complete-output acknowledgement**. Consequently, a blocked `fsync` before acknowledgement can exceed the budget: a universal hard deadline cannot be guaranteed.
+
+Output-first BRREG foundation acquisition preloads exact-entity batches in chunks of **100**, with existing single-entity fallback for misses/errors, then uses **eight finance workers** (subject to configured HTTP concurrency). Batching does not change identity matching, ownership checks or extraction rules. Official endpoint concurrency remains bounded at eight, with eight request starts/second and adaptive throttling; ordinary website concurrency is unchanged. Physical connect/read waits are capped at ten seconds and a company phase gets at most thirty seconds. Optional research follows foundation and financial acquisition or recorded failures. These are project safeguards, not published organizer limits. Current acceptance remains pending the 200/360 gate and, only after it passes, the 1000/1800 gate.
+
+Default evidence cutoff is run start. Current registered identity/workplace observations are supported in default live mode; an explicit historical cutoff strictly excludes later observations. Use --evidence-cutoff only with the organizer's actual authorized timestamp; never invent a future cutoff. A supplied registry uses --registry-snapshot, --registry-snapshot-as-of and --registry-source-url with real provenance and rights.
+
+## Offline demo and UI
+
+The bundled fixture is fictional and includes duplicate input. It demonstrates execution, not live coverage.
+
+~~~sh
+signalpost-starter-kit/.venv/bin/python signalpost-starter-kit/run_signalpost.py --input signalpost-starter-kit/tests/fixtures/m01/offline-batch.jsonl --registry-snapshot signalpost-starter-kit/tests/fixtures/m01/registry.jsonl --output /tmp/signalpost-output.jsonl --state-output /tmp/signalpost-state.json
+signalpost-starter-kit/.venv/bin/python signalpost-starter-kit/run_signalpost_web.py --data /tmp/signalpost-output.jsonl --host 127.0.0.1 --port 8000
+~~~
+
+Open http://127.0.0.1:8000. Find an ID, inspect its profile and evidence, compare companies, verify a legal-name proposition and inspect Changes. Load actual CLI output for real research. The dashboard performs no live acquisition. [Accepted UI evidence](docs/ui-ux-acceptance-20261017/REPORT.md) covers desktop/mobile.
+
+## Sources, rights, costs and limits
+
+Official BRREG entity/accounts/roles/subunit APIs provide the foundation, with NLOD attribution and privacy exclusions. Websites use bounded transient factual extraction subject to site terms, robots and ownership proof.
+
+Official annual-account PDF acquisition and local OCR are enabled. **No LLM, paid API, personal service key or paid model is required.** Local OCR is model use: the lock pins `rapidocr-onnxruntime==1.4.4` with `onnxruntime==1.31.0`, and PDF rendering uses `pypdfium2==4.30.0`. The installed RapidOCR asset filenames and hashes, classifier-disabled setting, and PDFium notice scope are recorded in the [dependency and license disclosure](docs/release/SUBMISSION_PACKAGE_2026-11-05.md#dependencies-models-and-licenses). Retain upstream component notices; this is not a blanket license audit.
+
+The live paths include official BRREG APIs/filing copies, NAV public vacancy metadata, bounded company websites and candidate-only Wikidata SPARQL. Foundation acquisition uses identity-only BRREG work, then structured finance for all eligible companies before optional official details, external discovery and OCR work. This ordering is implemented; it does not guarantee a particular live coverage result. The [source-rights register](docs/source-rights.md) records their distinct terms; the older rejected-Wikidata report is historical. NAV's runtime public token is a credential to protect, even though no personal key is required. No paid search/news provider, ATS integration, platform scraper or browser-rendering service is enabled.
+
+**API billing assumption: $0** for 100, 1,000 or 1,100 inputs under this public-source/local-OCR configuration, assuming the documented public services remain available without charges. This is a configuration-based estimate, **not measured billing**. CPU/OCR, memory, disk, installation, network traffic and hosting consume resources and may incur infrastructure costs; they have not been priced or measured for this release. Full-scale live runtime is unproven. Website reach, jobs/news and financial values remain major scoring gaps; offline scale throughput is not factual accuracy or competition recall.
+
+URLs pass the centralized gateway's public-address/DNS checks, redirect revalidation, host/path policy, response bounds and request accounting. Ordinary website robots failures fail closed and explicit disallows are honored; documented API exceptions are narrowly scoped, not permission to bypass site robots. Site terms and ownership proof still apply. Keep secrets server-side and out of logs, profiles, Git and release artifacts. Raw HTTP/PDF recordings, OCR caches, tokens, full private outputs and SQLite checkpoints are private captures: never commit or publish them. Public reports need sanitized metadata and rights-permitted short evidence only. These controls reduce risk; they do not establish blanket source permission or complete SSRF protection.
+
+See [source rights](docs/source-rights.md), [source policy](config/source_policy.yaml), [data licences](docs/data-licenses.md) and [third-party notices](THIRD_PARTY_NOTICES.md). No licence grant for this repository's own code is implied; that decision remains with the owner. No research credentials are required.
+
+## Tests and submission evidence
+
+~~~sh
+cd signalpost-starter-kit
+uv pip install --python .venv/bin/python pytest==9.1.1
+PYTHONPATH=.. .venv/bin/python -m pytest -q
+PYTHONPATH=.. .venv/bin/python scripts/validate_signalpost_functionality.py --output-dir /tmp/signalpost-acceptance
+~~~
+
+CI also runs identity/ownership, M06 scale/provenance, M07 refresh, M08 gold/synthesis, M09 source/failure/resume, cardinality, clean-directory launch and UI/XSS checks.
+
+The self-contained [100-company smoke report](submission/HISTORICAL_100_COMPANY_SMOKE.md) identifies its historical source SHA and conditions. Unavailable raw VM files are not required to read it; it is not a fresh 100-company test of this source. [20-company replay](docs/release/MAXIMUM_VERIFIED_COVERAGE_2026-10-17.md) and the latest three-company experiment are separate evidence.
+
+[5 November package/checklist](docs/release/SUBMISSION_PACKAGE_2026-11-05.md) · [Limitations](LIMITATIONS.md) · [Unsent email draft](SUBMISSION_EMAIL_DRAFT.md) · [Submission guide](submission/README.md) · [Historical artifacts](submission/ARTIFACTS.md)
+
+External handoff remains on hold for verified organizer access/public-artifact arrangements, parser/handoff clarification and owner contact details. Nothing has been submitted.

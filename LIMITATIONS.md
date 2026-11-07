@@ -1,5 +1,15 @@
 # Signalpost limitations — updated 7 November 2026
 
+## Latest documentation context
+
+Runtime is frozen at `82703d348e894ed68bf9873404a7900886440398`; this revision changes documentation only. Organizer Soham confirms **45 minutes and 2,000 requests per 100 companies (20/company)**. Older statements below that numeric official limits are unknown are historical, not current. Revision 1 `a9d0bc8` is already on record; proposed revision 2 of 5 is not claimed sent. The organizer revision cutoff is 7 November 2026, 23:59 IST; older task deadlines below are historical.
+
+The fresh default-budget 1,000-company check **failed**, exit 1 at 598.86 seconds, on filesystem exhaustion during output preparation. A valid 1,000-row snapshot survived but its marker remained partial, not a committed output/state pair. There is no clean scale-completion claim for this verification. See [latest results](RESULTS.md), including command/environment scope and the repeated-command refresh finding, and [contract differences](docs/OUTPUT_CONTRACT_CHECK.md).
+
+Website/jobs/FTE remain low because optional research is time-limited and strict identity/evidence gates abstain. No extractor, identity, scheduler, dependency or behavior change was made in this documentation revision. Output-first success does not establish paired state or automatic refresh.
+
+## Earlier release notes (dated results, not current readiness)
+
 ## Compatibility verification
 
 The resumed candidate passes 1,358 tests and 252 subtests. With the earlier
