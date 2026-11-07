@@ -23,7 +23,7 @@ def run_parent(body, timeout=6):
 import os, signal, sys, time
 from signalpost.watchdog import Watchdog
 def observed(signum, frame):
-    print(signal.Signals(signum).name, flush=True)
+    os.write(1, (signal.Signals(signum).name + "\\n").encode())
 signal.signal(signal.SIGUSR1, observed)
 signal.signal(signal.SIGUSR2, observed)
 """ + body

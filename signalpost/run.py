@@ -26,11 +26,11 @@ from .models import (Claim, Envelope, Evidence, PublicState, RefreshState, RunEr
                      empty_section, validate_batch_publication_graph)
 from .operations import (Budget, CheckpointStore, Opportunity, OpportunityDeferred, OpportunityFailed, OpportunityScheduler,
                          OrderedAtomicWriter, PartialEnvelopePublisher, RunBudget, publish_paired_artifacts,
-                         _SerializedEnvelope)
+                         PublicationRecoveryError, _SerializedEnvelope)
 from .network import NetworkGateway, StructuredLogger, registered_domain, request_company_scope, request_phase_scope
 from .execution import ExecutionTrace, implementation_identity
 from .recording import HttpRecording, ReplayError
-from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company, fetch_financial_statements
+from .brreg import BrregResult, RIGHTS, cutoff_identity, fetch_company, fetch_financial_statements, preload_entity_batch
 from .history import (SOURCE_POLICY_VERSION, CompanyState, PriorStateError, artifact_payload, artifact_ref, canonical_json,
                       compare_states, company_state, merge_prior_facts, validate_artifact, sha256_json)
 from .synthesis import synthesize
@@ -478,12 +478,30 @@ def _run_research(awaitable, on_stop=None):
         asyncio.set_event_loop(None)
 
 
+class OutputFirstDeadline(BaseException):
+    pass
+
+
 def run(args: argparse.Namespace) -> int:
     args._watchdog = None
     args._watchdog_handlers = {}
+    args._output_committed = False
     try:
         return _run(args)
+    except OutputFirstDeadline:
+        if not getattr(args, "_output_committed", False):
+            raise
+        args._output_first_report()
+        return 0
+    except Exception as exc:
+        if isinstance(exc, PublicationRecoveryError) or not getattr(args, "_output_committed", False):
+            raise
+        print(f"state_incomplete: secondary finalization failed ({type(exc).__name__})", file=sys.stderr)
+        args._output_first_report()
+        return 0
     finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
         if args._watchdog is not None:
             args._watchdog.stop()
         for signum, handler in args._watchdog_handlers.items():
@@ -576,6 +594,10 @@ def _run(args: argparse.Namespace) -> int:
     budget = _with_global_budget(
         RunBudget.from_mapping(config_values.get("budget", config_values), batch_rows=len(rows)),
         budget_override)
+    output_first = bool(getattr(args, "output_first", False) and replay_metadata is None)
+    if output_first:
+        budget = replace(budget, soft_seconds=budget.hard_seconds * 0.9,
+            completion_reserve_seconds=budget.hard_seconds * 0.1)
     run_budget = Budget(budget, started_at=run_started)
     cutoff_value = args.evidence_cutoff or config_values.get("evidence_cutoff")
     cutoff_source = "evaluator" if args.evidence_cutoff else "config" if cutoff_value else "run_start"
@@ -718,16 +740,70 @@ def _run(args: argparse.Namespace) -> int:
     pending_path = writer.write_shells(rows, checkpoint.shell_states())
     prior_terminalized = checkpoint.terminalized() if args.resume else {}
     baseline_saved = checkpoint.envelopes_for_state("baseline_done") if args.resume else {}
+    resume_rows = {item.row_number: item for item in checkpoint.rows()} if output_first and args.resume else {}
     frozen_cache = checkpoint.phase_results("frozen_foundation") if args.resume else {}
     partial = PartialEnvelopePublisher(writer,
-        [prior_terminalized.get(row.row_number, _provisional_envelope(row, batch_id, cutoff, run_start_utc))
+        [resume_rows.get(row.row_number) or prior_terminalized.get(row.row_number) or _provisional_envelope(row, batch_id, cutoff, run_start_utc)
             for row in rows], serializer=to_evaluator, max_seconds=30.0,
         max_updates=max(100, len(rows)))
+
+    def prepare_primary():
+        if not output_first:
+            partial.flush(force=True)
+            return
+        partial.prepare_output()
+        reserve = min(budget.hard_seconds, partial.reserve_estimate(budget.hard_seconds))
+        run_budget.config = replace(run_budget.config,
+            soft_seconds=max(0.0, budget.hard_seconds - reserve),
+            completion_reserve_seconds=reserve)
+
+    def output_first_report():
+        try:
+            state_incomplete = json.loads(marker_path.read_text()).get("status") != "committed"
+        except (OSError, ValueError):
+            state_incomplete = True
+        requests_by_phase = {}
+        requests_by_purpose = {}
+        if gateway:
+            for entry in gateway.ledger.entries:
+                requests_by_purpose[entry.purpose] = requests_by_purpose.get(entry.purpose, 0) + 1
+                if getattr(entry, "recorded_physical_attempt", False):
+                    phase = getattr(entry, "phase", None) or "unscoped"
+                    requests_by_phase[phase] = requests_by_phase.get(phase, 0) + 1
+        if state_incomplete:
+            print("state_incomplete: complete output committed; secondary state/recording may be incomplete", file=sys.stderr)
+        print(StructuredLogger.emit("batch_complete", batch_id=batch_id, rows=len(rows),
+            output_cardinality=len(rows), output_committed=True, state_incomplete=state_incomplete,
+            runtime_seconds=round(time.monotonic() - run_started, 3),
+            budget_seconds=budget.hard_seconds,
+            finalization_seconds=partial.commit_seconds,
+            finalization_preparation_seconds_per_company=partial.per_row_prep_seconds,
+            output_preparation_seconds=partial.flush_seconds,
+            completion_reserve_seconds=run_budget.config.completion_reserve_seconds,
+            physical_requests=(gateway.ledger.physical_requests if gateway else 0),
+            recorded_requests_by_phase=requests_by_phase, requests_by_purpose=requests_by_purpose,
+            scheduler_passes={**scheduler_report, "company_phases": {
+                phase: checkpoint.phase_statuses(phase) for phase in (
+                    "official", "financial_statements", "official_details", "annual_documents",
+                    "nav_batch", "wiki_batch", "nav_apply", "website_verify", "website_shallow", "jobs_activity")}}))
+
+    args._output_first_report = output_first_report
+
+    def commit_primary():
+        if output_first and not getattr(args, "_output_committed", False):
+            partial.commit_output()
+            args._output_committed = True
+            if args._watchdog is not None:
+                args._watchdog.mark_output_committed()
+            print("output_committed: complete validated JSONL is durable", file=sys.stderr)
 
     def frozen_envelope(row):
         saved = frozen_cache.get(row.organisation_number, {}).get(str(row.row_number))
         if saved is not None:
-            return Envelope.model_validate(saved)
+            envelope = Envelope.model_validate(saved)
+            if output_first:
+                partial.update(envelope)
+            return envelope
         started = time.monotonic()
         try:
             envelope = _envelope(row, fixture, batch_id, cutoff, previous,
@@ -1038,6 +1114,12 @@ def _run(args: argparse.Namespace) -> int:
                 return observations, homepages
 
             if live_brreg:
+                if output_first:
+                    try:
+                        with request_phase_scope("official"):
+                            await _company_phase(preload_entity_batch(unique, gateway, cutoff), run_budget, execution.replay)
+                    except Exception as exc:
+                        scheduler_report["entity_batch"] = {"state": "failed", "reason": type(exc).__name__}
                 finance_pending = [org for org in unique if org not in phase_cache["financial_statements"]]
                 remaining_work_seconds = max(0.0, min(budget.soft_seconds - run_budget.elapsed,
                     budget.hard_seconds - run_budget.elapsed - budget.completion_reserve_seconds))
@@ -1069,7 +1151,7 @@ def _run(args: argparse.Namespace) -> int:
                             result = await _company_phase(fetch_company(item.company, gateway, cutoff,
                                 allow_current_identity_after_run_start=cutoff_source == "run_start",
                                 include_accounts=False, include_people=False), run_budget, execution.replay)
-                        if (gateway.ledger.logical_requests == logical_requests_before
+                        if (not output_first and gateway.ledger.logical_requests == logical_requests_before
                                 and result.observations.get("foundation_breadth_only")):
                             result.observations.pop("foundation_breadth_only", None)
                         if result.terminal_state == PublicState.FAILED:
@@ -1147,7 +1229,7 @@ def _run(args: argparse.Namespace) -> int:
                             terminal_state=PublicState.AMBIGUOUS, observations={"execution_state": "deadline_skipped"})
                         record_phase("official", "deadline_skipped", org=org)
                         await checkpoint_completed(Opportunity(key=org, company=org, pass_name="official_foundation"), by_org[org])
-                partial.flush(force=True)
+                prepare_primary()
                 scheduler_report["official_foundation"]["wall_seconds"] = time.monotonic() - official_started
                 from .operations import financial_request_scope
                 finance_scheduler = OpportunityScheduler(concurrency=min(8, budget.global_http_concurrency))
@@ -1226,7 +1308,7 @@ def _run(args: argparse.Namespace) -> int:
                 by_org.update(phase_cache["financial_statements"])
                 scheduler_report["financial_statements"] = {"passes": finance_scheduler.metrics,
                     "companies": finance_scheduler.company_metrics}
-                partial.flush(force=True)
+                prepare_primary()
                 phase_metrics["financial_statements"]["wall_seconds"] = time.monotonic() - started
 
                 details_pending = [org for org in by_org if org not in phase_cache["official_details"]
@@ -1330,7 +1412,7 @@ def _run(args: argparse.Namespace) -> int:
                     "companies": details_scheduler.company_metrics,
                     "allocation_seconds": details_allocation,
                     "allocation_rule": "min(300s, 1s per pending company, 25% of remaining soft budget)"}
-                partial.flush(force=True)
+                prepare_primary()
             live_by_org.update(by_org)
             for saved in baseline_saved.values():
                 if saved.organisation_number in live_by_org:
@@ -1670,14 +1752,24 @@ def _run(args: argparse.Namespace) -> int:
             scheduler_report["official_foundation"]["last_partial_update"] = _timing_percentiles(
                 item["last_partial_update_seconds"] for item in breadth_timings.values())
             execution.save(checkpoint, ("official", *phase_cache))
-            output = [prior_terminalized[row.row_number] if row.row_number in prior_terminalized
-                      else compose(row) for row in rows]
+            output = (partial.snapshot_rows() if output_first else
+                [prior_terminalized[row.row_number] if row.row_number in prior_terminalized
+                    else compose(row) for row in rows])
             for envelope in output:
                 envelope.errors.extend(optional_errors)
             return output
         async def guarded_enrich():
             stop = asyncio.Event()
-            flushing = asyncio.create_task(partial.run(stop))
+            async def prepare_periodically():
+                try:
+                    while not stop.is_set():
+                        try:
+                            await asyncio.wait_for(stop.wait(), timeout=30.0)
+                        except TimeoutError:
+                            partial.flush()
+                finally:
+                    partial.prepare_output()
+            flushing = asyncio.create_task(prepare_periodically() if output_first else partial.run(stop))
             try:
                 return await enrich()
             finally:
@@ -1692,11 +1784,14 @@ def _run(args: argparse.Namespace) -> int:
                 and os.name == "posix" and threading.current_thread() is threading.main_thread()):
             from .watchdog import Watchdog
             def interrupt_research(signum, frame):
+                if output_first and getattr(args, "_output_committed", False):
+                    raise OutputFirstDeadline()
                 if args._research_active:
                     raise ResearchDeadline("deadline" if signum != signal.SIGTERM else "sigterm")
             for signum in (signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM):
                 args._watchdog_handlers[signum] = signal.signal(signum, interrupt_research)
-            args._watchdog = Watchdog(budget.hard_seconds, time.monotonic() - run_started)
+            args._watchdog = Watchdog(budget.hard_seconds, time.monotonic() - run_started,
+                output_first=output_first)
         try:
             with signal_deadline(max(0.001, budget.soft_seconds - run_budget.elapsed), enabled=not execution.replay):
                 if expected_keys == set():
@@ -1707,6 +1802,8 @@ def _run(args: argparse.Namespace) -> int:
         except ResearchDeadline as exc:
             args._research_active = False
             checkpoint.connection.rollback()
+            if output_first:
+                commit_primary()
             keys = [list(item) for item in checkpoint.connection.execute("SELECT phase,company FROM phase_results ORDER BY phase,company")]
             if recording and not execution.replay:
                 execution.control("bounded_frontier", {"keys": keys, "reason": str(exc)})
@@ -1732,9 +1829,10 @@ def _run(args: argparse.Namespace) -> int:
                     for phase, org in dict.fromkeys((item["request"].get("phase"), item["request"].get("company")) for item in pending):
                         await drain.consume_abandoned(gateway, phase, org)
                 asyncio.run(drain_abandoned())
-            saved = {item.row_number: item for item in checkpoint.rows()}
+            saved = ({item.row_number: item for item in partial.snapshot_rows()} if output_first else
+                {item.row_number: item for item in checkpoint.rows()})
             envelopes = [saved.get(row.row_number) or _provisional_envelope(row, batch_id, cutoff, run_start_utc) for row in rows]
-            for envelope in envelopes:
+            for envelope in ([] if output_first else envelopes):
                 envelope.errors.append(RunError(code="RESEARCH_INCOMPLETE",
                     message="Research stopped at its deadline or termination signal; unfinished fields are unknown, not zero.", retryable=True))
                 for section in envelope.sections.values():
@@ -1764,6 +1862,10 @@ def _run(args: argparse.Namespace) -> int:
             "official", "financial_statements", "annual_documents", "nav_batch", "wiki_batch", "nav_apply",
             "website_verify", "website_shallow", "jobs_activity")}
     finalization_started = time.monotonic()
+    commit_primary()
+    if output_first and budget.hard_seconds - run_budget.elapsed < run_budget.config.completion_reserve_seconds:
+        output_first_report()
+        return 0
     partial.release()
     live_by_org.clear()
     gc.collect()
@@ -1804,6 +1906,8 @@ def _run(args: argparse.Namespace) -> int:
             new_state = company_state(envelope, config_fingerprint, old_state)
             new_state = merge_prior_facts(new_state, old_state)
         except Exception as exc:
+            if output_first:
+                raise OutputFirstDeadline() from exc
             row = rows_by_org[org][0]
             envelope = _phase_failure_envelope(row, batch_id, cutoff, "finalization", exc, run_start_utc)
             finalization_errors[org] = exc
@@ -1827,6 +1931,8 @@ def _run(args: argparse.Namespace) -> int:
             output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
                 ensure_ascii=False, separators=(",", ":")))
         except Exception as exc:
+            if output_first:
+                raise OutputFirstDeadline() from exc
             row = next(row for row in rows_by_org[org] if row.row_number == envelope.row_number)
             envelope = _phase_failure_envelope(row, batch_id, cutoff, "finalization", exc, run_start_utc)
             envelope.refresh.mode = "finalization_failed"
@@ -1875,6 +1981,9 @@ def _run(args: argparse.Namespace) -> int:
         except ReplayError as exc:
             capture_error = exc
     if capture_error is not None:
+        if output_first:
+            output_first_report()
+            return 0
         name = "replay" if recording and recording.replay else "recording"
         error = failure_error(name.upper() + "_UNEXPECTED_FAILURE", name, capture_error)
         for envelope in envelopes:
@@ -1894,7 +2003,8 @@ def _run(args: argparse.Namespace) -> int:
             output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
                 ensure_ascii=False, separators=(",", ":")))
     publication_marker = publish_paired_artifacts(writer, state_writer, envelopes,
-        canonical_json(state_payload) + b"\n", serializer=lambda envelope: output_payloads[envelope.row_number])
+        canonical_json(state_payload) + b"\n", serializer=lambda envelope: output_payloads[envelope.row_number],
+        preserve_output_commit=output_first)
     if args._watchdog is not None:
         args._watchdog.mark_committed()
     finalization_seconds = time.monotonic() - finalization_started
@@ -1942,6 +2052,9 @@ def _run(args: argparse.Namespace) -> int:
                                     coalesced_requests=(getattr(gateway, "coalesced_requests", 0) if gateway else 0),
                                     runtime_seconds=round(time.monotonic() - run_started, 3),
                                     output_cardinality=len(envelopes),
+                                    output_committed=True, state_incomplete=False,
+                                    output_commit_seconds=partial.commit_seconds,
+                                    finalization_preparation_seconds_per_company=partial.per_row_prep_seconds,
                                     publication_marker=str(publication_marker),
                                     finalization_seconds=round(finalization_seconds, 3),
                                     completion_reserve_remaining_seconds=(
@@ -1960,8 +2073,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m signalpost.run")
     parser.add_argument("--input", default=os.environ.get("SIGNALPOST_INPUT"))
     parser.add_argument("--output")
+    parser.add_argument("--output-first", action="store_true", help="Commit complete validated JSONL before secondary state and recording; allow clean output-only completion")
     parser.add_argument("--budget-seconds", type=float,
-        help="Total seconds including 15% finalization; overrides SIGNALPOST_TIME_BUDGET_SECONDS (default 1.8 seconds per input)")
+        help="Total seconds including measured output-first reserve (at least 10%); overrides SIGNALPOST_TIME_BUDGET_SECONDS (default 1.8 seconds per input)")
     parser.add_argument("--format", choices=("auto", "json", "jsonl", "csv", "tsv", "plain"), default="auto")
     parser.add_argument("--registry-snapshot", default=os.environ.get("SIGNALPOST_REGISTRY_SNAPSHOT"))
     parser.add_argument("--registry-snapshot-as-of", default=os.environ.get("SIGNALPOST_REGISTRY_SNAPSHOT_AS_OF"))
@@ -1984,6 +2098,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         args._enable_watchdog = argv is None
+        args.output_first = args.output_first or (argv is None and args.live_brreg
+            and not args.replay_http and not args.record_http)
         return run(args)
     except ReplayError as exc:
         print(f"Replay/capture error: {exc}", file=sys.stderr)

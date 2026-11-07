@@ -8,6 +8,7 @@ import math
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import tempfile
 import time
@@ -670,6 +671,26 @@ class _SerializedEnvelope(str):
     """Already encoded JSON produced by the partial publisher's serializers."""
 
 
+@dataclass
+class _PreparedAtomicWrite:
+    """A closed, fsynced temporary file on the destination filesystem."""
+
+    destination: Path
+    temporary: Path
+    sha256: str
+
+    def promote(self) -> None:
+        os.replace(self.temporary, self.destination)
+        directory_fd = os.open(self.destination.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+    def discard(self) -> None:
+        self.temporary.unlink(missing_ok=True)
+
+
 class OrderedAtomicWriter:
     def __init__(self, output_path: str | Path, estimated_bytes: int = 1024 * 1024):
         self.output_path = Path(output_path)
@@ -679,6 +700,28 @@ class OrderedAtomicWriter:
         required = max(1024 * 1024, estimated_bytes)
         if shutil.disk_usage(self.output_path.parent).free < required:
             raise OSError(f"insufficient free space for atomic output (need {required} bytes)")
+
+    def prepare_bytes(self, chunks: Iterable[bytes]) -> _PreparedAtomicWrite:
+        """Stream and hash a snapshot without changing the canonical artifact.
+
+        This is linear in snapshot bytes and must run before a hard deadline.
+        Promotion performs only a rename and directory fsync, with no row work.
+        The caller owns cleanup of a successfully returned temporary file.
+        """
+        fd, temporary = tempfile.mkstemp(prefix=f".{self.output_path.name}.", suffix=".tmp", dir=self.output_path.parent)
+        temporary_path = Path(temporary)
+        digest = hashlib.sha256()
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                for chunk in chunks:
+                    stream.write(chunk)
+                    digest.update(chunk)
+                stream.flush()
+                os.fsync(stream.fileno())
+            return _PreparedAtomicWrite(self.output_path, temporary_path, digest.hexdigest())
+        except BaseException:
+            temporary_path.unlink(missing_ok=True)
+            raise
 
     def write(self, envelopes: Iterable[Envelope], *, serializer: Callable[[Envelope], dict[str, object] | _SerializedEnvelope] | None = None) -> None:
         ordered = sorted(envelopes, key=lambda item: item.row_number)
@@ -753,7 +796,15 @@ class OrderedAtomicWriter:
 
 
 class PartialEnvelopePublisher:
-    """Publish complete provisional rows immediately and at bounded flush intervals."""
+    """Publish full ordered snapshots, retaining validated/encoded latest rows.
+
+    Stop/await ``run`` before finalization. Call ``commit_output`` before any
+    secondary history, recording or state work. For a deadline promotion, call
+    ``prepare_output`` off the deadline, then ``commit_output_ready``. Any accepted
+    update invalidates readiness, so a stale snapshot cannot be committed.
+    These synchronous methods must be serialized by the owning event loop;
+    they are not a multi-threaded or multi-process publication protocol.
+    """
 
     def __init__(self, writer: OrderedAtomicWriter, envelopes: Iterable[Envelope], *,
                  serializer: Callable[[Envelope], dict[str, object]] | None = None,
@@ -766,14 +817,27 @@ class PartialEnvelopePublisher:
         self.max_updates = max_updates
         self._monotonic = monotonic
         self._serializer = serializer
+        self.prep_seconds = 0.0
+        self.prepared_rows = 0
+        self.flush_seconds = 0.0
+        self.commit_seconds = 0.0
+        self._ready: tuple[_PreparedAtomicWrite, ...] | None = None
+        self._output_committed = False
+        started = time.perf_counter()
         self._identity_index = _EnvelopeIdentityIndex()
         checked, changes = self._identity_index.prepare(envelopes)
         self._rows = {item.row_number: item for item in checked}
         self._payloads = {item.row_number: self._serialize(item) for item in checked}
+        self._encoded_rows = {number: (payload + "\n").encode("utf-8") for number, payload in self._payloads.items()}
+        self._ordered_numbers = tuple(sorted(self._rows))
         self._identity_index.apply(changes)
+        self.prep_seconds += time.perf_counter() - started
+        self.prepared_rows += len(checked)
         self._pending_updates = 0
         self._last_flush = monotonic()
         self.marker_path = writer.output_path.with_name(writer.output_path.name + ".publication.json")
+        if self.marker_path.resolve() == writer.output_path.resolve():
+            raise ValueError("publication marker must have a distinct path")
         self._marker = OrderedAtomicWriter(self.marker_path, estimated_bytes=4096)
         self.flush(force=True)
 
@@ -788,14 +852,118 @@ class PartialEnvelopePublisher:
         return _SerializedEnvelope(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
     def release(self) -> None:
+        self._discard_ready()
         self._rows.clear()
         self._payloads.clear()
+        self._encoded_rows.clear()
+        self._ordered_numbers = ()
         self._identity_index = None
+
+    @property
+    def per_row_prep_seconds(self) -> float:
+        """Mean validation, identity checking and JSON/UTF-8 preparation time."""
+        return self.prep_seconds / self.prepared_rows if self.prepared_rows else 0.0
+
+    def reserve_estimate(self, budget_seconds: float) -> float:
+        """Seconds the parent should reserve before secondary finalization.
+
+        Allow twice measured full-batch preparation plus the latest full flush,
+        or 10% of the budget, whichever is larger. This is an estimate, not an
+        I/O latency guarantee. ``flush_seconds`` includes snapshot file fsyncs;
+        ``commit_seconds`` measures the separate fixed-size promotion work.
+        """
+        if not math.isfinite(budget_seconds) or budget_seconds < 0:
+            raise ValueError("budget_seconds must be finite and non-negative")
+        return max(2 * (self.per_row_prep_seconds * len(self._rows) + self.flush_seconds),
+                   0.1 * budget_seconds)
+
+    @property
+    def output_ready(self) -> bool:
+        return self._ready is not None
+
+    def snapshot_rows(self) -> list[Envelope]:
+        return [self._rows[number] for number in self._ordered_numbers]
+
+    def _discard_ready(self) -> None:
+        ready, self._ready = self._ready, None
+        if ready is not None:
+            for prepared in ready:
+                prepared.discard()
+
+    def prepare_output(self) -> None:
+        """Prebuild and fsync the freshest full output and both commit markers.
+
+        No validation, JSON row encoding, UTF-8 row encoding or output reread is
+        performed here. Copying/hashing the cached bytes is still O(output size).
+        Until promotion, the previous canonical output/marker remain untouched.
+        """
+        if self._identity_index is None:
+            raise RuntimeError("partial publisher has been released")
+        started = time.perf_counter()
+        prepared: list[_PreparedAtomicWrite] = []
+        try:
+            output = self.writer.prepare_bytes(self._encoded_rows[number] for number in self._ordered_numbers)
+            prepared.append(output)
+            common = {"publication_id": str(uuid.uuid4()), "output_path": str(self.writer.output_path),
+                      "row_count": len(self._rows), "canonical_pair_committed": False,
+                      "state_incomplete": True}
+            # Invalidate any previous committed pair/output before replacing its
+            # bytes. Kills between renames leave a truthful incomplete marker.
+            publishing = {**common, "status": "publishing_output", "output_committed": False}
+            final = {**common, "status": "output_committed", "output_committed": True,
+                     "output_sha256": output.sha256}
+            final["marker_sha256"] = _publication_marker_digest(final)
+            for marker in (publishing, final):
+                prepared.append(self._marker.prepare_bytes((json.dumps(marker, sort_keys=True).encode("utf-8") + b"\n",)))
+        except BaseException:
+            for item in prepared:
+                item.discard()
+            raise
+        finally:
+            self.flush_seconds = time.perf_counter() - started
+        self._discard_ready()
+        self._ready = tuple(prepared)
+
+    def commit_output_ready(self) -> Path:
+        """Promote a prebuilt snapshot with O(1) work in row count/byte size.
+
+        Uses three renames and directory fsyncs: incomplete marker, full output,
+        then output-committed marker. No file contents are written/read here.
+        Filesystem latency itself is not bounded. Rejects missing/stale readiness
+        rather than secretly performing a linear flush at the deadline.
+        """
+        if self._ready is None:
+            raise RuntimeError("no prepared output; call prepare_output before the deadline")
+        output, publishing, final = self._ready
+        started = time.perf_counter()
+        try:
+            publishing.promote()
+            output.promote()
+            final.promote()
+            self._output_committed = True
+            self._pending_updates = 0
+            self._last_flush = self._monotonic()
+        finally:
+            self.commit_seconds = time.perf_counter() - started
+            self._discard_ready()
+        return self.marker_path
+
+    def commit_output(self) -> Path:
+        """Durably commit latest output before secondary artifacts.
+
+        Reuses a ready snapshot if current, otherwise performs the linear flush
+        first. Use prepare_output/commit_output_ready for deadline-only promotion.
+        A returned marker commits OUTPUT alone, never an output/state pair.
+        """
+        if not self.output_ready:
+            self.prepare_output()
+        return self.commit_output_ready()
 
     def update(self, envelope: Envelope) -> bool:
         return self.update_rows([envelope])
 
     def update_rows(self, envelopes: Iterable[Envelope]) -> bool:
+        started = time.perf_counter()
         checked, changes = self._identity_index.prepare(envelopes)
         for envelope in checked:
             previous = self._rows.get(envelope.row_number)
@@ -803,22 +971,35 @@ class PartialEnvelopePublisher:
                     envelope.input_ref, envelope.organisation_number, envelope.batch_id):
                 raise ValueError("partial publication update must preserve the input row identity")
         payloads = {item.row_number: self._serialize(item) for item in checked}
+        encoded_rows = {number: (payload + "\n").encode("utf-8") for number, payload in payloads.items()}
+        if checked:
+            self._discard_ready()
         self._identity_index.apply(changes)
         self._rows.update({item.row_number: item for item in checked})
         self._payloads.update(payloads)
+        self._encoded_rows.update(encoded_rows)
+        self.prep_seconds += time.perf_counter() - started
+        self.prepared_rows += len(checked)
+        if checked:
+            self._output_committed = False
         self._pending_updates += len(checked)
         return self.flush()
 
     def flush(self, *, force: bool = False) -> bool:
+        if self._output_committed and not self._pending_updates:
+            return False
         if not force and (not self._pending_updates or (
                 self._pending_updates < self.max_updates
                 and self._monotonic() - self._last_flush < self.max_seconds)):
             return False
+        started = time.perf_counter()
         self._marker.write_bytes(json.dumps({
             "status": "partial", "output_path": str(self.writer.output_path),
             "row_count": len(self._rows), "canonical_pair_committed": False,
+            "output_committed": False, "state_incomplete": True,
         }, sort_keys=True).encode("utf-8") + b"\n")
         self.writer.write(self._rows.values(), serializer=lambda envelope: self._payloads[envelope.row_number])
+        self.flush_seconds = time.perf_counter() - started
         self._pending_updates = 0
         self._last_flush = self._monotonic()
         return True
@@ -837,9 +1018,14 @@ class PartialEnvelopePublisher:
             self.flush(force=True)
 
 
+class PublicationRecoveryError(RuntimeError):
+    pass
+
+
 def publish_paired_artifacts(output_writer: OrderedAtomicWriter, state_writer: OrderedAtomicWriter,
                              envelopes: list[Envelope], state_payload: bytes,
-                             *, serializer: Callable[[Envelope], dict[str, object]] | None = None) -> Path:
+                             *, serializer: Callable[[Envelope], dict[str, object]] | None = None,
+                             preserve_output_commit: bool = False) -> Path:
     """Publish output/state with a durable commit marker consumers can verify."""
     output_path, state_path = output_writer.output_path, state_writer.output_path
     marker_path = output_path.with_name(output_path.name + ".publication.json")
@@ -847,6 +1033,51 @@ def publish_paired_artifacts(output_writer: OrderedAtomicWriter, state_writer: O
         raise ValueError("paired publication marker must have a distinct path")
     marker = OrderedAtomicWriter(marker_path, estimated_bytes=4096)
     publication_id = str(uuid.uuid4())
+    if preserve_output_commit:
+        prepared = []
+        previous_mask = None
+        backups = []
+        try:
+            def encoded_rows():
+                for envelope in sorted(envelopes, key=lambda item: item.row_number):
+                    payload = serializer(envelope) if serializer is not None else _SerializedEnvelope(envelope.model_dump_json())
+                    encoded = payload if isinstance(payload, _SerializedEnvelope) else json.dumps(
+                        payload, ensure_ascii=False, separators=(",", ":"))
+                    yield (encoded + "\n").encode("utf-8")
+            output = output_writer.prepare_bytes(encoded_rows())
+            prepared.append(output)
+            state = state_writer.prepare_bytes((state_payload,))
+            prepared.append(state)
+            final = {"status": "committed", "publication_id": publication_id,
+                "output_path": str(output_path), "output_sha256": output.sha256,
+                "state_path": str(state_path), "state_sha256": state.sha256}
+            final["marker_sha256"] = _publication_marker_digest(final)
+            committed = marker.prepare_bytes((json.dumps(final, sort_keys=True).encode() + b"\n",))
+            prepared.append(committed)
+            for target in (output_path, marker_path):
+                backup = target.with_name(f".{target.name}.{uuid.uuid4().hex}.backup")
+                os.link(target, backup)
+                backups.append(_PreparedAtomicWrite(target, backup, ""))
+            if hasattr(signal, "pthread_sigmask"):
+                previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK,
+                    {signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM})
+            try:
+                state.promote()
+                output.promote()
+                committed.promote()
+            except BaseException:
+                try:
+                    for backup in backups:
+                        backup.promote()
+                except BaseException as exc:
+                    raise PublicationRecoveryError("primary output restoration failed") from exc
+                raise
+        finally:
+            for item in (*prepared, *backups):
+                item.discard()
+            if previous_mask is not None:
+                signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        return marker_path
     marker.write_bytes(json.dumps({"status": "publishing", "publication_id": publication_id,
         "output_path": str(output_path), "state_path": str(state_path)}, sort_keys=True).encode() + b"\n")
     output_writer.write(envelopes, serializer=serializer)

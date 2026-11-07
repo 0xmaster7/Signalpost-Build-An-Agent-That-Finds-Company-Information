@@ -105,11 +105,28 @@ def _wikidata_api_url(url: str, purpose: str) -> bool:
 
 def _brreg_structured_api_url(url: str, purpose: str) -> bool:
     """Constrain the robots-outage exception to documented BRREG API paths."""
-    parsed = urllib.parse.urlsplit(url)
-    if (parsed.scheme != "https" or parsed.hostname != "data.brreg.no"
-            or parsed.port not in {None, 443} or parsed.username or parsed.password
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        invalid_origin = (parsed.scheme != "https" or parsed.hostname != "data.brreg.no"
+            or parsed.port not in {None, 443} or parsed.username is not None or parsed.password is not None)
+    except ValueError:
+        return False
+    if (invalid_origin or "#" in url or any(ord(char) <= 32 for char in url)
             or purpose not in _BRREG_API_PURPOSES):
         return False
+    if parsed.path == "/enhetsregisteret/api/enheter":
+        try:
+            parameters = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True)
+        except ValueError:
+            return False
+        if (purpose != "entity" or len(parameters) != 2
+                or {name for name, _ in parameters} != {"organisasjonsnummer", "size"}):
+            return False
+        query = dict(parameters)
+        orgs = query["organisasjonsnummer"].split(",")
+        return (1 <= len(orgs) <= 100 and len(set(orgs)) == len(orgs)
+            and all(re.fullmatch(r"[0-9]{9}", org) for org in orgs)
+            and query["size"] == str(len(orgs)))
     org_match = _BRREG_ORG_PATH.fullmatch(parsed.path)
     if org_match:
         if parsed.query:
@@ -560,6 +577,8 @@ class NetworkGateway:
                     allowed_hosts: set[str] | None = None, access_profile: str | None = None,
                     api_headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes, str, str]:
         self.ledger.logical_requests += 1
+        if access_profile == "brreg_structured_api" and not _brreg_structured_api_url(url, purpose):
+            raise NetworkPolicyError("BRREG structured API profile is limited to documented BRREG endpoints")
         if access_profile == "wikidata_sparql_api" and not _wikidata_api_url(url, purpose):
             raise NetworkPolicyError("Wikidata API profile requires the exact documented SPARQL endpoint")
         target = canonical_url(url)
@@ -675,6 +694,11 @@ class NetworkGateway:
                             approved_ips=(ordered_ips[address_index % len(ordered_ips)],) if ordered_ips else None)
                         location = headers.get("Location") or headers.get("location")
                         if status in {301, 302, 303, 307, 308} and location:
+                            redirect_url = urllib.parse.urljoin(target, location)
+                            if access_profile == "brreg_structured_api" and (
+                                    "#" in location or any(ord(char) <= 32 for char in location)
+                                    or not _brreg_structured_api_url(redirect_url, purpose)):
+                                raise NetworkPolicyError("BRREG structured API profile is limited to documented BRREG endpoints")
                             self.ledger.entries[-1].redirect_location = canonical_url(urllib.parse.urljoin(target, location))
                             if hop >= self.redirect_limit:
                                 return status, headers, b"", target, "redirect_limit"

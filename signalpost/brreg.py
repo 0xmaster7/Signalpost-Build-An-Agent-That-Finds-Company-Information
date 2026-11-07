@@ -21,6 +21,88 @@ UA = "Signalpost/0.2 (public BRREG foundation; contact pending)"
 RIGHTS = "NLOD-2.0"
 
 
+@dataclass(frozen=True)
+class EntityBatchItem:
+    """An entity within an actual HAL response, never a synthetic HTTP response."""
+
+    payload: bytes
+    response_body: dict[str, Any]
+    source_url: str
+    content_sha256: str
+    retrieved_at: datetime
+    index: int
+
+    @property
+    def json_pointer(self) -> str:
+        return f"/_embedded/enheter/{self.index}"
+
+    def entity(self, org: str) -> dict[str, Any] | None:
+        rows = _get(self.response_body, "_embedded", "enheter")
+        if not isinstance(rows, list) or not 0 <= self.index < len(rows):
+            return None
+        row = rows[self.index]
+        return row if isinstance(row, dict) and row.get("organisasjonsnummer") == org else None
+
+
+def _batch_item(org: str, gateway: NetworkGateway) -> EntityBatchItem | None:
+    item = getattr(gateway, "_brreg_entity_batch_cache", {}).get(org)
+    return item if isinstance(item, EntityBatchItem) and item.entity(org) is not None else None
+
+
+async def preload_entity_batch(orgs, gateway: NetworkGateway, cutoff: datetime, *,
+                               chunk_size: int = 100) -> dict[str, EntityBatchItem]:
+    """Preload exact matches; misses/errors retain the existing single-entity fallback.
+
+    The caller's cutoff is applied by fetch_company's existing projection gate.
+    Batch requests use normal gateway robots policy: the structured API outage
+    exception currently allows only individual entity URLs.
+    """
+    if type(chunk_size) is not int or not 1 <= chunk_size <= 100:
+        raise ValueError("chunk_size must be between 1 and 100")
+    requested = list(dict.fromkeys(org for org in orgs
+        if isinstance(org, str) and re.fullmatch(r"[0-9]{9}", org)))
+    cache = getattr(gateway, "_brreg_entity_batch_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(gateway, "_brreg_entity_batch_cache", cache)
+    loaded: dict[str, EntityBatchItem] = {}
+    for offset in range(0, len(requested), chunk_size):
+        chunk = requested[offset:offset + chunk_size]
+        url = f"{BASE}/enheter?organisasjonsnummer={','.join(chunk)}&size={len(chunk)}"
+        try:
+            status, _, payload, final_url, outcome = await gateway.fetch(
+                url, purpose="entity", user_agent=UA, max_bytes=4 * 1024 * 1024,
+                allowed_hosts={"data.brreg.no"}, access_profile="brreg_structured_api")
+            if status != 200 or outcome != "ok" or not final_url:
+                continue
+            final = urlsplit(final_url)
+            if (final.scheme != "https" or final.hostname != "data.brreg.no"
+                    or final.port not in {None, 443} or final.username or final.password
+                    or final.path != "/enhetsregisteret/api/enheter"):
+                continue
+            body = json.loads(payload)
+            rows = _get(body, "_embedded", "enheter")
+            if not isinstance(rows, list):
+                continue
+        except Exception:
+            # This is an optional optimization. The gateway records failed
+            # requests; ordinary fetch_company requests remain authoritative.
+            continue
+        retrieved = getattr(gateway, "observed_at", None) or datetime.now(timezone.utc)
+        digest = hashlib.sha256(payload).hexdigest()
+        matches: dict[str, list[int]] = {}
+        for index, row in enumerate(rows):
+            if isinstance(row, dict) and isinstance(row.get("organisasjonsnummer"), str):
+                matches.setdefault(row["organisasjonsnummer"], []).append(index)
+        for org in chunk:
+            indexes = matches.get(org, [])
+            if len(indexes) != 1:
+                continue
+            item = EntityBatchItem(payload, body, final_url, digest, retrieved, indexes[0])
+            cache[org] = loaded[org] = item
+    return loaded
+
+
 def _get(data: Any, *path: str) -> Any:
     for part in path:
         if not isinstance(data, dict):
@@ -384,6 +466,9 @@ def _projection_helpers(org, gateway, claims, evidence, snapshots, errors):
             entity_cache = None
 
     async def request(url: str, purpose: str, section: str) -> tuple[Any, str | None, int, datetime, str | None]:
+        batch = _batch_item(org, gateway) if purpose == "entity" else None
+        if batch is not None and url == f"{BASE}/enheter/{org}":
+            return batch.entity(org), batch.source_url, 200, batch.retrieved_at, batch.content_sha256
         if purpose == "entity" and entity_cache is not None and url in entity_cache:
             return entity_cache[url]
         try:
@@ -611,6 +696,10 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
 
     entity_url = f"{BASE}/enheter/{org}"
     entity, entity_final, entity_status, entity_time, entity_hash = await request(entity_url, "entity", "identity_brand")
+    batch = _batch_item(org, gateway)
+    entity_prefix = (batch.json_pointer if batch is not None
+                     and batch.source_url == entity_final and batch.content_sha256 == entity_hash
+                     and batch.entity(org) is entity else "")
     observations["entity_http_status"] = entity_status
     if entity_status in {404, 410}:
         observations["identity_state_evidence_id"] = _add_endpoint_evidence(evidence, snapshots, org=org, name="entity_state",
@@ -627,7 +716,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             if entity_hash:
                 evidence.append(Evidence(evidence_id=candidate_evidence_id, source_url=entity_final,
                     retrieved_at=entity_time, content_sha256=entity_hash, extraction_method="brreg_website_candidate_v1",
-                    json_pointer="/hjemmeside", source_class="official", subject_organisation_number=org,
+                    json_pointer=entity_prefix + "/hjemmeside", source_class="official", subject_organisation_number=org,
                     source_snapshot_ids=[candidate_source_id]))
                 if not any(item.source_id == candidate_source_id for item in snapshots):
                     snapshots.append(SourceSnapshot(source_id=candidate_source_id, source_url=entity_final,
@@ -636,7 +725,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             observations["website_candidates"] = [{"raw": identity["website"], "source": "registry_live", "rights_status": "NLOD-2.0",
                 "source_url": entity_final, "content_sha256": entity_hash, "evidence_id": candidate_evidence_id,
                 "source_snapshot_id": candidate_source_id, "retrieved_at": entity_time.isoformat()}]
-        contact_leads(entity, entity_final, entity_hash, entity_time, entity_status, "entity")
+        contact_leads(entity, entity_final, entity_hash, entity_time, entity_status, "entity", entity_prefix)
         identity_source_paths = {
             "organisation_number": "/organisasjonsnummer", "name": "/navn", "legal_form": "/organisasjonsform/kode",
             "legal_form_description": "/organisasjonsform/beskrivelse", "website": "/hjemmeside", "employees": "/antallAnsatte",
@@ -659,7 +748,7 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             elif key.startswith("industry_codes."):
                 pointer = f"/naeringskode{int(key.rsplit('.', 1)[1]) + 1}"
             add_claim(key, value, "identity_brand", "identity", org, "legal_entity", entity_final, entity_time,
-                      entity, pointer, "entity", source_hash=entity_hash,
+                      entity, entity_prefix + pointer, "entity", source_hash=entity_hash,
                       extraction_method="brreg_json_pointer_projection_v1" if key in {"business_address", "postal_address", "registered_workplace_address"} else "brreg_json_pointer_v1")
         # These are registered statements, not observed dated events or an
         # inferred industry description. Preserve the complete source arrays:
@@ -675,10 +764,10 @@ async def fetch_company(org: str, gateway: NetworkGateway, cutoff: datetime, *,
             if re.search(r"(?i)\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|(?<!\d)(?:\+47\s?)?\d{8}(?!\d)|(?<!\d)\d{11}(?!\d)", text):
                 continue
             add_claim(field, value, "identity_brand", "business_description", org, "legal_entity",
-                      entity_final, entity_time, entity, "/" + source_field, "entity", source_hash=entity_hash)
+                      entity_final, entity_time, entity, entity_prefix + "/" + source_field, "entity", source_hash=entity_hash)
         for i, item in enumerate(identity["historical_names"]):
             add_claim("historical_name", item["name"], "identity_brand", "identity_history", org, "legal_entity",
-                      entity_final, entity_time, entity, f"/historiskeNavn/{i}/navn", "entity", start=item["from"], end=item["to"], source_hash=entity_hash)
+                      entity_final, entity_time, entity, entity_prefix + f"/historiskeNavn/{i}/navn", "entity", start=item["from"], end=item["to"], source_hash=entity_hash)
         states["identity_brand"] = PublicState.AVAILABLE if claims else PublicState.NOT_AVAILABLE
     elif entity_status == 410:
         states["identity_brand"] = PublicState.BLOCKED

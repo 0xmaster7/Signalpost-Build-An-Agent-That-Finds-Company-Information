@@ -5,6 +5,7 @@ sources:
     hosts:
       - data.brreg.no
     endpoints:
+      - /enhetsregisteret/api/enheter?organisasjonsnummer={comma_separated_organisation_numbers}&size={count}
       - /enhetsregisteret/api/enheter/{organisation_number}
       - /enhetsregisteret/api/enheter/{organisation_number}/roller
       - /enhetsregisteret/api/underenheter?overordnetEnhet={organisation_number}
@@ -12,6 +13,14 @@ sources:
     acquisition:
       mode: documented_public_get
       gateway: signalpost.network.NetworkGateway
+      access_profile: brreg_structured_api
+      entity_batch:
+        query_keys: [organisasjonsnummer, size]
+        duplicate_query_keys: reject
+        organisation_numbers: unique_ascii_nine_digit_strings
+        min_items: 1
+        max_items: 100
+        size: exact_item_count
       robots:
         enforce_explicit_rules: true
         on_unreachable: allow_only_documented_structured_api_paths
