@@ -1,5 +1,7 @@
 # Submission email draft — NOT SENT / ACCEPTANCE FAILED
 
+Latest evidence: [200-company gate failed](docs/release/HARD_DEADLINE_RESULTS_2026-11-07.md) at implementation `3e8a8a0`, despite green CI. There is no successful new1,000-company acceptance or full replay. **Do not submit as a safe replacement.** `[JBOX_SITE_URL]` remains a placeholder.
+
 **Latest replacement gate FAILED:** the [7 November result](docs/release/TIMEBOX_RESULTS_2026-11-07.md) records external termination at1,830.864seconds, incomplete checkpoint finalization and no committed final state pair. Exact scale replay was not run. Do not present the bounded candidate as safe or send this draft. `[JBOX_SITE_URL]` remains a placeholder.
 
 Bounded-run remediation uses `SIGNALPOST_TIME_BUDGET_SECONDS=1800` for1000inputs,15%finalization reserve. Replacement safety is **unproven until the authorized live1000 run and exact replay pass**. Contact/recipient and `[JBOX_SITE_URL]` remain owner placeholders. This draft must not be sent automatically.

@@ -1,5 +1,7 @@
 # Signalpost
 
+**Latest 200-company gate FAILED:** [independent-watchdog results](docs/release/HARD_DEADLINE_RESULTS_2026-11-07.md). Implementation `3e8a8a0` has green CI and 200 terminalized checkpoint rows, but emergency termination at354.431seconds left no committed state pair/aggregate. No subsequent1,000-company run or acceptance replay was launched. **Not safe to submit as a replacement.**
+
 **7 November live bounded-run result: FAILED — not a safe replacement.** [Result and phase counters](docs/release/TIMEBOX_RESULTS_2026-11-07.md): 1,000 complete-shaped rows survived, but only 728 checkpoint rows terminalized; no committed state pair or aggregate. External termination at 1,830.864 seconds exceeded the 1,800-second budget. Exact scale replay was not started. No coverage improvement or successful finalization is claimed.
 
 **7 November bounded-run remediation:** `SIGNALPOST_TIME_BUDGET_SECONDS` sets the total budget (CLI `--budget-seconds` wins; legacy `SIGNALPOST_BUDGET_SECONDS` remains accepted). With no explicit/configured total, default is **1.8 seconds per input**, i.e. 1,800 seconds for 1,000. The final **15%** is reserved for final envelopes, state, counters and aggregate. POSIX research is interrupted at 85%; SIGTERM uses the same checkpoint recovery. Unfinished fields remain unknown/incomplete, not zero. This is implementation intent, **not a live acceptance pass**; replacement safety requires the one authorized live1,000 run plus exact replay. No website/FTE extractor or identity thresholds were tuned.

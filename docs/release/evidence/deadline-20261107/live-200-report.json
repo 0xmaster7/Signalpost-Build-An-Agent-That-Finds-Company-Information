@@ -1,0 +1,202 @@
+{
+  "status": "failed",
+  "gate_pass": false,
+  "gates": {
+    "process_succeeded": false,
+    "exact_final_cardinality_and_order": true,
+    "complete_final_envelope_shape": true,
+    "zero_aborted_inputs": true,
+    "recognized_final_statuses": true,
+    "paired_state_present": false,
+    "zero_duplicate_ids": true,
+    "durable_company_phase_metrics_complete": true,
+    "completion_aggregate_present": false,
+    "runtime_within_budget": false,
+    "process_elapsed_within_budget": true,
+    "all_shells_terminalized": true,
+    "committed_output_state_pair": false,
+    "recording_complete": false
+  },
+  "final_envelopes": 200,
+  "terminal_states": {
+    "available": 200
+  },
+  "run_statuses": {
+    "absent": 200
+  },
+  "aborted_inputs": 0,
+  "failed_finals": 0,
+  "partial_finals": 0,
+  "unfinalized_inputs": 0,
+  "phase_failed": 2,
+  "company_counts": {
+    "finance_companies": 196,
+    "explicit_fte_companies": 0,
+    "verified_website_companies": 0,
+    "jobs_companies": 0,
+    "companies_with_available_claims": 200
+  },
+  "error_codes": {
+    "ROBOTS_UNREACHABLE": 58,
+    "ANNUAL_DOCUMENT_FAILED": 2,
+    "WEBSITE_POLICY_REJECTED": 7,
+    "BRREG_ACCOUNTS_404": 4,
+    "BRREG_ACCOUNTS_HISTORY_NO_DATA": 4
+  },
+  "elapsed_seconds": 354.431,
+  "exit_code": -9,
+  "runtime_seconds": null,
+  "checkpoint": {
+    "complete": true,
+    "shell_states": {
+      "terminalized": 200
+    },
+    "final_envelopes": 200,
+    "company_phase_rows": 2200,
+    "phase_counters": {
+      "official_foundation": {
+        "ran": 200,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 231.9761008566711,
+        "wall_seconds": null
+      },
+      "financial_statements": {
+        "ran": 200,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 511.9128527988214,
+        "wall_seconds": null
+      },
+      "official_details": {
+        "ran": 87,
+        "skipped": 113,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 403.9303557430394,
+        "wall_seconds": null
+      },
+      "wiki_batch": {
+        "ran": 200,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 222.27765223942697,
+        "wall_seconds": null
+      },
+      "annual_documents": {
+        "ran": 2,
+        "skipped": 198,
+        "deadline_skipped": 194,
+        "failed": 2,
+        "ineligible": 4,
+        "not_attempted": 0,
+        "worker_seconds": 214.73681676457636,
+        "wall_seconds": null
+      },
+      "nav_batch": {
+        "ran": 200,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 8872.148372372612,
+        "wall_seconds": null
+      },
+      "nav_apply": {
+        "ran": 0,
+        "skipped": 200,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 200,
+        "not_attempted": 0,
+        "worker_seconds": 0.0,
+        "wall_seconds": null
+      },
+      "website_verify": {
+        "ran": 45,
+        "skipped": 155,
+        "deadline_skipped": 155,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 779.1660051022191,
+        "wall_seconds": null
+      },
+      "website_shallow": {
+        "ran": 0,
+        "skipped": 200,
+        "deadline_skipped": 1,
+        "failed": 0,
+        "ineligible": 199,
+        "not_attempted": 0,
+        "worker_seconds": 0.0,
+        "wall_seconds": null
+      },
+      "jobs_activity": {
+        "ran": 0,
+        "skipped": 200,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 200,
+        "not_attempted": 0,
+        "worker_seconds": 0.0,
+        "wall_seconds": null
+      },
+      "finalization": {
+        "ran": 200,
+        "skipped": 0,
+        "deadline_skipped": 0,
+        "failed": 0,
+        "ineligible": 0,
+        "not_attempted": 0,
+        "worker_seconds": 24.036044603213668,
+        "wall_seconds": null
+      }
+    },
+    "failed": 2,
+    "problems": [],
+    "phase_failure_fingerprints": []
+  },
+  "quality_observations": {
+    "zero_failed_finals": true,
+    "zero_phase_failures": false,
+    "runtime_within_1200_seconds": true
+  },
+  "duplicate_count": 0,
+  "conflicting_identifier_count": 0,
+  "missing_identifier_count": 0,
+  "colliding_claims_and_provenance": [],
+  "failure_evidence": {
+    "traceback_frames": [],
+    "exception_types": []
+  },
+  "phase_wall_seconds": {},
+  "finalization_seconds": null,
+  "artifacts": {
+    "envelopes.jsonl": "11d844fc0e1bc9c34912d8639e3dc78d75bb44e3b262325b5b5d2165fd3aae0b",
+    "checkpoint.sqlite": "72630798d42b8ce560645ece88d865956ad22ac24583ef001304da085753030d",
+    "stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr.log": "2f25d44571e3e425dedda33c403f2ef18a64a00ef37528fdccb5ab59e45bbbd6",
+    "invocation.json": "b4e40bc313da683ff2cdee8e4fda8404cd6822ae6d30f36874670725b72078ee"
+  },
+  "execution_gate_pass": false,
+  "stage": "200",
+  "budget_seconds": 360,
+  "ignored_measurement_gates": {},
+  "aggregate": {},
+  "phase_aggregate_metrics": {},
+  "requests_by_purpose": {},
+  "request_metrics_note": "Null phase requests mean absent in aggregate; requests_by_purpose preserves recorded counts without inferring phase attribution."
+}
