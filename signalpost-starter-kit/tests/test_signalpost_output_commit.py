@@ -15,7 +15,7 @@ import pytest
 
 from test_signalpost_checkpoint_publication import envelope_fixture, shared_copy
 from signalpost import models, operations
-from signalpost.adapter import to_evaluator, validate_vendor_payload
+from signalpost.adapter import from_evaluator, to_evaluator, validate_vendor_payload
 from signalpost.models import Claim, Envelope, PublicState
 from signalpost.operations import (OrderedAtomicWriter, PartialEnvelopePublisher,
                                    publish_paired_artifacts, validate_paired_publication)
@@ -50,16 +50,16 @@ def assert_contract(path, canonical_rows):
     for payload, row in zip(payloads, canonical_rows, strict=True):
         validate_vendor_payload(payload)
         validate_synthesis_schema(payload["synthesis"])
-        # Reconstruct the internal metadata omitted by the evaluator edge, then
-        # validate the entire canonical graph and round-trip through its adapter.
-        restored = Envelope.model_validate({
-            **{key: payload[key] for key in ("input_ref", "organisation_number", "terminal_state",
-                "sections", "claims", "evidence", "source_snapshots", "refresh", "synthesis", "errors", "operations")},
-            "row_number": row.row_number, "batch_id": payload["batch"]["batch_id"],
-            "evidence_cutoff": payload["batch"]["evidence_cutoff"], "created_at": payload["run"]["created_at"],
-        })
-        assert to_evaluator(restored) == payload
-        assert payload == to_evaluator(row)
+        # Decode through the strict reverse adapter and compare the full
+        # canonical graph, including row identity and run metadata.
+        restored = from_evaluator(payload, row_number=row.row_number)
+        expected = row.model_dump(mode="json")
+        expected["synthesis"] = to_evaluator(row)["synthesis"]
+        assert restored.model_dump(mode="json") == expected
+        # Runtime measurements are evaluator metadata and need not equal
+        # defaults produced when serializing a canonical fixture row.
+        assert payload["operations"]["requests"] is None or isinstance(payload["operations"]["requests"], int)
+        assert payload["operations"]["runtime_ms"] is None or isinstance(payload["operations"]["runtime_ms"], int)
     return payloads
 
 

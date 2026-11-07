@@ -80,16 +80,10 @@ def _envelope(source: Envelope | Mapping[str, Any]) -> Envelope:
         raise TypeError("profile source must be a canonical Envelope or evaluator object")
     if "batch_id" in source and "evidence_cutoff" in source:
         return Envelope.model_validate(dict(source))
-    batch = source.get("batch") or {}
-    run = source.get("run") or {}
-    canonical = {key: source[key] for key in (
-        "input_ref", "organisation_number", "terminal_state", "sections", "claims", "evidence",
-        "source_snapshots", "refresh", "operations", "errors") if key in source}
-    canonical.update(row_number=source.get("row_number", 1), batch_id=batch.get("batch_id"),
-                     evidence_cutoff=batch.get("evidence_cutoff"))
-    if run.get("created_at") is not None:
-        canonical["created_at"] = run["created_at"]
-    return Envelope.model_validate(canonical)
+    # Keep this import local: synthesis imports profile while building the
+    # canonical summary, whereas evaluator decoding is only needed for wire input.
+    from .adapter import from_evaluator
+    return from_evaluator(dict(source), row_number=source.get("row_number", 1))
 
 
 def _domain(claim: Claim) -> str | None:

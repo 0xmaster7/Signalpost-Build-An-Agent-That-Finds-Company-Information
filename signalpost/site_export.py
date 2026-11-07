@@ -100,17 +100,10 @@ def _validate_event(event: ChangeEvent, organisation_number: str) -> None:
 
 
 def _read_envelope(raw: dict[str, Any], line_number: int) -> Envelope:
-    batch = raw.get("batch") or {}
-    run = raw.get("run") or {}
-    envelope = Envelope.model_validate({
-        "input_ref": raw["input_ref"], "row_number": line_number,
-        "organisation_number": raw["organisation_number"], "terminal_state": raw["terminal_state"],
-        "sections": raw["sections"], "claims": raw["claims"], "evidence": raw["evidence"],
-        "source_snapshots": raw["source_snapshots"], "refresh": raw["refresh"],
-        "synthesis": raw.get("synthesis") or {}, "errors": raw.get("errors") or [],
-        "batch_id": batch["batch_id"], "evidence_cutoff": batch["evidence_cutoff"],
-        "created_at": run["created_at"],
-    })
+    # Evaluator aliases and wire-only availability markers are normalized at
+    # the shared boundary. Canonical checkpoint/history parsing stays direct.
+    from .adapter import from_evaluator
+    envelope = from_evaluator(raw, row_number=line_number)
     canonical = {claim.claim_id: claim for claim in envelope.claims}
     for section_name, section in envelope.sections.items():
         for claim in section.claims:

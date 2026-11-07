@@ -178,11 +178,8 @@ def _validate_evaluator_rows(envelopes: list[dict], source_rows: list[dict]) -> 
             validate_vendor_payload(payload)
             if payload.get("organisation_number") != source_rows[index - 1]["organisation_number"]:
                 raise ValueError("organisation number does not match input")
-            canonical = {key: value for key, value in payload.items() if key not in {"run", "batch"}}
-            canonical.update({"row_number": index, "batch_id": payload["batch"]["batch_id"],
-                "evidence_cutoff": payload["batch"]["evidence_cutoff"],
-                "created_at": payload["run"]["created_at"]})
-            envelope = Envelope.model_validate(canonical)
+            from signalpost.adapter import from_evaluator
+            envelope = from_evaluator(payload, row_number=index)
             serialized = to_evaluator(envelope)
             validate_vendor_payload(serialized)
             adapter_roundtrips += 1

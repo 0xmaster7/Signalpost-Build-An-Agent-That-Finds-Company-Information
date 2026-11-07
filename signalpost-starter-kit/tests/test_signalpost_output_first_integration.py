@@ -12,7 +12,7 @@ import pytest
 
 from signalpost import history, run
 from signalpost.inputs import parse_records
-from signalpost.models import Envelope
+from signalpost.adapter import from_evaluator
 from test_signalpost_output_commit import assert_contract, assert_output_marker
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,15 +27,7 @@ def complete_output(output, organisations):
     assert [item["input_ref"] for item in payloads] == [row.input_ref for row in inputs]
     canonical = []
     for payload, row in zip(payloads, inputs, strict=True):
-        canonical.append(Envelope.model_validate({
-            **{key: payload[key] for key in (
-                "input_ref", "organisation_number", "terminal_state", "sections", "claims",
-                "evidence", "source_snapshots", "refresh", "synthesis", "errors", "operations")},
-            "row_number": row.row_number,
-            "batch_id": payload["batch"]["batch_id"],
-            "evidence_cutoff": payload["batch"]["evidence_cutoff"],
-            "created_at": payload["run"]["created_at"],
-        }))
+        canonical.append(from_evaluator(payload, row_number=row.row_number))
     return assert_contract(output, canonical)
 
 

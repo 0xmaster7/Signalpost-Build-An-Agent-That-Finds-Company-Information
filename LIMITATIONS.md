@@ -1,5 +1,55 @@
 # Signalpost limitations — updated 7 November 2026
 
+## Compatibility verification
+
+The resumed candidate passes 1,358 tests and 252 subtests. With the earlier
+successful fresh-clone environment restored, live 10 returns 10 available,
+supported envelopes, exit 0 in 16.87 seconds, and 35 physical requests. The
+unchanged starter validator, canonical graph validation and canonical roundtrip
+all pass, with zero duplicate claim IDs. The earlier proxy-misconfigured failure
+attempt is historical, not live research evidence. See the
+[compatibility results](docs/release/COMPATIBILITY_RESULTS_2026-11-07.md) for the
+larger gate and exact-source qualification. The single live 200 also passes:
+exit 0, 332.41 seconds, 200 supported valid rows, unchanged starter validator and
+canonical roundtrip pass, zero duplicate claim IDs. Counts are finance 196,
+explicit FTE 0, verified websites 0 and jobs 1; no coverage improvement is
+claimed. Both new live runs have incomplete secondary state. No new
+1,000-company run is claimed.
+
+Only top-level `state` and `modules.*.state` use the starter validator's legacy
+terminal vocabulary. `terminal_state` and claim `state`/`availability` retain
+the public vocabulary. Following `batch.evidence_terminal_state`, `available`
+maps to `complete`, `not_available` to `not_found`, and `not_applicable` remains
+unchanged. `blocked` maps to `blocked_robots` only when an explicit error mentions
+robots, otherwise `blocked_policy`. `failed` maps to `source_error` when a source
+error is identified, otherwise `submission_error`. `ambiguous` has no legacy
+equivalent and conservatively maps to `submission_error`. The private official
+parser's choice between `state` and `terminal_state` is unconfirmed.
+
+Unassessed sections publish `state: not_available`, `canonical_state: null` and
+their existing `attempt_outcome` (or `not_checked`). This means unknown/incomplete,
+not proven absent. Reverse decoding restores canonical null. Modules include
+only persisted completed/failed phase outcomes, not unattempted work.
+
+`operation_log` preserves the original array. `operations.requests` measures
+company-attributed charged attempts, excluding shared batch requests;
+`runtime_ms` is batch elapsed time at row serialization, not company CPU time.
+Run timestamps describe batch start and row snapshot, not completion of all
+research. Unknown measurements remain null; API charge cost is zero and excludes
+compute/hosting. Initial snapshot completion/runtime are unknown.
+
+Final publication telemetry is buffered once per row for sealed recording and
+restored during replay; it does not restore extractor facts or drive phase
+admission. Snapshot module keys are ordered deterministically. External clients
+that previously treated `operations` as an array must use `operation_log`.
+
+Confidence remains null where uncalibrated. The unchanged starter validator
+ignores confidence; the public example uses a number but supplies no formal
+nullable schema. Null acceptance by the private parser is unproven. Evidence
+`id` aliases `evidence_id`; `claim_span` copies an existing excerpt or is null.
+Top-level `changes` mirrors `refresh.changes`. Compatibility changes do not tune
+extraction, identity gates, scheduling or claim IDs.
+
 **Latest operational output gate PASSED:** [measured report](docs/release/OUTPUT_FIRST_RESULTS_2026-11-07.md), runtime `f0902cb0cbb1a4cd5e9ac1d471f0c8459545ed73`, exact-runtime CI green. Live 200/1000 returned 200/1000 valid primary envelopes, exit 0 in 332.033/1659.034s, zero duplicate IDs. Counts: finance196/983, explicit FTE1/8, verified websites0/0, jobs1/1. These are counts, not coverage/precision claims. **Both state pairs, checkpoint terminalization and sealed replay remain incomplete.** This is safe only under the latest primary-output operational definition; original coverage and replay gates do not thereby pass. The 1000 capture contains one incomplete website attempt. A blocked pre-ack fsync or different resources can still overrun; no universal deadline guarantee exists. Finance retries are disabled, so Retry-After retry behavior is not established for that phase. The 200 breadth target <=0.5s/input passed; it is not certified at 1000. Preparation and historical notes below are superseded by this measured status.
 
 Strict recording/replay and frozen-fixture workflows keep paired-state behavior unless `--output-first` is supplied explicitly; ordinary live CLI research uses output-first by default.

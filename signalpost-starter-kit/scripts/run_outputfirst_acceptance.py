@@ -82,8 +82,8 @@ def validate_output(path, repository):
     """
     sys.path.insert(0, str(repository))
     try:
-        from signalpost.adapter import to_evaluator, validate_vendor_payload
-        from signalpost.models import Envelope, validate_batch_publication_graph
+        from signalpost.adapter import from_evaluator, to_evaluator, validate_vendor_payload
+        from signalpost.models import validate_batch_publication_graph
         rows, envelopes, invalid = [], [], []
         with path.open(encoding='utf-8') as stream:
             for number, line in enumerate(stream, 1):
@@ -95,12 +95,7 @@ def validate_output(path, repository):
                         raise ValueError('envelope_requires_object')
                     validate_vendor_payload(raw)
                     rows.append(raw)
-                    envelope = Envelope.model_validate({
-                        **{key: raw[key] for key in ('input_ref', 'organisation_number', 'terminal_state',
-                            'sections', 'claims', 'evidence', 'source_snapshots', 'refresh', 'synthesis', 'errors', 'operations')},
-                        'row_number': len(rows), 'batch_id': raw['batch']['batch_id'],
-                        'evidence_cutoff': raw['batch']['evidence_cutoff'], 'created_at': raw['run']['created_at'],
-                    })
+                    envelope = from_evaluator(raw, row_number=len(rows))
                     to_evaluator(envelope)
                     envelopes.append(envelope)
                 except (ValueError, TypeError, KeyError, AttributeError):

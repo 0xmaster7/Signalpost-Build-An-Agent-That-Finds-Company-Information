@@ -88,6 +88,7 @@ def build_index(profiles: dict[str, CompanyProfile] | Iterable[CompanyProfile]) 
 
 def load_profiles(path: str | Path, *, rejected_inputs: list[dict[str, Any]] | None = None) -> dict[str, CompanyProfile]:
     """Load evaluator JSONL as a keyed canonical view and verify its bindings."""
+    from .adapter import claim_from_evaluator, evidence_from_evaluator
     profiles: dict[str, CompanyProfile] = {}
     with Path(path).open("r", encoding="utf-8-sig") as stream:
         for line_number, line in enumerate(stream, 1):
@@ -112,7 +113,10 @@ def load_profiles(path: str | Path, *, rejected_inputs: list[dict[str, Any]] | N
                     continue
                 raise QueryError(f"data row {line_number} has no exact nine-digit organisation_number")
             profile = profiles.setdefault(org, CompanyProfile(org))
-            profile.sections.update(raw.get("sections") or {})
+            profile.sections.update({name: {**section,
+                "state": section.get("canonical_state", section.get("state")),
+                "attempt_outcome": section.get("canonical_attempt_outcome", section.get("attempt_outcome"))}
+                for name, section in (raw.get("sections") or {}).items()})
             profile.errors.extend(raw.get("errors") or [])
             for item in raw.get("source_snapshots") or []:
                 snapshot = SourceSnapshot.model_validate(item)
@@ -125,7 +129,7 @@ def load_profiles(path: str | Path, *, rejected_inputs: list[dict[str, Any]] | N
                 if existing is None or snapshot.retrieved_at < existing.retrieved_at:
                     profile.snapshots[snapshot.source_id] = snapshot
             for item in raw.get("evidence") or []:
-                evidence = Evidence.model_validate(item)
+                evidence = evidence_from_evaluator(item)
                 if evidence.subject_organisation_number != org:
                     raise QueryError(f"evidence {evidence.evidence_id} crosses company identity at row {line_number}")
                 if (not evidence.source_snapshot_ids
@@ -140,7 +144,7 @@ def load_profiles(path: str | Path, *, rejected_inputs: list[dict[str, Any]] | N
                     raise QueryError(f"conflicting evidence {evidence.evidence_id} at row {line_number}")
                 profile.evidence[evidence.evidence_id] = evidence
             for item in raw.get("claims") or []:
-                claim = Claim.model_validate(item)
+                claim = claim_from_evaluator(item)
                 if claim.state == PublicState.AVAILABLE:
                     if claim.organisation_number != org:
                         raise QueryError(f"available claim {claim.claim_id} crosses company identity at row {line_number}")

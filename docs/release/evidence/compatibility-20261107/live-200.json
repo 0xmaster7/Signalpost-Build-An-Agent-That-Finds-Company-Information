@@ -1,0 +1,128 @@
+{
+  "budget_seconds": 360.0,
+  "internal_runtime_seconds": 331.7,
+  "output_committed": true,
+  "phase_summary": {
+    "annual_documents": {
+      "outcomes": {
+        "deadline_skipped": 199,
+        "failed": 1
+      },
+      "recorded_requests": 8,
+      "wall_seconds": 111.30804381892085
+    },
+    "financial_statements": {
+      "outcomes": {
+        "completed": 200
+      },
+      "recorded_requests": 200,
+      "wall_seconds": 70.60090936603956
+    },
+    "jobs_activity": {
+      "outcomes": {
+        "deadline_skipped": 200
+      },
+      "recorded_requests": null,
+      "wall_seconds": null
+    },
+    "nav_apply": {
+      "outcomes": {
+        "completed": 1,
+        "deadline_skipped": 199
+      },
+      "recorded_requests": null,
+      "wall_seconds": 0.2747533100191504
+    },
+    "nav_batch": {
+      "outcomes": {
+        "completed": 200
+      },
+      "recorded_requests": 18,
+      "wall_seconds": 49.521685146028176
+    },
+    "official": {
+      "outcomes": {
+        "completed": 200
+      },
+      "recorded_requests": 4,
+      "wall_seconds": 8.154545390047133
+    },
+    "official_details": {
+      "outcomes": {
+        "completed": 96,
+        "deadline_skipped": 104
+      },
+      "recorded_requests": 193,
+      "wall_seconds": 60.30490157008171
+    },
+    "website_shallow": {
+      "outcomes": {
+        "deadline_skipped": 200
+      },
+      "recorded_requests": null,
+      "wall_seconds": null
+    },
+    "website_verify": {
+      "outcomes": {
+        "completed": 39,
+        "deadline_skipped": 157,
+        "failed": 4
+      },
+      "recorded_requests": 159,
+      "wall_seconds": null
+    },
+    "wiki_batch": {
+      "outcomes": {
+        "completed": 200
+      },
+      "recorded_requests": 2,
+      "wall_seconds": 10.671857599867508
+    }
+  },
+  "physical_requests": 584,
+  "process_exit": 0,
+  "process_seconds": 332.41,
+  "requests_by_purpose": {
+    "accounts": 200,
+    "annual_account_copy": 8,
+    "entity": 2,
+    "nav_feed": 12,
+    "nav_job": 4,
+    "nav_public_access": 1,
+    "robots": 77,
+    "roles": 97,
+    "subunits": 96,
+    "website_page": 85,
+    "wikidata_batch_candidates": 2
+  },
+  "runtime_source_identity": "caa8a1bd529f8d8f585ef2256fef5d2143c1ef602bf70f76f21bb36383b415ad",
+  "state_incomplete": true,
+  "verification": {
+    "canonical_roundtrip_equal": true,
+    "canonical_valid": true,
+    "counts": {
+      "finance": 196,
+      "fte": 0,
+      "jobs": 1,
+      "websites": 0
+    },
+    "duplicate_claim_ids": 0,
+    "output_sha256": "f7c1eea2886891da4ec36a793a8d8b58b152441debb0be49c5cf872679e9c629",
+    "real_envelopes": 200,
+    "rows": 200,
+    "starter_validator": {
+      "checks": {
+        "all_entity_states_terminal": true,
+        "all_module_states_terminal": true,
+        "exact_expected_count": true,
+        "unique_organisation_numbers": true,
+        "zero_silent_drops": true
+      },
+      "invalid_states": [],
+      "passed": true
+    },
+    "terminal_states": {
+      "available": 200
+    }
+  }
+}

@@ -36,7 +36,8 @@ def test_synthetic_batch_has_complete_unknown_rows_before_source_work(tmp_path, 
     assert [row["input_ref"] for row in published] == [f"synthetic-{index}" for index in range(row_count)]
     assert all(row["terminal_state"] == "ambiguous" for row in published)
     assert all(not row["claims"] and not row["evidence"] for row in published)
-    assert all(all(section["state"] is None for section in row["sections"].values())
+    assert all(all(section["state"] == "not_available" and section["canonical_state"] is None
+                   for section in row["sections"].values())
                for row in published)
 
 

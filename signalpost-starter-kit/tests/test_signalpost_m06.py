@@ -199,8 +199,10 @@ class DeadlineAndBudgetTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(code, 0)
             self.assertEqual([row["input_ref"] for row in rows], ["row:1", "row:2"])
             self.assertTrue(all(row["terminal_state"] == "ambiguous" for row in rows))
-            self.assertTrue(all(row["sections"]["website_owned_profiles"]["state"] is None for row in rows))
-            self.assertTrue(all(row["sections"]["hiring_activity"]["state"] is None for row in rows))
+            self.assertTrue(all(row["sections"]["website_owned_profiles"]["state"] == "not_available" for row in rows))
+            self.assertTrue(all(row["sections"]["hiring_activity"]["state"] == "not_available" for row in rows))
+            self.assertTrue(all(row["sections"]["website_owned_profiles"]["canonical_state"] is None for row in rows))
+            self.assertTrue(all(row["sections"]["hiring_activity"]["canonical_state"] is None for row in rows))
             self.assertTrue(all(row["sections"]["website_owned_profiles"]["attempt_outcome"] == "deadline_skipped" for row in rows))
             self.assertTrue(all(row["sections"]["hiring_activity"]["attempt_outcome"] == "deadline_skipped" for row in rows))
 

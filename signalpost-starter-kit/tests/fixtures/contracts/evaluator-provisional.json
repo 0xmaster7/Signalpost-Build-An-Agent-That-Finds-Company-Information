@@ -13,7 +13,16 @@
     "errors",
     "operations",
     "run",
-    "batch"
+    "batch",
+    "operation_log",
+    "state",
+    "availability",
+    "changes",
+    "profile",
+    "modules",
+    "run_id",
+    "started_at",
+    "completed_at"
   ],
   "section_names": [
     "identity_brand",

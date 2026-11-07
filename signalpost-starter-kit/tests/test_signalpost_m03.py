@@ -513,8 +513,10 @@ class WebsiteIdentityTests(unittest.TestCase):
                 with patch.object(run_module, "NetworkGateway", return_value=gateway):
                     self.assertEqual(run_module.main(argv), 0)
                 envelope = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
-                self.assertIsNone(envelope["sections"]["website_owned_profiles"]["state"])
-                self.assertIsNone(envelope["sections"]["hiring_activity"]["state"])
+                self.assertEqual(envelope["sections"]["website_owned_profiles"]["state"], "not_available")
+                self.assertEqual(envelope["sections"]["hiring_activity"]["state"], "not_available")
+                self.assertIsNone(envelope["sections"]["website_owned_profiles"]["canonical_state"])
+                self.assertIsNone(envelope["sections"]["hiring_activity"]["canonical_state"])
                 self.assertEqual(envelope["sections"]["website_owned_profiles"]["attempt_outcome"], expected_attempt)
                 self.assertEqual(envelope["sections"]["hiring_activity"]["attempt_outcome"], expected_hiring_attempt)
                 self.assertFalse(any(claim["section"] in {"website_owned_profiles", "hiring_activity"}

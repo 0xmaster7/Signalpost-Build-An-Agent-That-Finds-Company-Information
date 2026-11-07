@@ -742,9 +742,32 @@ def _run(args: argparse.Namespace) -> int:
     baseline_saved = checkpoint.envelopes_for_state("baseline_done") if args.resume else {}
     resume_rows = {item.row_number: item for item in checkpoint.rows()} if output_first and args.resume else {}
     frozen_cache = checkpoint.phase_results("frozen_foundation") if args.resume else {}
+    gateway = None
+    execution = ExecutionTrace(None)
+    publication_contexts = {}
+
+    def serialize_publication(envelope):
+        phases = ("official", "financial_statements", "official_details", "annual_documents",
+                  "website_verify", "website_shallow", "jobs_activity", "nav_apply", "nav_batch", "wiki_batch")
+        statuses = {phase: status for phase in phases
+                    if (status := checkpoint.phase_status(phase, envelope.organisation_number)) is not None}
+        context_key = str(envelope.row_number)
+        context = {"run_id": batch_id, "started_at": run_start_utc.isoformat(),
+                   "completed_at": datetime.now(timezone.utc).isoformat() if gateway else None,
+                   "runtime_ms": int((time.monotonic() - run_started) * 1000) if gateway else None,
+                   "requests": run_budget.company_request_count(envelope.organisation_number) if gateway else 0,
+                   "phase_statuses": statuses}
+        if execution.replay:
+            if context_key not in publication_contexts:
+                raise ReplayError("missing publication metadata for row: " + context_key)
+            context = publication_contexts[context_key]
+        elif execution.recording:
+            publication_contexts[context_key] = context
+        return to_evaluator(envelope, publication_context=context)
+
     partial = PartialEnvelopePublisher(writer,
         [resume_rows.get(row.row_number) or prior_terminalized.get(row.row_number) or _provisional_envelope(row, batch_id, cutoff, run_start_utc)
-            for row in rows], serializer=to_evaluator, max_seconds=30.0,
+            for row in rows], serializer=serialize_publication, max_seconds=30.0,
         max_updates=max(100, len(rows)))
 
     def prepare_primary():
@@ -842,6 +865,8 @@ def _run(args: argparse.Namespace) -> int:
                                      "request_configuration": effective_config_identity})
         recording = getattr(gateway, "http_recording", None)
         execution = ExecutionTrace(recording)
+        if execution.replay:
+            publication_contexts = execution.control("publication_contexts")
         expected_frontier = execution.control("bounded_frontier") if execution.replay else None
         persisted_frontier = set()
         expected_keys = {tuple(item) for item in expected_frontier["keys"]} if expected_frontier else None
@@ -1928,7 +1953,7 @@ def _run(args: argparse.Namespace) -> int:
                 raise finalization_errors[org]
             envelope = _finalize_company(envelope, old_state, previous_state_error, previous_ref,
                 current_ref, current_states[org], cutoff, validate_output=False)
-            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(serialize_publication(envelope),
                 ensure_ascii=False, separators=(",", ":")))
         except Exception as exc:
             if output_first:
@@ -1942,7 +1967,7 @@ def _run(args: argparse.Namespace) -> int:
             envelope.synthesis["summary"] = canonical_synthesis(envelope)
             current_states[org] = canonical_company_state(envelope, config_fingerprint, old_state)
             finalization_errors[org] = exc
-            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(serialize_publication(envelope),
                 ensure_ascii=False, separators=(",", ":")))
         envelopes[index] = envelope
         reason, digest = error_fingerprint(envelope.errors)
@@ -1957,7 +1982,7 @@ def _run(args: argparse.Namespace) -> int:
             for event in envelope.refresh.changes:
                 event.current_state_ref = current_ref
             envelope.synthesis["summary"] = synthesize(envelope)
-            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(serialize_publication(envelope),
                 ensure_ascii=False, separators=(",", ":")))
     checkpoint.put_finalized(envelopes, final_statuses)
     checkpoint.release_identity_cache()
@@ -1967,6 +1992,8 @@ def _run(args: argparse.Namespace) -> int:
     if len(actual_rows) != len(expected_rows) or actual_rows != expected_rows:
         raise RuntimeError("terminal output does not exactly match input row cardinality/order")
     scheduler_report.setdefault("company_phases", {})["finalization"] = checkpoint.phase_statuses("finalization")
+    if recording and not execution.replay:
+        execution.control("publication_contexts", publication_contexts)
     if recording and capture_error is None:
         try:
             fresh_bytes = b"".join((output_payloads[envelope.row_number] + "\n").encode()
@@ -2000,7 +2027,7 @@ def _run(args: argparse.Namespace) -> int:
                 event.current_state_ref = current_ref
             envelope.synthesis["summary"] = synthesize(envelope)
             checkpoint.put(envelope)
-            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(to_evaluator(envelope),
+            output_payloads[envelope.row_number] = _SerializedEnvelope(json.dumps(serialize_publication(envelope),
                 ensure_ascii=False, separators=(",", ":")))
     publication_marker = publish_paired_artifacts(writer, state_writer, envelopes,
         canonical_json(state_payload) + b"\n", serializer=lambda envelope: output_payloads[envelope.row_number],

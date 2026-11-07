@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from signalpost import run as run_module
-from signalpost.adapter import validate_vendor_payload
+from signalpost.adapter import claim_from_evaluator, from_evaluator, validate_vendor_payload
 from signalpost.history import validate_artifact
 from signalpost.identifiers import canonical_product_heading
 from signalpost.models import Envelope, validate_publication_graph
@@ -233,12 +233,10 @@ class SignalpostM09LiveShapeIntegrationTests(unittest.TestCase):
             canonical_rows = []
             for index, payload in enumerate(rows, start=1):
                 validate_vendor_payload(payload)
-                canonical = {key: value for key, value in payload.items() if key not in {"run", "batch"}}
-                canonical.update({"row_number": index, "batch_id": payload["batch"]["batch_id"],
-                    "evidence_cutoff": payload["batch"]["evidence_cutoff"], "created_at": payload["run"]["created_at"]})
-                envelope = validate_publication_graph(Envelope.model_validate(canonical))
+                envelope = validate_publication_graph(from_evaluator(payload, row_number=index))
                 canonical_rows.append(envelope)
-                self.assertEqual(to_sorted(payload["claims"], "claim_id"),
+                self.assertEqual(to_sorted([claim_from_evaluator(claim).model_dump(mode="json")
+                    for claim in payload["claims"]], "claim_id"),
                     to_sorted([claim.model_dump(mode="json") for claim in envelope.claims], "claim_id"))
 
             evidence_owners: dict[str, str] = {}
